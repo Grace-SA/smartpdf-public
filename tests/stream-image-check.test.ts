@@ -6,6 +6,36 @@ import { randomBytes } from "node:crypto";
 import { checkFlateImage } from "../src/core/stream-image-check";
 import { probePdf } from "../src/core/probe";
 
+for (const overLimit of [false, true])
+  test(`stream reader releases its lock and cancels only unfinished work (limit: ${overLimit})`, async () => {
+    const reader = {
+      read: vi
+        .fn()
+        .mockResolvedValueOnce({ done: false, value: new Uint8Array(10) })
+        .mockResolvedValueOnce({ done: true }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    const pipe = vi
+      .spyOn(ReadableStream.prototype, "pipeThrough")
+      .mockReturnValue({
+        getReader: () => reader,
+      } as unknown as ReadableStream);
+    try {
+      const pending = checkFlateImage(
+        deflateSync(Buffer.alloc(10)),
+        overLimit ? 5 : 20,
+      );
+      if (overLimit)
+        await expect(pending).rejects.toMatchObject({ code: "RESOURCE_LIMIT" });
+      else expect(await pending).toBe(10);
+      expect(reader.cancel).toHaveBeenCalledTimes(overLimit ? 1 : 0);
+      expect(reader.releaseLock).toHaveBeenCalledOnce();
+    } finally {
+      pipe.mockRestore();
+    }
+  });
+
 test("understated zlib windows retain full-window compatibility without skipping checksum validation", async () => {
   const seed = randomBytes(10000),
     input = Buffer.concat([seed, seed, seed]);

@@ -43,10 +43,12 @@ export async function checkFlateImage(
     .pipeThrough(new DecompressionStream("deflate"))
     .getReader();
   let decoded = 0;
+  let complete = false;
   try {
     for (;;) {
       const chunk = await reader.read();
       if (chunk.done) {
+        complete = true;
         stage("flate-eof");
         return decoded;
       }
@@ -55,9 +57,11 @@ export async function checkFlateImage(
         throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
     }
   } finally {
-    stage("flate-cancel");
-    await reader.cancel().catch(() => {});
-    stage("flate-cancelled");
+    if (!complete) {
+      stage("flate-cancel");
+      await reader.cancel().catch(() => {});
+      stage("flate-cancelled");
+    }
     reader.releaseLock();
     stage("flate-released");
   }

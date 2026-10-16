@@ -48,6 +48,7 @@ test("image and generated PDF previews stay stable while idle and after resize",
   await page
     .getByRole("button", { name: "Convert to PDF →", exact: true })
     .click();
+  await expect(page.locator(".delivery")).toBeVisible({ timeout: 30000 });
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF", exact: true }).click();
   const output = (await (await pending).path())!;
