@@ -1,5 +1,11 @@
 import { FontSample } from "./FontSample";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 import {
   canvasAsset,
   importedAsset,
@@ -48,7 +54,7 @@ export function SignatureCreator({
       for (const u of saved) URL.revokeObjectURL(u);
     };
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const d = dialog.current!,
       previous = document.activeElement;
@@ -56,7 +62,7 @@ export function SignatureCreator({
     return () => {
       d.close();
       if (previous instanceof HTMLElement && previous.isConnected)
-        previous.focus();
+        previous.focus({ preventScroll: true });
     };
   }, [open]);
   useEffect(() => {
@@ -176,7 +182,16 @@ export function SignatureCreator({
       : mode === "Image"
         ? !!image
         : supportsName(font, name) && name.length <= SIGN_LIMITS.nameLength;
-  if (!open) return null;
+  // Keep the host connected during an open -> closed update so layout cleanup
+  // can close its native modal state. Closed contents/canvas are not retained.
+  if (!open)
+    return (
+      <dialog
+        ref={dialog}
+        className="sign-creator"
+        aria-label="Create signature"
+      />
+    );
   return (
     <dialog
       className="sign-creator"

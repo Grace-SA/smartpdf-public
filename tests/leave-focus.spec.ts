@@ -1,4 +1,64 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function trackNativeCloses(page: Page) {
+  await page.addInitScript(() => {
+    const closes: boolean[] = [];
+    Reflect.set(window, "nativeDialogConnectedOnClose", closes);
+    const close = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.close = function (value?: string) {
+      closes.push(this.isConnected);
+      return close.call(this, value);
+    };
+  });
+}
+
+for (const kind of ["preview", "confirmation", "signature"] as const)
+  test(`native ${kind} dialog closes before removal`, async ({ page }) => {
+    await trackNativeCloses(page);
+    if (kind === "preview") {
+      await page.goto("/images-to-pdf/");
+      await page
+        .locator("#photo-files")
+        .setInputFiles("docs/ux/public-synthetic-only/image-a.png");
+      await page
+        .getByRole("button", { name: "Preview image 1", exact: true })
+        .click();
+      await page
+        .getByRole("dialog", { name: "Image page preview", exact: true })
+        .getByRole("button", { name: "Close preview", exact: true })
+        .click();
+    } else if (kind === "confirmation") {
+      await page.goto("/split-pdf/");
+      await page
+        .locator("#pdf-file")
+        .setInputFiles("tests/fixtures/split/credentials.pdf");
+      await expect(
+        page.getByRole("dialog", {
+          name: "Create a copy without Content Credentials",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+    } else {
+      await page.goto("/sign-pdf/");
+      await page
+        .locator("#pdf-file")
+        .setInputFiles("tests/fixtures/m5/normal-a4.pdf");
+      await page
+        .getByRole("button", { name: "Add signature", exact: true })
+        .click();
+      await page
+        .getByRole("dialog", { name: "Create signature", exact: true })
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+    }
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const closes = await page.evaluate(
+      () => Reflect.get(window, "nativeDialogConnectedOnClose") as boolean[],
+    );
+    expect(closes.length).toBeGreaterThan(0);
+    expect(closes.every(Boolean)).toBe(true);
+  });
 
 test("leave confirmation restores focus before removal at desktop and mobile widths", async ({
   page,
