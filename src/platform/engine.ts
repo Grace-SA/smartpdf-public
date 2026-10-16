@@ -85,14 +85,23 @@ export class Engine {
 
   private async renderingWorker(signal: AbortSignal): Promise<Worker> {
     const port = new Worker(this.workerUrl, { type: "module" });
-    const ready = waitForBoot(
-      port,
-      (data) => data?.smartPdfResourcesReady === true,
-      signal,
-    );
     try {
-      port.postMessage({ smartPdfResources: this.resources });
-      await ready;
+      // A resource acknowledgement alone can precede PDF.js initialization.
+      // Confirm this instance's request handler before attaching a document.
+      await waitForBoot(
+        port,
+        (data) =>
+          data?.sourceName === "worker" &&
+          data?.targetName === "main" &&
+          data?.action === "ready",
+        signal,
+      );
+      await waitForBoot(
+        port,
+        (data) => data?.smartPdfResourcesReady === true,
+        signal,
+        () => port.postMessage({ smartPdfResources: this.resources }),
+      );
       return port;
     } catch (error) {
       port.terminate();

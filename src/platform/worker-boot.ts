@@ -4,6 +4,7 @@ export function waitForBoot(
   port: Worker,
   ready: (data: Record<string, unknown> | null) => boolean,
   signal?: AbortSignal,
+  start?: () => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const clean = () => {
@@ -35,5 +36,14 @@ export function waitForBoot(
     port.addEventListener("error", error);
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
+    else {
+      try {
+        start?.();
+      } catch (reason) {
+        fail(
+          reason instanceof Error ? reason : new Error("RESOURCE_LOAD_FAILED"),
+        );
+      }
+    }
   });
 }
