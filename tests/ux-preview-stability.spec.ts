@@ -2,10 +2,18 @@ import { selectTool } from "./navigation";
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
 import { readFile } from "node:fs/promises";
+import {
+  workerDiagnostics,
+  reportWorkerDiagnostics,
+} from "./worker-diagnostics";
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) await reportWorkerDiagnostics(page);
+});
 test.use({ trace: "off", screenshot: "off", video: "off" });
 test("image and generated PDF previews stay stable while idle and after resize", async ({
   page,
 }) => {
+  await workerDiagnostics(page);
   await page.goto("/");
   await page.addStyleTag({
     content: ".page-detail-canvas::-webkit-scrollbar{width:17px;height:17px}",
