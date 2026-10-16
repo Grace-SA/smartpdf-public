@@ -50,7 +50,7 @@ jobs:
         if: matrix.browser == 'webkit'
         run: >-
           pnpm exec playwright test --config playwright.github.config.ts --project webkit
-          --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness'
+          --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation'
         env:
           DEBUG: pw:browser
       - name: Browser regression across all nine tools

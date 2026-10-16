@@ -533,59 +533,56 @@ export async function probePdf(
     }
     const streamedImages = new Set<PDFRawStream>();
     let imageWork = 0;
-    if (typeof DecompressionStream !== "undefined") {
-      for (const [, object] of objects) {
-        if (!(object instanceof PDFRawStream)) continue;
-        const dict = object.dict;
-        if (name(resolve(dict.get(PDFName.of("Subtype")))) !== "Image")
-          continue;
-        const filter = resolve(dict.get(PDFName.of("Filter")));
-        const filters =
-          filter instanceof PDFArray
-            ? filter.asArray().map((v) => name(resolve(v)))
-            : [name(filter)];
-        if (
-          filters.at(-1) !== "FlateDecode" ||
-          !filters
-            .slice(0, -1)
-            .every((v) => ["ASCII85Decode", "ASCIIHexDecode"].includes(v))
-        )
-          continue;
-        const w = resolve(dict.get(PDFName.of("Width")));
-        const h = resolve(dict.get(PDFName.of("Height")));
-        if (
-          !(w instanceof PDFNumber) ||
-          !(h instanceof PDFNumber) ||
-          !Number.isSafeInteger(w.asNumber()) ||
-          !Number.isSafeInteger(h.asNumber()) ||
-          w.asNumber() <= 0 ||
-          h.asNumber() <= 0
-        )
-          reject("malformed");
-        if (w.asNumber() * h.asNumber() > LIMITS.imagePixels)
-          throw new ProbeFailure("RESOURCE_LIMIT", "image");
-        let compressed = object.contents;
-        if (filters.length > 1) {
-          const wrapper = dict.clone();
-          wrapper.set(
-            PDFName.of("Filter"),
-            doc.context.obj(filters.slice(0, -1)),
-          );
-          wrapper.delete(PDFName.of("DecodeParms"));
-          compressed = decodePDFRawStream(
-            PDFRawStream.of(wrapper, compressed),
-          ).decode();
-          if (compressed.length > LIMITS.bytes)
-            throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
-        }
-        imageWork += await checkFlateImage(
-          compressed,
-          LIMITS.streamedImageWorkBytes - imageWork,
+    for (const [, object] of objects) {
+      if (!(object instanceof PDFRawStream)) continue;
+      const dict = object.dict;
+      if (name(resolve(dict.get(PDFName.of("Subtype")))) !== "Image") continue;
+      const filter = resolve(dict.get(PDFName.of("Filter")));
+      const filters =
+        filter instanceof PDFArray
+          ? filter.asArray().map((v) => name(resolve(v)))
+          : [name(filter)];
+      if (
+        filters.at(-1) !== "FlateDecode" ||
+        !filters
+          .slice(0, -1)
+          .every((v) => ["ASCII85Decode", "ASCIIHexDecode"].includes(v))
+      )
+        continue;
+      const w = resolve(dict.get(PDFName.of("Width")));
+      const h = resolve(dict.get(PDFName.of("Height")));
+      if (
+        !(w instanceof PDFNumber) ||
+        !(h instanceof PDFNumber) ||
+        !Number.isSafeInteger(w.asNumber()) ||
+        !Number.isSafeInteger(h.asNumber()) ||
+        w.asNumber() <= 0 ||
+        h.asNumber() <= 0
+      )
+        reject("malformed");
+      if (w.asNumber() * h.asNumber() > LIMITS.imagePixels)
+        throw new ProbeFailure("RESOURCE_LIMIT", "image");
+      let compressed = object.contents;
+      if (filters.length > 1) {
+        const wrapper = dict.clone();
+        wrapper.set(
+          PDFName.of("Filter"),
+          doc.context.obj(filters.slice(0, -1)),
         );
-        if (imageWork > LIMITS.streamedImageWorkBytes)
+        wrapper.delete(PDFName.of("DecodeParms"));
+        compressed = decodePDFRawStream(
+          PDFRawStream.of(wrapper, compressed),
+        ).decode();
+        if (compressed.length > LIMITS.bytes)
           throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
-        streamedImages.add(object);
       }
+      imageWork += await checkFlateImage(
+        compressed,
+        LIMITS.streamedImageWorkBytes - imageWork,
+      );
+      if (imageWork > LIMITS.streamedImageWorkBytes)
+        throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
+      streamedImages.add(object);
     }
     for (const [, object] of objects) visit(object, 0);
     visit(doc.catalog, 0);

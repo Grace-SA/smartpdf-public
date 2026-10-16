@@ -34,12 +34,7 @@ export async function workerDiagnostics(page: Page) {
         record(
           `probe-send:${ids.get(this)}:${message.id}:${message.bytes.length}`,
         );
-      return Reflect.apply(send, this, [
-        typeof message?.id === "number" && message?.bytes instanceof Uint8Array
-          ? { ...message, syntheticDiagnostics: true }
-          : data,
-        transferOrOptions,
-      ]);
+      return Reflect.apply(send, this, [data, transferOrOptions]);
     };
     NativeWorker.prototype.terminate = function () {
       record(`terminate:${ids.get(this)}`);
@@ -52,8 +47,6 @@ export async function workerDiagnostics(page: Page) {
         ids.set(this, id);
         record(`create:${id}`);
         this.addEventListener("message", ({ data }) => {
-          if (typeof data?.syntheticStage === "string")
-            record(`stage:${id}:${data.syntheticStage}`);
           if (data?.ready === true) record(`probe-ready:${id}`);
           if (typeof data?.id === "number" && data?.result)
             record(`probe-result:${id}:${data.id}:${Boolean(data.result.ok)}`);
@@ -68,5 +61,5 @@ export async function workerDiagnostics(page: Page) {
 }
 
 export async function reportWorkerDiagnostics(page: Page) {
-  console.log("SYNTHETIC_WORKER_EVENTS", summaries.get(page));
+  console.log("SYNTHETIC_WORKER_EVENTS", JSON.stringify(summaries.get(page)));
 }
