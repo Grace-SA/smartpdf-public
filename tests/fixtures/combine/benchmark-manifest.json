@@ -1,0 +1,35 @@
+{
+  "origin": "synthetic; page-referenced comment padding; not representative of image complexity",
+  "files": [
+    {
+      "path": "tests/fixtures/combine/benchmark-1.pdf",
+      "bytes": 4194304,
+      "pages": 20,
+      "sha256": "a6a6329dc947dc8143297d0b1bd2e62915742514a2a28c325151ac98d237022e"
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-2.pdf",
+      "bytes": 4194304,
+      "pages": 20,
+      "sha256": "1dbe32e11cfca2678070855b38b62c54399217f925177f779a48c0b7f253b96e"
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-3.pdf",
+      "bytes": 4194304,
+      "pages": 20,
+      "sha256": "0ce69f84b530f8e525340a514f4f404590dc362a97f9554e46cc0e3f70e56328"
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-4.pdf",
+      "bytes": 4194304,
+      "pages": 20,
+      "sha256": "20aec17ff785f23daa376a7bc127c6597f440e28ca70792d49e0b1d71b926f7e"
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-5.pdf",
+      "bytes": 4194304,
+      "pages": 20,
+      "sha256": "314ecd5d9279ee13f623f9e6b88113680f3f7f8f3ca81154b1c0255fae83a59e"
+    }
+  ]
+}

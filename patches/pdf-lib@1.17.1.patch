@@ -1,0 +1,246 @@
+diff --git a/cjs/core/PDFContext.js b/cjs/core/PDFContext.js
+index c9b09da..953fe77 100644
+--- a/cjs/core/PDFContext.js
++++ b/cjs/core/PDFContext.js
+@@ -32,6 +32,8 @@ var PDFContext = /** @class */ (function () {
+         this.rng = rng_1.SimpleRNG.withSeed(1);
+     }
+     PDFContext.prototype.assign = function (ref, object) {
++        if (!this.indirectObjects.has(ref) && this.indirectObjects.size >= 50000)
++            throw new Error('SMARTWORKS_RESOURCE_LIMIT');
+         this.indirectObjects.set(ref, object);
+         if (ref.objectNumber > this.largestObjectNumber) {
+             this.largestObjectNumber = ref.objectNumber;
+diff --git a/cjs/core/parser/PDFObjectParser.js b/cjs/core/parser/PDFObjectParser.js
+index 303abb9..495a5eb 100644
+--- a/cjs/core/parser/PDFObjectParser.js
++++ b/cjs/core/parser/PDFObjectParser.js
+@@ -34,6 +34,11 @@ var PDFObjectParser = /** @class */ (function (_super) {
+     }
+     // TODO: Is it possible to reduce duplicate parsing for ref lookaheads?
+     PDFObjectParser.prototype.parseObject = function () {
++        var budget = this.context.smartworksParseBudget || (this.context.smartworksParseBudget = { nodes: 0 });
++        this.smartworksDepth = (this.smartworksDepth || 0) + 1;
++        if (++budget.nodes > 200000 || this.smartworksDepth > 100)
++            throw new Error('SMARTWORKS_RESOURCE_LIMIT');
++        try {
+         this.skipWhitespaceAndComments();
+         if (this.matchKeyword(Keywords_1.Keywords.true))
+             return PDFBool_1.default.True;
+@@ -57,6 +62,7 @@ var PDFObjectParser = /** @class */ (function (_super) {
+         if (Numeric_1.IsNumeric[byte])
+             return this.parseNumberOrRef();
+         throw new errors_1.PDFObjectParsingError(this.bytes.position(), byte);
++        } finally { this.smartworksDepth--; }
+     };
+     PDFObjectParser.prototype.parseNumberOrRef = function () {
+         var firstNum = this.parseRawNumber();
+@@ -147,6 +153,8 @@
+             var key = this.parseName();
+             var value = this.parseObject();
++            if (dict.has(key) && dict.get(key).toString() !== value.toString())
++                this.context.smartworksAmbiguousDictionary = true;
+             dict.set(key, value);
+             this.skipWhitespaceAndComments();
+         }
+         this.skipWhitespaceAndComments();
+diff --git a/cjs/core/parser/PDFObjectStreamParser.js b/cjs/core/parser/PDFObjectStreamParser.js
+index a6b823c..4767bea 100644
+--- a/cjs/core/parser/PDFObjectStreamParser.js
++++ b/cjs/core/parser/PDFObjectStreamParser.js
+@@ -17,6 +17,7 @@ var PDFObjectStreamParser = /** @class */ (function (_super) {
+         _this.shouldWaitForTick = shouldWaitForTick || (function () { return false; });
+         _this.firstOffset = dict.lookup(PDFName_1.default.of('First'), PDFNumber_1.default).asNumber();
+         _this.objectCount = dict.lookup(PDFName_1.default.of('N'), PDFNumber_1.default).asNumber();
++        if (!Number.isSafeInteger(_this.objectCount) || _this.objectCount < 0 || _this.objectCount > 50000) throw new Error('SMARTWORKS_RESOURCE_LIMIT');
+         return _this;
+     }
+     PDFObjectStreamParser.prototype.parseIntoContext = function () {
+diff --git a/cjs/core/parser/PDFParser.js b/cjs/core/parser/PDFParser.js
+index 46f01e4..35fb180 100644
+--- a/cjs/core/parser/PDFParser.js
++++ b/cjs/core/parser/PDFParser.js
+@@ -204,6 +204,7 @@ var PDFParser = /** @class */ (function (_super) {
+                         return [3 /*break*/, 5];
+                     case 4:
+                         e_1 = _a.sent();
++                        if (e_1 && e_1.message === 'SMARTWORKS_RESOURCE_LIMIT') throw e_1;
+                         // TODO: Add tracing/logging mechanism to track when this happens!
+                         this.bytes.moveTo(initialOffset);
+                         this.tryToParseInvalidIndirectObject();
+diff --git a/cjs/core/streams/DecodeStream.js b/cjs/core/streams/DecodeStream.js
+index b5472a7..c87fb6d 100644
+--- a/cjs/core/streams/DecodeStream.js
++++ b/cjs/core/streams/DecodeStream.js
+@@ -131,6 +131,10 @@ var DecodeStream = /** @class */ (function () {
+         throw new errors_1.MethodNotImplementedError(this.constructor.name, 'readBlock');
+     };
+     DecodeStream.prototype.ensureBuffer = function (requested) {
++        // SmartWorks: enforce limits before decoder allocation, including one huge block.
++        var maximum = this.smartworksMaxBuffer || 8388608;
++        if (!Number.isSafeInteger(requested) || requested < 0 || requested > maximum)
++            throw new Error('SMARTWORKS_RESOURCE_LIMIT');
+         var buffer = this.buffer;
+         if (requested <= buffer.byteLength) {
+             return buffer;
+@@ -139,6 +143,12 @@ var DecodeStream = /** @class */ (function () {
+         while (size < requested) {
+             size *= 2;
+         }
++        if (size > maximum) throw new Error('SMARTWORKS_RESOURCE_LIMIT');
++        if (this.smartworksBudget) {
++            this.smartworksBudget.allocated += size - buffer.byteLength;
++            if (this.smartworksBudget.allocated > 134217728)
++                throw new Error('SMARTWORKS_RESOURCE_LIMIT');
++        }
+         var buffer2 = new Uint8Array(size);
+         buffer2.set(buffer);
+         return (this.buffer = buffer2);
+diff --git a/cjs/core/streams/decode.js b/cjs/core/streams/decode.js
+index 65ff457..92c09e9 100644
+--- a/cjs/core/streams/decode.js
++++ b/cjs/core/streams/decode.js
+@@ -40,15 +40,20 @@ var decodeStream = function (stream, encoding, params) {
+ };
+ exports.decodePDFRawStream = function (_a) {
+     var dict = _a.dict, contents = _a.contents;
++    var budget = dict.context.smartworksDecodeBudget || (dict.context.smartworksDecodeBudget = { allocated: 0 });
+     var stream = new Stream_1.default(contents);
+     var Filter = dict.lookup(PDFName_1.default.of('Filter'));
+     var DecodeParms = dict.lookup(PDFName_1.default.of('DecodeParms'));
+     if (Filter instanceof PDFName_1.default) {
+         stream = decodeStream(stream, Filter, DecodeParms);
++        stream.smartworksBudget = budget;
++        stream.smartworksMaxBuffer = dict.lookup(PDFName_1.default.of('Subtype')) === PDFName_1.default.of('Image') ? 33554432 : 8388608;
+     }
+     else if (Filter instanceof PDFArray_1.default) {
+         for (var idx = 0, len = Filter.size(); idx < len; idx++) {
+             stream = decodeStream(stream, Filter.lookup(idx, PDFName_1.default), DecodeParms && DecodeParms.lookupMaybe(idx, PDFDict_1.default));
++        stream.smartworksBudget = budget;
++        stream.smartworksMaxBuffer = dict.lookup(PDFName_1.default.of('Subtype')) === PDFName_1.default.of('Image') ? 33554432 : 8388608;
+         }
+     }
+     else if (!!Filter) {
+diff --git a/es/core/PDFContext.js b/es/core/PDFContext.js
+index a995777..d61cd75 100644
+--- a/es/core/PDFContext.js
++++ b/es/core/PDFContext.js
+@@ -30,6 +30,8 @@ var PDFContext = /** @class */ (function () {
+         this.rng = SimpleRNG.withSeed(1);
+     }
+     PDFContext.prototype.assign = function (ref, object) {
++        if (!this.indirectObjects.has(ref) && this.indirectObjects.size >= 50000)
++            throw new Error('SMARTWORKS_RESOURCE_LIMIT');
+         this.indirectObjects.set(ref, object);
+         if (ref.objectNumber > this.largestObjectNumber) {
+             this.largestObjectNumber = ref.objectNumber;
+diff --git a/es/core/parser/PDFObjectParser.js b/es/core/parser/PDFObjectParser.js
+index 22deb4a..fbf5367 100644
+--- a/es/core/parser/PDFObjectParser.js
++++ b/es/core/parser/PDFObjectParser.js
+@@ -32,6 +32,11 @@ var PDFObjectParser = /** @class */ (function (_super) {
+     }
+     // TODO: Is it possible to reduce duplicate parsing for ref lookaheads?
+     PDFObjectParser.prototype.parseObject = function () {
++        var budget = this.context.smartworksParseBudget || (this.context.smartworksParseBudget = { nodes: 0 });
++        this.smartworksDepth = (this.smartworksDepth || 0) + 1;
++        if (++budget.nodes > 200000 || this.smartworksDepth > 100)
++            throw new Error('SMARTWORKS_RESOURCE_LIMIT');
++        try {
+         this.skipWhitespaceAndComments();
+         if (this.matchKeyword(Keywords.true))
+             return PDFBool.True;
+@@ -55,6 +60,7 @@ var PDFObjectParser = /** @class */ (function (_super) {
+         if (IsNumeric[byte])
+             return this.parseNumberOrRef();
+         throw new PDFObjectParsingError(this.bytes.position(), byte);
++        } finally { this.smartworksDepth--; }
+     };
+     PDFObjectParser.prototype.parseNumberOrRef = function () {
+         var firstNum = this.parseRawNumber();
+@@ -147,6 +153,8 @@
+             var key = this.parseName();
+             var value = this.parseObject();
++            if (dict.has(key) && dict.get(key).toString() !== value.toString())
++                this.context.smartworksAmbiguousDictionary = true;
+             dict.set(key, value);
+             this.skipWhitespaceAndComments();
+         }
+         this.skipWhitespaceAndComments();
+diff --git a/es/core/parser/PDFObjectStreamParser.js b/es/core/parser/PDFObjectStreamParser.js
+index faca2b6..2fdec1d 100644
+--- a/es/core/parser/PDFObjectStreamParser.js
++++ b/es/core/parser/PDFObjectStreamParser.js
+@@ -15,6 +15,7 @@ var PDFObjectStreamParser = /** @class */ (function (_super) {
+         _this.shouldWaitForTick = shouldWaitForTick || (function () { return false; });
+         _this.firstOffset = dict.lookup(PDFName.of('First'), PDFNumber).asNumber();
+         _this.objectCount = dict.lookup(PDFName.of('N'), PDFNumber).asNumber();
++        if (!Number.isSafeInteger(_this.objectCount) || _this.objectCount < 0 || _this.objectCount > 50000) throw new Error('SMARTWORKS_RESOURCE_LIMIT');
+         return _this;
+     }
+     PDFObjectStreamParser.prototype.parseIntoContext = function () {
+diff --git a/es/core/parser/PDFParser.js b/es/core/parser/PDFParser.js
+index b5d25a1..70a399e 100644
+--- a/es/core/parser/PDFParser.js
++++ b/es/core/parser/PDFParser.js
+@@ -202,6 +202,7 @@ var PDFParser = /** @class */ (function (_super) {
+                         return [3 /*break*/, 5];
+                     case 4:
+                         e_1 = _a.sent();
++                        if (e_1 && e_1.message === 'SMARTWORKS_RESOURCE_LIMIT') throw e_1;
+                         // TODO: Add tracing/logging mechanism to track when this happens!
+                         this.bytes.moveTo(initialOffset);
+                         this.tryToParseInvalidIndirectObject();
+diff --git a/es/core/streams/DecodeStream.js b/es/core/streams/DecodeStream.js
+index 27ffc32..73bed97 100644
+--- a/es/core/streams/DecodeStream.js
++++ b/es/core/streams/DecodeStream.js
+@@ -128,6 +128,10 @@ var DecodeStream = /** @class */ (function () {
+         throw new MethodNotImplementedError(this.constructor.name, 'readBlock');
+     };
+     DecodeStream.prototype.ensureBuffer = function (requested) {
++        // SmartWorks: enforce limits before decoder allocation, including one huge block.
++        var maximum = this.smartworksMaxBuffer || 8388608;
++        if (!Number.isSafeInteger(requested) || requested < 0 || requested > maximum)
++            throw new Error('SMARTWORKS_RESOURCE_LIMIT');
+         var buffer = this.buffer;
+         if (requested <= buffer.byteLength) {
+             return buffer;
+@@ -136,6 +140,12 @@ var DecodeStream = /** @class */ (function () {
+         while (size < requested) {
+             size *= 2;
+         }
++        if (size > maximum) throw new Error('SMARTWORKS_RESOURCE_LIMIT');
++        if (this.smartworksBudget) {
++            this.smartworksBudget.allocated += size - buffer.byteLength;
++            if (this.smartworksBudget.allocated > 134217728)
++                throw new Error('SMARTWORKS_RESOURCE_LIMIT');
++        }
+         var buffer2 = new Uint8Array(size);
+         buffer2.set(buffer);
+         return (this.buffer = buffer2);
+diff --git a/es/core/streams/decode.js b/es/core/streams/decode.js
+index 2d21e2e..3c7ffe9 100644
+--- a/es/core/streams/decode.js
++++ b/es/core/streams/decode.js
+@@ -36,15 +36,20 @@ var decodeStream = function (stream, encoding, params) {
+ };
+ export var decodePDFRawStream = function (_a) {
+     var dict = _a.dict, contents = _a.contents;
++    var budget = dict.context.smartworksDecodeBudget || (dict.context.smartworksDecodeBudget = { allocated: 0 });
+     var stream = new Stream(contents);
+     var Filter = dict.lookup(PDFName.of('Filter'));
+     var DecodeParms = dict.lookup(PDFName.of('DecodeParms'));
+     if (Filter instanceof PDFName) {
+         stream = decodeStream(stream, Filter, DecodeParms);
++        stream.smartworksBudget = budget;
++        stream.smartworksMaxBuffer = dict.lookup(PDFName.of('Subtype')) === PDFName.of('Image') ? 33554432 : 8388608;
+     }
+     else if (Filter instanceof PDFArray) {
+         for (var idx = 0, len = Filter.size(); idx < len; idx++) {
+             stream = decodeStream(stream, Filter.lookup(idx, PDFName), DecodeParms && DecodeParms.lookupMaybe(idx, PDFDict));
++        stream.smartworksBudget = budget;
++        stream.smartworksMaxBuffer = dict.lookup(PDFName.of('Subtype')) === PDFName.of('Image') ? 33554432 : 8388608;
+         }
+     }
+     else if (!!Filter) {

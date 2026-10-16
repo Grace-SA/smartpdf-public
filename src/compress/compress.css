@@ -1,0 +1,155 @@
+.compress-task {
+  max-width: 980px;
+  margin: 0 auto;
+  background: white;
+  border: 1px solid #dedee7;
+  border-radius: 14px;
+  padding: 28px;
+}
+.compress-source {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid #e1e1e8;
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+.compress-file-icon {
+  width: 52px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #fff0ef;
+  color: #c72c28;
+  font-weight: 800;
+  font-size: 13px;
+}
+.compress-source strong,
+.compress-source span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.compress-source span {
+  margin-top: 6px;
+  color: #62626e;
+  font-size: 14px;
+}
+.compression-levels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  border: 0 !important;
+  padding: 0 !important;
+}
+.compression-levels legend {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.compression-levels > label {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  padding: 20px;
+  border: 2px solid #dedee7;
+  border-radius: 12px;
+  cursor: pointer;
+  min-height: 190px;
+}
+.compression-levels > label:hover {
+  border-color: #aaaab5;
+}
+.compression-levels > label.selected {
+  border-color: #e5322d;
+  background: #fff8f7;
+  box-shadow: 0 0 0 2px #e5322d18;
+}
+.compression-levels input {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  accent-color: #e5322d;
+}
+.compression-copy,
+.compression-copy > span,
+.compression-copy > small {
+  display: block;
+}
+.compression-title strong {
+  font-size: 18px;
+}
+.compression-title {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.compression-title small {
+  width: fit-content;
+  margin: 0 0 6px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e9f6ed;
+  color: #237642;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.compression-copy > span:not(.compression-title) {
+  font-weight: 650;
+  margin-bottom: 8px;
+}
+.compression-copy > small {
+  color: #62626e;
+  line-height: 1.45;
+}
+.compression-details {
+  margin: 22px 0;
+  padding: 14px 16px;
+  border: 1px solid #e1e1e8;
+  border-radius: 9px;
+}
+.compression-details p {
+  color: #555561;
+  line-height: 1.55;
+}
+.compress-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 390px;
+  margin: 24px 0 0 auto;
+  gap: 10px;
+}
+.compress-actions button:first-child {
+  font-size: 19px;
+  padding: 17px;
+}
+.compress-progress progress {
+  width: 100%;
+  accent-color: #e5322d;
+}
+@media (max-width: 760px) {
+  .compress-task {
+    padding: 16px;
+  }
+  .compression-levels {
+    grid-template-columns: 1fr;
+  }
+  .compression-levels > label {
+    min-height: 0;
+    padding: 16px;
+  }
+  .compress-source {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+  .compress-source button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .compress-actions {
+    max-width: none;
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "MaShanZheng-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/MaShanZheng-Regular.ttf",
+    "sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb",
+    "bytes": 5857936
+  },
+  {
+    "file": "mashanzheng-OFL.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/OFL.txt",
+    "sha256": "d7bdb1cee215b689e23c2f95672a6084c790542170648267a55114103d756a08",
+    "bytes": 4397
+  },
+  {
+    "file": "Kalam-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/kalam/Kalam-Regular.ttf",
+    "sha256": "57cecb63d4608019371954274ae1d8c397764debd5b19d4a33c1efa4dc923c0b",
+    "bytes": 427360
+  },
+  {
+    "file": "kalam-OFL.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/kalam/OFL.txt",
+    "sha256": "f62ef357d3a1c3d27edd35a6e1ba350e8a8d13499797964eeadefbf0b3b15d1f",
+    "bytes": 4373
+  },
+  {
+    "file": "Caveat.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/Caveat%5Bwght%5D.ttf",
+    "sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
+    "bytes": 403648
+  },
+  {
+    "file": "caveat-OFL.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/OFL.txt",
+    "sha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b",
+    "bytes": 4385
+  }
+]

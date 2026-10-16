@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>手机加载速度验收</title>
+  <style>
+    body {
+      font: 17px/1.6 system-ui;
+      margin: 20px;
+      color: #173f32;
+      background: #f8f8f3;
+    }
+    button {
+      font: inherit;
+      padding: 14px;
+      background: #205843;
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      width: 100%;
+      margin: 12px 0;
+    }
+    button:disabled {
+      opacity: 0.5;
+    }
+    #status {
+      font-weight: bold;
+      padding: 15px;
+      border: 2px solid #205843;
+    }
+    iframe {
+      width: 100%;
+      height: 650px;
+      border: 1px solid #ccc;
+    }
+    pre {
+      white-space: pre-wrap;
+      font-size: 12px;
+    }
+    body.running {
+      overflow: hidden;
+    }
+    body.running #status {
+      position: fixed;
+      inset: 0 0 auto;
+      margin: 0;
+      height: 110px;
+      box-sizing: border-box;
+      background: #f8f8f3;
+      z-index: 11;
+    }
+    body.running #frames {
+      position: fixed;
+      top: 110px;
+      left: 0;
+      width: 100%;
+      height: calc(100vh - 110px);
+      height: calc(100dvh - 110px);
+      background: white;
+      z-index: 10;
+    }
+    body.running iframe {
+      height: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+  <h1>手机加载速度验收</h1>
+  <p>保持 Wi-Fi 开启。点击开始后会自动加载页面 3 次，约 30 秒。无需选文件。</p>
+  <p>
+    电脑会模拟 10 Mbps 传输上限和 100 ms
+    响应延迟。这是受控页面加载检查，不是运营商网速测试。
+  </p>
+  <p id="status" role="status">等待开始</p>
+  <button id="run">开始加载检查</button>
+  <button id="send" disabled>将结果回传电脑</button>
+  <details>
+    <summary>测试明细</summary>
+    <pre id="results"></pre>
+  </details>
+  <div id="frames"></div>
+  <script>
+    window.m0Token = "TOKEN_VALUE";
+    window.m0Build = BUILD_VALUE;
+  </script>
+  <script src="/__m0/cold.js"></script>
+</html>

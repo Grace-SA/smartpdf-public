@@ -1,0 +1,11 @@
+qpdf version 12.2.0
+
+Copyright (c) 2005-2021 Jay Berkenbilt
+Copyright (c) 2022-2025 Jay Berkenbilt and Manfred Holger
+
+qpdf is licensed under the Apache License, Version 2.0. The full license
+text is distributed as qpdf-Apache-2.0.txt.
+
+SmartWorks uses the unmodified qpdf 12.2.0 WebAssembly binary distributed
+inside @neslinesli93/qpdf-wasm 0.3.0. The JavaScript wrapper is distributed
+under its ISC license.

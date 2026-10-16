@@ -1,0 +1,43 @@
+name: Smart PDF checks
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.25.0"
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --target .local-python -r scripts/requirements-test.txt
+      - name: Repository privacy and asset check
+        run: node scripts/check-repository.mjs
+      - name: Generate synthetic boundary fixtures
+        run: python -B scripts/m5-fixtures.py
+      - name: Type check
+        run: pnpm typecheck
+      - name: Application lint
+        run: pnpm exec eslint src scripts/check-repository.mjs scripts/prepare-release.mjs
+      - name: Unit and integration regression
+        run: pnpm test
+      - name: Build all public pages
+        run: pnpm build
+      - run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
+      - name: Browser regression across all nine tools
+        run: pnpm exec playwright test --config playwright.github.config.ts

@@ -1,0 +1,773 @@
+{
+  "note": "Explicit reviewed binary baseline. Do not regenerate automatically to approve new files. User files must never be added.",
+  "assets": [
+    {
+      "path": "docs/ux/public-synthetic-only/demo-a.pdf",
+      "bytes": 2732,
+      "sha256": "4455f31e95c222da7f71e08233ceb3da6dcd9f89b11906e59341932bdc14fdd7",
+      "origin": "Synthetic public UX fixture with generated pages/geometric raster; no user samples."
+    },
+    {
+      "path": "docs/ux/public-synthetic-only/demo-b.pdf",
+      "bytes": 1745,
+      "sha256": "c4a864ccf1ed28c23ab4c66e40ce3e03655765093d4e68e2836ceac6221323e6",
+      "origin": "Synthetic public UX fixture with generated pages/geometric raster; no user samples."
+    },
+    {
+      "path": "docs/ux/public-synthetic-only/image-a.png",
+      "bytes": 630,
+      "sha256": "b9b8c30ccf4342a7f036113c98c4654bcfd0b9ea5d9604f03c1a0cbb6f1fa431",
+      "origin": "Synthetic public UX fixture with generated pages/geometric raster; no user samples."
+    },
+    {
+      "path": "docs/ux/public-synthetic-only/image-b.png",
+      "bytes": 629,
+      "sha256": "1a08f9b780d8f08fb5d56aa0d3d2b48013f2c700c81d45b868d026007c54bd46",
+      "origin": "Synthetic public UX fixture with generated pages/geometric raster; no user samples."
+    },
+    {
+      "path": "public/og-smart-pdf.png",
+      "bytes": 34462,
+      "sha256": "7ccca1ab4e343437d0cccc8672865880914502c73008c38c157b939bae998c24",
+      "origin": "Smart PDF public product artwork."
+    },
+    {
+      "path": "public/sign-fonts/Caveat.ttf",
+      "bytes": 403648,
+      "sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
+      "origin": "Public OFL font or renamed derived font; adjacent OFL and modification notices apply."
+    },
+    {
+      "path": "public/sign-fonts/Kalam-Regular.ttf",
+      "bytes": 427360,
+      "sha256": "57cecb63d4608019371954274ae1d8c397764debd5b19d4a33c1efa4dc923c0b",
+      "origin": "Public OFL font or renamed derived font; adjacent OFL and modification notices apply."
+    },
+    {
+      "path": "public/sign-fonts/MaShanZheng-Regular.ttf",
+      "bytes": 5857936,
+      "sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb",
+      "origin": "Public OFL font or renamed derived font; adjacent OFL and modification notices apply."
+    },
+    {
+      "path": "public/watermark-fonts/SmartPDFSans-Regular.ttf",
+      "bytes": 10642352,
+      "sha256": "6b746ab1c30e6f3cb634af270268368f5348366d0a9c76b5a0b9c16c591b8acb",
+      "origin": "Public OFL font or renamed derived font; adjacent OFL and modification notices apply."
+    },
+    {
+      "path": "tests/fixtures/annotations.pdf",
+      "bytes": 1705,
+      "sha256": "243c0e6196a63a4dcf4fe2fc1b4c9f1ea3b63803be3888a836a2ba90a70995d4",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/attachment.pdf",
+      "bytes": 1703,
+      "sha256": "0bbbb4fbb912d6df80e481ad2852d12ff1ddd532366836022d8565449af7b7dd",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/benchmark-10p-5mib.pdf",
+      "bytes": 5251406,
+      "sha256": "840cb1e2aad3b0bb106a43f3cc40299ef797d08cac6b545c59a2bef42df87c46",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/bookmarks.pdf",
+      "bytes": 1695,
+      "sha256": "dbf7c64c88568075eae03f28c60726e405fd95bd14f5e205b6b3d5151c5fede9",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/a.pdf",
+      "bytes": 1198,
+      "sha256": "907fee38b23447121576044616952aec79732dea68bd6d933ef0d8e6227d8f6a",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/b.pdf",
+      "bytes": 1491,
+      "sha256": "19b130cd87aacb01eca4cb5a265ce2e548027d18b2bb54421a5ed0789fd01c11",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-1.pdf",
+      "bytes": 4194304,
+      "sha256": "a6a6329dc947dc8143297d0b1bd2e62915742514a2a28c325151ac98d237022e",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-2.pdf",
+      "bytes": 4194304,
+      "sha256": "1dbe32e11cfca2678070855b38b62c54399217f925177f779a48c0b7f253b96e",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-3.pdf",
+      "bytes": 4194304,
+      "sha256": "0ce69f84b530f8e525340a514f4f404590dc362a97f9554e46cc0e3f70e56328",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-4.pdf",
+      "bytes": 4194304,
+      "sha256": "20aec17ff785f23daa376a7bc127c6597f440e28ca70792d49e0b1d71b926f7e",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/benchmark-5.pdf",
+      "bytes": 4194304,
+      "sha256": "314ecd5d9279ee13f623f9e6b88113680f3f7f8f3ca81154b1c0255fae83a59e",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/c.pdf",
+      "bytes": 940,
+      "sha256": "5282600d60eb4e76cffc31e194349841e74ba411ac508ea07b5778ef61a76dbb",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/custom-role.pdf",
+      "bytes": 1251,
+      "sha256": "0bc36b6ad5449f0039161b2d3bc4e02a6eb59af0e5a9b2167d079b1ae9c85575",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/empty-form.pdf",
+      "bytes": 942,
+      "sha256": "5d8042614ff84760ebec543fe7bdd96260918986c6aa20337a2d6975e015b1c1",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/empty-layers.pdf",
+      "bytes": 903,
+      "sha256": "b49cf26fdb107f80550d0f2373e49bec491fe570f9883108da95649bd3e36c23",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-attachment.pdf",
+      "bytes": 1142,
+      "sha256": "7ffe9c358f0c0c9261ed62de2d67809e1eaece01706c7285f262c9d991f08c68",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-color.pdf",
+      "bytes": 1399,
+      "sha256": "23f0c1dd8156e1cd4758e805384da01c342230243996be1c6fc77087a0802ce4",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-form.pdf",
+      "bytes": 1231,
+      "sha256": "37ecc564a20754e6e7becbef460e589ca007706f23de0b2dce0280b8dc0a06da",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-inline.pdf",
+      "bytes": 746,
+      "sha256": "730c9c15bb635c5b99aa5b2b4dcf8fca392210d6340934765969bc1df8953691",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-jpeg-overlimit.pdf",
+      "bytes": 1936,
+      "sha256": "622efe801ee8dc8345f3663fa26e072648e806784f6174ade87e9be1f9253e9a",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-jpeg.pdf",
+      "bytes": 522062,
+      "sha256": "54ec75b6fba1d6b6ebb0a5f99d15637f0e8b09a0485625136ded4af41b034051",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-stream-scan.pdf",
+      "bytes": 151835,
+      "sha256": "e2a9fb374e49b5543dba02fbda4b4e18f0c120107382c06659a74f0ada0087f5",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/final-tags.pdf",
+      "bytes": 1330,
+      "sha256": "bdb10621929695c9a665580440478e2e45191cb478b28610055e8e09ab5d6f77",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/indexed-artifact.pdf",
+      "bytes": 1440,
+      "sha256": "1b761ddc9b794241b430b765a8ccdd0fcf21dc8a004ca2ffa2800e81ce5285ff",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/layer-off.pdf",
+      "bytes": 1108,
+      "sha256": "a8653a725da483c2e0ebc6e8abbb55a7e7304ae6db0a43f4183338a4cfe99264",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/layer-on.pdf",
+      "bytes": 1109,
+      "sha256": "e0d079b8d2f6fe9e14f73c5b424d7be00508e478b60c92df4ea5fea4a2d5fa94",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/navigation-a.pdf",
+      "bytes": 1522,
+      "sha256": "9236df01f500326504977d7ef31be66fa7e6635294be5b2b349929ef446af3a7",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/navigation-b.pdf",
+      "bytes": 1522,
+      "sha256": "15b3e9486e1e99f2534152d18d6dcf0fbc17999bacafb579001fd7c029299d30",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/optional-tag-indexes.pdf",
+      "bytes": 1257,
+      "sha256": "7b1126809f607d0dbc382054f8921c245e4dd375395202207afb0291c6432ae6",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/ordinary-comments.pdf",
+      "bytes": 713,
+      "sha256": "49bb5c46451d6a759864389d691918519077398b7c9f67ffbd0fc32f920bb8fd",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/ordinary-scan.pdf",
+      "bytes": 28421,
+      "sha256": "14477b85f8e7c4a369dcc130bc095fb8c56534f42e2c8fb64ee4bda597099a73",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/ordinary-tagged-link.pdf",
+      "bytes": 1063,
+      "sha256": "e5d30865e3b647d0319d1633efa8e0876c39a0064738db9f8c794fab1e5e0666",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/ordinary-wrapped-image.pdf",
+      "bytes": 1382,
+      "sha256": "e4079e2482853b07133057a992319a7d7fe96742bb1724af90a1d324d1f55c93",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/tag-a.pdf",
+      "bytes": 1265,
+      "sha256": "9a363c51264f85f77db8c4a6dda8068b5c3274297cdfa2ff3e053df3d507b2be",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/tag-b.pdf",
+      "bytes": 1267,
+      "sha256": "bf5463893a7e6f47aba4292f01b4a03426614bf9c87bad8fbe52518059fa6863",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/combine/unconfigured-layer.pdf",
+      "bytes": 1020,
+      "sha256": "f5ef1ba3962842b869379fc61102a909f575a4a720901448c59829fb098ed8ff",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/destinations.pdf",
+      "bytes": 1699,
+      "sha256": "cd7837a1f5b30e2404339c099c16744a003c521590601e0ad91c93f243da36fd",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/form.pdf",
+      "bytes": 1734,
+      "sha256": "9360bbbc2093cd15d0c9cf28f17a28024e80a33c9f20b56559bca46aa8e82435",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/geometry.pdf",
+      "bytes": 1710,
+      "sha256": "7ac4ccb353a0cc466f7ba9c2a78fe87ba66b45a0500e881f6f582d207e933369",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/javascript.pdf",
+      "bytes": 1729,
+      "sha256": "4247f0ab999e38a2b3ed1d69c50a75a52d9bc18ace3d0c6e427b22cfed0d8898",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/labels.pdf",
+      "bytes": 1702,
+      "sha256": "c9db88f0090a260bf93d5926f9f7e28d073b0fc15f6304a3d2914c37cda360eb",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/large-native.jpg",
+      "bytes": 520951,
+      "sha256": "566b2358b81092915756608d56c66f75c272046334da3af5157483bf70ddcaa3",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/launch.pdf",
+      "bytes": 1716,
+      "sha256": "c94bdd7beaaafb71c5882294534fb4059b792fe7e5f1a83d3ab9573b1a858ee2",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/layers.pdf",
+      "bytes": 1698,
+      "sha256": "84d0efd4810f629cf05e2add5eb144841191544c5deb7e12b40abb73bbeef3e8",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/100-pages.pdf",
+      "bytes": 39876,
+      "sha256": "5c041897f81f118d88c268484ca0e9b952910586001f911809a10d600d98bf24",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/200-pages.pdf",
+      "bytes": 79621,
+      "sha256": "9633f4c32e32cc6eb08998106c49f46a783b372fe9c72bba1933f24115fd0483",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/chinese.pdf",
+      "bytes": 2079,
+      "sha256": "290cb1d1a8b8ab05fe5df8c55f8632c55d37c77643911d82a77ae5f4efd5732f",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/corrupted.pdf",
+      "bytes": 29,
+      "sha256": "38dbda79eefb3dd97d02a85c9d628e7dbaf5b3d2a713bccbe5aad0da19cfd4e8",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/encrypted.pdf",
+      "bytes": 1873,
+      "sha256": "7a2274791e222afc2be471b228a60aca0baafebca0a4d31d1ec0ee74b581b17f",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/form.pdf",
+      "bytes": 2213,
+      "sha256": "3b275700075470c7a3da3d5774400197164f14df6331a4cd10969b3208425af7",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/image-heavy.pdf",
+      "bytes": 48130,
+      "sha256": "c8a66271988201b467f9f847550573a32872260a568baf43855ebe30e17b3048",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/japanese.pdf",
+      "bytes": 2105,
+      "sha256": "93c2dfa9b5830b4bf5fe5649e9b94f3f3cc932666480ac94043cc648ef6d1428",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/landscape.pdf",
+      "bytes": 1239,
+      "sha256": "f5433cb25e8ff6ab996219b3479a5b773a2b37dfff3ba0acfd96197985992fd3",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/m8-detail.pdf",
+      "bytes": 37064,
+      "sha256": "f4caf0d7556f44734c0775bd5fe74ab36499bad45c27e752e3b1e616b4a878a9",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/m8-embedded-japanese.pdf",
+      "bytes": 12340,
+      "sha256": "97863cd4cef9340b0a91ff75c7adab8eed5e260de997290ec4128411710e6057",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/m8-geometry.pdf",
+      "bytes": 962,
+      "sha256": "76d4e0152973ad9484df5fcdddcac75cf2298007d81e2c8b081ea70de9cc0c37",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/m8-transparency.pdf",
+      "bytes": 1384,
+      "sha256": "9f4e92365defacd5f4314ae9fa09b5fb9ea544143d11b74097101a2bdb0ee888",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/mixed-page-size.pdf",
+      "bytes": 1649,
+      "sha256": "e1611a64888be1701737d79b57a1cfbf05a52414fce8a15f6e5c0b19302aca95",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/normal-a4.pdf",
+      "bytes": 1239,
+      "sha256": "202e01af4556e36ef831ffdafc21d492a4648448fffc5d8b2ba24f084e3264b0",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/scanned.pdf",
+      "bytes": 48113,
+      "sha256": "8a86a59d13b3f8e498ed15abeaa39c474015dbd3b42732c29a603067cfd77e07",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/signature.png",
+      "bytes": 873,
+      "sha256": "c5594a5409b58b42db1ea78b6aaa6ab2356187d71cbb6edda8798aacb5ef0fb1",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/unusual-page-sizes.pdf",
+      "bytes": 1659,
+      "sha256": "67164d81e4a0af0bcc46472ebf1a9b1af43c6a3f66aacdd21479e00285c71155",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m5/zero-pages.pdf",
+      "bytes": 124,
+      "sha256": "b6786e887c09775e752ff005021cc3eb9746b0b02d87b1cbc6e665b226e3e193",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/m8-device.pdf",
+      "bytes": 2345,
+      "sha256": "59222d9198ff6e44ed7b23f948739c79887be3830f462279d521b7ab02cf40ef",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/metadata.pdf",
+      "bytes": 1867,
+      "sha256": "f4cac7e7a8f21853ff384309c9ca49ae31d5bc7ba0d52e6778b04c1ffed8498c",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/multimedia.pdf",
+      "bytes": 1701,
+      "sha256": "5b1b156777d237af272cd4d67b2adf5cfcbed250ab9d1493d336507eb6c6b06c",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/organize/eight.pdf",
+      "bytes": 2367,
+      "sha256": "2106ab1a6edfa259bc70e3928b2860c88286794e22cfc16bf47c9926f89cb2ba",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/organize/hundred.pdf",
+      "bytes": 23028,
+      "sha256": "52f89d285d2c982b62fd936b948919493461fcd3020fbaea9dc937f6848f9cb2",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/organize/linked.pdf",
+      "bytes": 1131,
+      "sha256": "4256857264416013aa82f5d86a76cea47c0b3952c7e56b30216c78768597d227",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/organize/ten.pdf",
+      "bytes": 2781,
+      "sha256": "7c78c5c60a5328e3f8de206dcee640d77b25bd258c3c4dd4f810be257f853c89",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/owner-encrypted.pdf",
+      "bytes": 3487,
+      "sha256": "582642ec1a711b08e50a39268a037234459338460869c3c1d61cdf4633e95777",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/password-protected.pdf",
+      "bytes": 3487,
+      "sha256": "8ff846dde5fa7f0893d4f059478e4810609c68c0a7fd9649079f679385d415dc",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/pdfa.pdf",
+      "bytes": 1945,
+      "sha256": "f983c2043f7a9aee9231793a78c9cfc22190117843b45cfeaa1b70f214ce78ad",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/pdfx.pdf",
+      "bytes": 1709,
+      "sha256": "817afa92404aa62a1058204c3cd592f30be3218759550b38778d1528bebeb802",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/alpha.png",
+      "bytes": 344,
+      "sha256": "3f1e42c659c31160d3a04d811b6f09b2413fea51eb432c1a7a746dfe872972e9",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/benchmark-2mp.jpg",
+      "bytes": 45626,
+      "sha256": "07f0b2b4a7327a9fc491211aa59888c3c19b02659e6ac6f2efca37af934eea5b",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/blue.jpg",
+      "bytes": 792,
+      "sha256": "46f5b3c3144cfadd43e1ff3d9324c8bc573c5cd023ffd0ed04a549adc63665ab",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/color-gamma.png",
+      "bytes": 296,
+      "sha256": "5d8ae9b1312d04ed47da9098b8726d30184d117a38d6320f5ff492386c7ee268",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/color-linear.jpg",
+      "bytes": 1822,
+      "sha256": "b54252ef2e0ba725e3c396dc4dd6077d6e3ba7c90436f9da19dbb49a897924b1",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/color-linear.png",
+      "bytes": 678,
+      "sha256": "b100751fb39097145d1f304db8457f1bcd487921d4192a4950c755e73c1099e2",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/corners.png",
+      "bytes": 271,
+      "sha256": "372378896a962959d465a4c24fcd00972b3015eee9f007d9afaa724288661aa7",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-1.jpg",
+      "bytes": 1336,
+      "sha256": "694a3482de852f4a93e5e0b22e2ee42599df6ff6cf6d676ff0d680d3adff0ba9",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-2.jpg",
+      "bytes": 1336,
+      "sha256": "882771f0b67c2d640f34cbcf696023a4da0c39b1116ef03e264cb16c37addc79",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-3.jpg",
+      "bytes": 1336,
+      "sha256": "af30168ca1c02bfc80aa6f6badae877665598a303bdf9b0fe484adbbe33ebd08",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-4.jpg",
+      "bytes": 1336,
+      "sha256": "a982f8949ec56d38a9382050a9718e6d1969a522b9f3af983c90e6491bed31c1",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-5.jpg",
+      "bytes": 1336,
+      "sha256": "a667979896a6017a6cadd67ed748522dd0f29c02615420a69dcc83687da67e02",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-6.jpg",
+      "bytes": 1336,
+      "sha256": "a02ba47055edb591400da0be0ca752e5d0961b121698d6fe5b51aafa949e29d3",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-7.jpg",
+      "bytes": 1336,
+      "sha256": "988d5ccb642806b8bd11e81dbf5e1bcdff3253a607f7aa11c2824d73850303fc",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/exif-8.jpg",
+      "bytes": 1336,
+      "sha256": "85eca5015625b497e1c3a1979d5cf781ac1a6f60ce65cdfbf5959fdd1e479417",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/green.jpg",
+      "bytes": 791,
+      "sha256": "5bc863af2bf437f598beca6e40c0da23f50b073e1defafceb85103c4586acedb",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/red.jpg",
+      "bytes": 791,
+      "sha256": "5fe78dc7dcf7b25afea344ad290ca638200ea50387c53632b231db3e2dfd8166",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic-12mp.heic",
+      "bytes": 36625,
+      "sha256": "408e55ce7aa63baf1ce7c8b725c657fd98be9040ca1897f3a9c02799a55ea242",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic-control.png",
+      "bytes": 2053,
+      "sha256": "9f01d5378950275b95c8926575efab5f8924c6cb9adfb15591b26809bd113935",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic-icc.heic",
+      "bytes": 3096,
+      "sha256": "80ffea9d0647e7758b7f75a19d61c8ec3675c206dcba3917426eb1b7c780cafa",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic-multi.heic",
+      "bytes": 4808,
+      "sha256": "f1b00b2d768d34231fc5801a001536bef7d17ef408112f4028f0b4f9f14a315b",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic-rotated.heic",
+      "bytes": 2606,
+      "sha256": "30d81128689658a1678b3a349247e021039045c90f36100dff73428c3a9a6b1d",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic-srgb.icc",
+      "bytes": 588,
+      "sha256": "ffdfaec354334e009828b5e032427c007da9cd4d726284bf5c20c69f80e3c28f",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/photos/synthetic.heic",
+      "bytes": 2495,
+      "sha256": "82ba1fbbff17b5c409ad81f32744404d57ec646b5b288057e5ce77aba6699d78",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/plain.pdf",
+      "bytes": 1682,
+      "sha256": "2260ae156d5e95f60bf481aabfde94d4902aa67a8fe017e8f3f282a22595779d",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/portfolio.pdf",
+      "bytes": 1690,
+      "sha256": "819be51a6dc8fcaefd4ee7f08d436c703cfd1b62cee405d3f48f6f7c18d21e90",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/raster-linear-icc.pdf",
+      "bytes": 1180,
+      "sha256": "e9bc8f7f8c49a83ef3a626bd9a3bbac0440159bb2977ffd38688954e8f175c74",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/review-30mp.jpg",
+      "bytes": 470127,
+      "sha256": "7972a7d24453a0fe63334ae5da91fd6f35230407e7fc8020278036666f53d131",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/scan.pdf",
+      "bytes": 55754,
+      "sha256": "9599bffe93983f77014b7f7159191d42b1a61bd508891e25d977c8044ffd655c",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/signature.pdf",
+      "bytes": 1734,
+      "sha256": "a7034da01529e2d6b7f17980f5baf9f2525ac789674ae18f4e0b25bdea0ceeb5",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/split/credentials.pdf",
+      "bytes": 1360,
+      "sha256": "6d4422cc20e50430907c05fd22c7ba43e4557f7736567d03c376b266ea9c9b25",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/split/ordinary.pdf",
+      "bytes": 1464,
+      "sha256": "b9bc2e2f99eec9b77a7d3d8d940e29bee6e121098a755284e7cb176a6a43c28a",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/srgb.icc",
+      "bytes": 588,
+      "sha256": "f4c1ca978c04ad62e9064df11e7649671763b422264bb6d1900d41a7b93bdb0b",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/tagged.pdf",
+      "bytes": 1714,
+      "sha256": "a595a7b3dd533134c96842ba45c65cecb55e1b0739ceae7ce8b6ce6d3f2aca07",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/token-text.pdf",
+      "bytes": 1811,
+      "sha256": "184615efc5625177f63ec3fc6c8c6e3a8e2e59207fb40e505c914c514218609a",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/watermark/corrupted.png",
+      "bytes": 12,
+      "sha256": "5464533c9647b67eb320c40ccc5959537c09102ae75388f6a7675b433e745c9d",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/watermark/logo.png",
+      "bytes": 264,
+      "sha256": "730e2766c849aa34071d43391ac2135368b4ba0f9566658572a6f30f80a2dded",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/watermark/orientation.jpg",
+      "bytes": 985,
+      "sha256": "118553e11589ea55aa29f5bd3c59c490985d11098efe16d689e3a9f47be414a8",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/watermark/oversized.png",
+      "bytes": 17595,
+      "sha256": "0d7a98e5e967b205d436ee9b4f5c642015900efff9ac16fd4f636049b166e3ff",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/watermark/transparent.png",
+      "bytes": 145,
+      "sha256": "0a10c4c49a8c9b75791fb42e34ad97b83fb436d48bd551c99d70216f7f30517d",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "tests/fixtures/xfa.pdf",
+      "bytes": 1711,
+      "sha256": "badbe09ae2fe4e4a3631da9747b0b9daf8bfa3c93cf414a8f4e6c05218d3b193",
+      "origin": "Synthetic development fixture: generated PDF objects, drawn geometric rasters, synthetic EXIF/ICC/HEIC or boundary cases; see tests and generator scripts. No user samples."
+    },
+    {
+      "path": "vendor-fonts/NotoSansSC-variable.ttf",
+      "bytes": 17772300,
+      "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+      "origin": "Public OFL font or renamed derived font; adjacent OFL and modification notices apply."
+    },
+    {
+      "path": "vendor-sources/heic/libde265-1.0.15.tar.gz",
+      "bytes": 438453,
+      "sha256": "d4e55706dfc5b2c5c9702940b675ce2d3e7511025c6894eaddcdbaf0b15fd3f3",
+      "origin": "Public upstream HEIC source archive distributed under vendor notices."
+    },
+    {
+      "path": "vendor-sources/heic/libheif-413e2a8.tar.gz",
+      "bytes": 2220554,
+      "sha256": "ef8e86a4e5670b7338a58b17553e306b8be88e506587b265dfdfe44495896999",
+      "origin": "Public upstream HEIC source archive distributed under vendor notices."
+    },
+    {
+      "path": "vendor-sources/heic/libheif-js-d8ec4bc.tar.gz",
+      "bytes": 10267,
+      "sha256": "db9c0c25b15c5c351ac5b045b01009cc446f5712091300656902f9e40a2934db",
+      "origin": "Public upstream HEIC source archive distributed under vendor notices."
+    }
+  ]
+}

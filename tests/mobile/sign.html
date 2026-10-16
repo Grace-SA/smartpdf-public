@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>M5 手机验收 · 签名</title>
+    <style>
+      body {
+        font: 16px/1.65 system-ui;
+        margin: 20px auto;
+        padding: 0 18px;
+        max-width: 650px;
+        background: #f5f5f9;
+        color: #262a34;
+      }
+      h1 {
+        font-size: 26px;
+      }
+      section {
+        background: white;
+        border: 1px solid #e0e2e9;
+        border-radius: 14px;
+        padding: 18px;
+        margin: 18px 0;
+      }
+      a {
+        color: #245baf;
+      }
+      label {
+        display: block;
+        padding: 12px 0;
+      }
+      input {
+        width: 24px;
+        height: 24px;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+      button,
+      .open {
+        display: block;
+        padding: 15px;
+        border: 0;
+        border-radius: 10px;
+        background: #e5322d;
+        color: white;
+        text-align: center;
+        font: inherit;
+        text-decoration: none;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      button:disabled {
+        opacity: 0.5;
+      }
+      li {
+        margin: 12px 0;
+      }
+      #status {
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>手机验收 · M5 签名</h1>
+    <p>
+      本页只回传检查勾选、浏览器信息及版本编号，不读取
+      PDF、签名或姓名。请在独立产品页面操作。
+    </p>
+    <section>
+      <h2>准备</h2>
+      <p>先保存这两个公开合成文件到 Files：</p>
+      <p>
+        <a href="/__m5/normal-a4.pdf" download>两页练习 PDF</a> ·
+        <a href="/__m5/signature.png" download>透明签名图片</a>
+      </p>
+      <a class="open" href="/?v=m5" target="_blank" rel="noopener"
+        >打开 M5 产品页面</a
+      >
+      <p>
+        在产品页面选择 Sign PDF，打开练习 PDF，等页面显示并能点 Add
+        signature。再关闭 Wi-Fi 和蜂窝网络；不要刷新页面。
+      </p>
+    </section>
+    <section>
+      <h2>依次检查</h2>
+      <ol>
+        <li>
+          <b>姓名签名：</b>Add signature → Type → 输入“王小明 Alex” →
+          选择可用样式 → Use signature。点页面空白处放置，或点 Place at page
+          center。
+        </li>
+        <li>
+          <b>调整：</b>点选签名，拖动或点 Move 后点新位置；用 Size
+          等比缩放。Delete 后点 Undo，签名应恢复；用 Pages 切换第二页，Add
+          another 放置同一个签名。
+        </li>
+        <li>
+          <b>手绘与图片：</b>New signature → Draw，画一笔，检查 Clear / Undo
+          stroke，再使用；另用 Image 选择练习
+          PNG，放到页面。横竖屏切换，检查页面和按钮均可操作。
+        </li>
+        <li>
+          <b>完成：</b>Create signed PDF → Download PDF。保存到 Files
+          后打开，核对两页、原内容、三种签名的位置及大小。完成页不应出现跨任务编辑或历史。
+        </li>
+        <li>
+          <b>切换任务：</b>恢复网络后，通过导航切到 Split PDF / Merge
+          PDF，文件选择器应能正常打开，且没有上一任务的文件。
+        </li>
+      </ol>
+      <label
+        ><input
+          type="checkbox"
+          data-check="offline"
+        />断网后完成创建和生成，无需刷新</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          data-check="typed"
+        />中英文姓名签名显示正常，缺字样式不可用</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          data-check="draw-image"
+        />手绘和导入图片均可放置</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          data-check="placement"
+        />移动、等比缩放、删除撤销、换页和横竖屏正常</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          data-check="saved-output"
+        />已保存并重新打开，原内容及签名位置正确</label
+      >
+      <label
+        ><input
+          type="checkbox"
+          data-check="fresh-task"
+        />完成后切换其他工具，能重新选文件且任务独立</label
+      >
+    </section>
+    <button id="send">恢复 Wi-Fi 后回传检查结果</button>
+    <p id="status" role="status">尚未回传；没有通过的项目请保持未勾选。</p>
+    <script>
+      window.m5Build = BUILD_VALUE;
+      window.m5Token = "TOKEN_VALUE";
+    </script>
+    <script src="/__m5/sign.js"></script>
+  </body>
+</html>

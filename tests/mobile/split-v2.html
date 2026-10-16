@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>M4 手机验收 · 拆分 PDF</title>
+    <style>
+      body {
+        font: 16px/1.6 system-ui;
+        margin: 18px;
+        background: #f8f8f3;
+        color: #173f32;
+      }
+      button {
+        padding: 14px;
+        margin: 8px 0;
+        background: #205843;
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        width: 100%;
+        font-size: 16px;
+      }
+      button:disabled {
+        opacity: 0.45;
+      }
+      iframe {
+        width: 100%;
+        height: 900px;
+        border: 1px solid #ccd5ce;
+      }
+      label {
+        display: block;
+        margin: 12px 0;
+      }
+      input[type="checkbox"] {
+        width: 24px;
+        height: 24px;
+        vertical-align: middle;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .running iframe {
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>手机验收 · M4 覆盖率改进版</h1>
+    <p>
+      只使用合成 PDF，检查分组拆分、每页拆分、多结果保存和全局撤销。不会收集你的
+      PDF。本版另检查移除来源凭证和标准声明前的明确确认。自动运行时请保持页面前台。
+    </p>
+    <p id="status" role="status">正在准备…</p>
+    <label
+      ><input id="offline" type="checkbox" />资源准备完成后，我已关闭 Wi-Fi
+      和蜂窝网络</label
+    ><button id="run" disabled>开始离线测试</button
+    ><button id="manual-only" disabled>只打开十页练习文件</button>
+    <section id="manual" hidden>
+      <h2>手动检查</h2>
+      <p>自动完成后，下方会重新打开十页样本并填写分组。请按步骤核对：</p>
+      <ol>
+        <li>
+          点 Create split results，应得到三个部分（3、4、3
+          页）和源文件，源文件仍显示 10 页。分别点三个结果卡片的 Save
+          PDF，在手机文件中打开核对。保存一个文件不会自动下载其他文件。
+        </li>
+        <li>
+          点第二个结果的 Open，再点 Organize pages，选择第一页、旋转并
+          Apply。其他结果仍应保留。之后点源文件的 Open，找到结果列表上方的 Undo
+          / Redo 区域，再点 Undo Organize pages（不是整理面板中的 Undo
+          draft），应回到第二个结果的编辑前状态；再 Undo Split
+          PDF，结果列表消失；Redo Split PDF 恢复三个部分。
+        </li>
+        <li>
+          检查横竖屏下结果名称、Open/Save/Remove 按钮和分组输入是否可用。可试
+          Remove 一个未打开的结果，再 Undo Remove result 恢复。
+        </li>
+      </ol>
+      <label
+        ><input
+          id="saved"
+          type="checkbox"
+        />三个结果分别保存并打开，页数、内容和顺序正确，源文件完整</label
+      >
+      <label
+        ><input
+          id="continued"
+          type="checkbox"
+        />子结果能继续整理，其他结果不被覆盖</label
+      >
+      <label
+        ><input
+          id="history"
+          type="checkbox"
+        />切回源文件后全局撤销/重做正确，移除结果可撤销</label
+      >
+      <label
+        ><input
+          id="orientation"
+          type="checkbox"
+        />横竖屏下分组输入和结果操作方便可用</label
+      >
+      <button id="send">恢复 Wi-Fi 后回传结果</button>
+    </section>
+    <details>
+      <summary>测试明细</summary>
+      <pre id="results"></pre>
+    </details>
+    <iframe id="app" src="/" title="SmartWorks PDF 测试应用"></iframe>
+    <script>
+      window.m0Token = "TOKEN_VALUE";
+      window.m0Build = BUILD_VALUE;
+    </script>
+    <script src="/__m4/split-v2.js"></script>
+  </body>
+</html>

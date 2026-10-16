@@ -1,0 +1,98 @@
+[
+  {
+    "name": "normal-a4.pdf",
+    "bytes": 1239,
+    "sha256": "202e01af4556e36ef831ffdafc21d492a4648448fffc5d8b2ba24f084e3264b0",
+    "expected": "inspect"
+  },
+  {
+    "name": "mixed-page-size.pdf",
+    "bytes": 1649,
+    "sha256": "e1611a64888be1701737d79b57a1cfbf05a52414fce8a15f6e5c0b19302aca95",
+    "expected": "inspect"
+  },
+  {
+    "name": "landscape.pdf",
+    "bytes": 1239,
+    "sha256": "f5433cb25e8ff6ab996219b3479a5b773a2b37dfff3ba0acfd96197985992fd3",
+    "expected": "inspect"
+  },
+  {
+    "name": "100-pages.pdf",
+    "bytes": 39876,
+    "sha256": "5c041897f81f118d88c268484ca0e9b952910586001f911809a10d600d98bf24",
+    "expected": "inspect"
+  },
+  {
+    "name": "scanned.pdf",
+    "bytes": 48113,
+    "sha256": "8a86a59d13b3f8e498ed15abeaa39c474015dbd3b42732c29a603067cfd77e07",
+    "expected": "inspect"
+  },
+  {
+    "name": "form.pdf",
+    "bytes": 2213,
+    "sha256": "3b275700075470c7a3da3d5774400197164f14df6331a4cd10969b3208425af7",
+    "expected": "inspect"
+  },
+  {
+    "name": "chinese.pdf",
+    "bytes": 2079,
+    "sha256": "290cb1d1a8b8ab05fe5df8c55f8632c55d37c77643911d82a77ae5f4efd5732f",
+    "expected": "inspect"
+  },
+  {
+    "name": "japanese.pdf",
+    "bytes": 2105,
+    "sha256": "93c2dfa9b5830b4bf5fe5649e9b94f3f3cc932666480ac94043cc648ef6d1428",
+    "expected": "inspect"
+  },
+  {
+    "name": "image-heavy.pdf",
+    "bytes": 48130,
+    "sha256": "c8a66271988201b467f9f847550573a32872260a568baf43855ebe30e17b3048",
+    "expected": "inspect"
+  },
+  {
+    "name": "encrypted.pdf",
+    "bytes": 1873,
+    "sha256": "7a2274791e222afc2be471b228a60aca0baafebca0a4d31d1ec0ee74b581b17f",
+    "expected": "reject"
+  },
+  {
+    "name": "corrupted.pdf",
+    "bytes": 29,
+    "sha256": "38dbda79eefb3dd97d02a85c9d628e7dbaf5b3d2a713bccbe5aad0da19cfd4e8",
+    "expected": "reject"
+  },
+  {
+    "name": "large-50mb.pdf",
+    "bytes": 52428800,
+    "sha256": "96b846614c38cdc9442cb9e4a13ff4145cab94fcc2b0100583c6db62d10d1b52",
+    "expected": "reject"
+  },
+  {
+    "name": "zero-pages.pdf",
+    "bytes": 124,
+    "sha256": "b6786e887c09775e752ff005021cc3eb9746b0b02d87b1cbc6e665b226e3e193",
+    "expected": "reject"
+  },
+  {
+    "name": "200-pages.pdf",
+    "bytes": 79621,
+    "sha256": "9633f4c32e32cc6eb08998106c49f46a783b372fe9c72bba1933f24115fd0483",
+    "expected": "inspect"
+  },
+  {
+    "name": "100mb.pdf",
+    "bytes": 104857600,
+    "sha256": "5e4eb381e5b8556183ad478a3415c73842e7cc124454cdaa0c600ae4eb003d15",
+    "expected": "reject"
+  },
+  {
+    "name": "unusual-page-sizes.pdf",
+    "bytes": 1659,
+    "sha256": "67164d81e4a0af0bcc46472ebf1a9b1af43c6a3f66aacdd21479e00285c71155",
+    "expected": "inspect"
+  }
+]

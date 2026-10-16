@@ -1,0 +1,2 @@
+patchedDependencies:
+  pdf-lib@1.17.1: patches/pdf-lib@1.17.1.patch

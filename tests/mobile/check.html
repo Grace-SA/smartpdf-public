@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SmartWorks 手机验收</title>
+    <style>
+      body {
+        font: 16px/1.6 system-ui;
+        margin: 20px;
+        background: #f8f8f3;
+        color: #173f32;
+      }
+      button {
+        padding: 14px;
+        margin: 8px 0;
+        background: #205843;
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        width: 100%;
+        font-size: 16px;
+      }
+      button:disabled {
+        opacity: 0.45;
+      }
+      iframe {
+        width: 100%;
+        height: 700px;
+        border: 1px solid #ccc;
+      }
+      pre {
+        white-space: pre-wrap;
+        font-size: 13px;
+      }
+      input {
+        font: inherit;
+      }
+      section {
+        padding: 16px;
+        background: white;
+        border-radius: 12px;
+        margin: 16px 0;
+      }
+      #status {
+        padding: 16px;
+        border: 2px solid #205843;
+        font-weight: 700;
+      }
+      /* Keep the tested browsing context on-screen while measuring. WebKit
+         may throttle rendering in an off-screen iframe. */
+      body.running {
+        overflow: hidden;
+      }
+      body.running #status {
+        position: fixed;
+        inset: 0 0 auto;
+        box-sizing: border-box;
+        height: 110px;
+        margin: 0;
+        overflow: auto;
+        background: #f8f8f3;
+        z-index: 11;
+      }
+      body.running #app {
+        position: fixed;
+        top: 110px;
+        left: 0;
+        box-sizing: border-box;
+        width: 100%;
+        height: calc(100vh - 110px);
+        height: calc(100dvh - 110px);
+        background: white;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>手机验收 · M0</h1>
+    <p>
+      只使用合成测试文件，不需要上传你的
+      PDF。测试期间保持本页在前台，不锁屏、不切换应用。
+    </p>
+    <section>
+      <p id="status" role="status" aria-live="polite">
+        正在准备测试文件和预览…
+      </p>
+      <p>
+        <strong
+          >关闭网络后，还需要勾选下面的确认框，并点击“开始离线测试”。</strong
+        >
+      </p>
+      <label
+        ><input id="offline" type="checkbox" /> 已关闭手机 Wi-Fi
+        和蜂窝网络</label
+      ><button id="run" disabled>开始离线测试（约一分钟）</button>
+      <p>
+        准备完成后关闭网络、勾选上框，再点击测试。测试会自动打开、翻页、拒绝不支持文件，并重复检查清理与性能。
+      </p>
+    </section>
+    <section>
+      <p>
+        测试结束后，把手机转为横屏，确认下方预览和按钮仍能使用，再转回竖屏。
+      </p>
+      <label
+        ><input id="orientation" type="checkbox" />
+        我已检查横竖屏，页面和按钮正常</label
+      >
+      <p>
+        可另用真实文件选择器打开下载的
+        <a id="sample" href="/__m0/plain.pdf" download="smartworks-test.pdf"
+          >合成样本</a
+        >。测试文件会预先载入；若手机无法保存，请恢复 Wi-Fi 后下载，再手动选择。
+      </p>
+      <label
+        ><input id="picker" type="checkbox" /> 我已手动选取 PDF
+        并成功预览</label
+      >
+      <p>
+        结果仅包含设备版本、合成测试结果和耗时，不包含 PDF 内容。恢复 Wi-Fi
+        后点击下方按钮，回传到你的电脑。
+      </p>
+      <button id="send" disabled>将测试结果回传电脑</button>
+      <details>
+        <summary>查看自动测试明细</summary>
+        <pre id="results"></pre>
+      </details>
+    </section>
+    <iframe id="app" src="/" title="SmartWorks PDF 测试预览"></iframe>
+    <script>
+      window.m0Token = "TOKEN_VALUE";
+      window.m0Build = BUILD_VALUE;
+    </script>
+    <script src="/__m0/check.js"></script>
+  </body>
+</html>

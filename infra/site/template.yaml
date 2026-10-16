@@ -1,0 +1,448 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Smart PDF private static site, CDN and low-cost product analytics
+
+Parameters:
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM certificate in us-east-1; leave blank for the CloudFront preview.
+  DomainName:
+    Type: String
+    Default: smartpdf.com.au
+  RedirectDomain:
+    Type: String
+    Default: smartpdf.au
+    Description: Secondary brand domain redirected to the canonical domain.
+
+Conditions:
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  OriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  RouteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-routes
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Redirect www and serve generated directory indexes with canonical trailing-slash URLs
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !Sub |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+          var host = request.headers.host && request.headers.host.value;
+          if (
+            host === "www.${DomainName}" ||
+            host === "${RedirectDomain}" ||
+            host === "www.${RedirectDomain}"
+          ) {
+            var query = request.querystring;
+            var queryParts = [];
+            for (var key in query) {
+              var values = query[key].multiValue || [query[key]];
+              for (var index = 0; index < values.length; index += 1) {
+                queryParts.push(
+                  encodeURIComponent(key) + "=" + encodeURIComponent(values[index].value)
+                );
+              }
+            }
+            return {
+              statusCode: 301,
+              statusDescription: "Moved Permanently",
+              headers: {
+                location: {
+                  value: "https://${DomainName}" + uri +
+                    (queryParts.length ? "?" + queryParts.join("&") : "")
+                }
+              }
+            };
+          }
+          if (uri === "/") {
+            request.uri = "/index.html";
+            return request;
+          }
+          if (uri.charAt(uri.length - 1) === "/") {
+            request.uri = uri + "index.html";
+            return request;
+          }
+          if (uri.indexOf(".") === -1) {
+            return {
+              statusCode: 301,
+              statusDescription: "Moved Permanently",
+              headers: { location: { value: uri + "/" } }
+            };
+          }
+          return request;
+        }
+
+  SiteCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub ${AWS::StackName}-site-cache
+        DefaultTTL: 300
+        MinTTL: 0
+        MaxTTL: 86400
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  AssetCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub ${AWS::StackName}-asset-cache
+        DefaultTTL: 31536000
+        MinTTL: 86400
+        MaxTTL: 31536000
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  NoCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub ${AWS::StackName}-no-cache
+        DefaultTTL: 0
+        MinTTL: 0
+        MaxTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: false
+          EnableAcceptEncodingBrotli: false
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  AnalyticsOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${AWS::StackName}-analytics-origin
+        CookiesConfig:
+          CookieBehavior: none
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            - content-type
+        QueryStringsConfig:
+          QueryStringBehavior: none
+
+  SecurityHeaders:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub ${AWS::StackName}-security
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' blob:; connect-src 'self' https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+            Preload: false
+            Override: true
+
+  AnalyticsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  AnalyticsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: smartpdf-product-analytics
+      Architectures:
+        - arm64
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt AnalyticsRole.Arn
+      MemorySize: 128
+      Timeout: 3
+      ReservedConcurrentExecutions: 10
+      Code:
+        ZipFile: |
+          const events = new Set([
+            "tool_view",
+            "file_selected",
+            "process_start",
+            "process_success",
+            "process_failure",
+            "process_cancel",
+            "download",
+            "download_failure",
+          ]);
+          const tools = new Set([
+            "combine",
+            "split",
+            "organize",
+            "photos",
+            "sign",
+            "compress",
+            "rotate",
+            "raster",
+            "watermark",
+          ]);
+          const reasons = new Set([
+            "cancelled",
+            "timeout",
+            "unsupported",
+            "resource_limit",
+            "validation",
+            "worker",
+            "unknown",
+          ]);
+          const bucket = /^(<=|>)[0-9]+$/;
+          const allowedKeys = new Set([
+            "schema",
+            "event",
+            "tool",
+            "file_count",
+            "size_mib",
+            "pages",
+            "duration_ms",
+            "reason",
+          ]);
+
+          function validate(body) {
+            if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+            if (Object.keys(body).some((key) => !allowedKeys.has(key))) return null;
+            if (body.schema !== 1 || !events.has(body.event) || !tools.has(body.tool))
+              return null;
+            for (const key of ["file_count", "size_mib", "pages", "duration_ms"])
+              if (body[key] !== undefined && !bucket.test(body[key])) return null;
+            if (body.reason !== undefined && !reasons.has(body.reason)) return null;
+            return body;
+          }
+
+          exports.handler = async function handler(event) {
+            const raw = event?.body ?? "";
+            if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
+              return { statusCode: 413, body: "" };
+            let parsed;
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              return { statusCode: 400, body: "" };
+            }
+            const data = validate(parsed);
+            if (!data) return { statusCode: 400, body: "" };
+
+            // Keep MVP analytics in structured logs rather than publishing a custom
+            // metric for every tool/event combination. Logs Insights can calculate the
+            // funnel on demand without the standing cost of dozens of custom metrics.
+            const record = {
+              schema: data.schema,
+              event: data.event,
+              tool: data.tool,
+              file_count: data.file_count,
+              size_mib: data.size_mib,
+              pages: data.pages,
+              duration_ms: data.duration_ms,
+              reason: data.reason,
+            };
+            console.log(JSON.stringify(record));
+            return { statusCode: 204, body: "" };
+          }
+
+  AnalyticsLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/smartpdf-product-analytics
+      RetentionInDays: 30
+
+  AnalyticsApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: smartpdf-product-analytics
+      ProtocolType: HTTP
+
+  AnalyticsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref AnalyticsApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt AnalyticsFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  AnalyticsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AnalyticsApi
+      RouteKey: POST /api/analytics
+      Target: !Sub integrations/${AnalyticsIntegration}
+
+  AnalyticsStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref AnalyticsApi
+      StageName: prod
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 50
+        ThrottlingRateLimit: 20
+
+  AnalyticsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AnalyticsFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AnalyticsApi}/*/POST/api/analytics
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Smart PDF private browser PDF tools
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Aliases: !If
+          - HasCertificate
+          - - !Ref DomainName
+            - !Sub "www.${DomainName}"
+            - !Ref RedirectDomain
+            - !Sub "www.${RedirectDomain}"
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasCertificate
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !Ref OriginAccess
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+          - Id: analytics
+            DomainName: !Sub ${AnalyticsApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}
+            OriginPath: /prod
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: !Ref SiteCachePolicy
+          ResponseHeadersPolicyId: !Ref SecurityHeaders
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt RouteFunction.FunctionARN
+        CacheBehaviors:
+          - PathPattern: assets/*
+            TargetOriginId: site
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: !Ref AssetCachePolicy
+            ResponseHeadersPolicyId: !Ref SecurityHeaders
+          - PathPattern: api/analytics*
+            TargetOriginId: analytics
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD, OPTIONS]
+            Compress: true
+            CachePolicyId: !Ref NoCachePolicy
+            OriginRequestPolicyId: !Ref AnalyticsOriginRequestPolicy
+            ResponseHeadersPolicyId: !Ref SecurityHeaders
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${SiteBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+Outputs:
+  BucketName:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionHostname:
+    Value: !GetAtt Distribution.DomainName
+  PreviewURL:
+    Value: !Sub https://${Distribution.DomainName}
+  AnalyticsEndpoint:
+    Value: /api/analytics

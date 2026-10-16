@@ -1,0 +1,327 @@
+.watermark-task {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  min-width: 0;
+}
+.watermark-filename {
+  overflow-wrap: anywhere;
+  margin: 0 0 16px;
+}
+.watermark-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+.watermark-preview {
+  min-width: 0;
+  background: #e9e9f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.watermark-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: white;
+  border-bottom: 1px solid var(--line);
+}
+.watermark-toolbar > button {
+  flex: 0 0 44px;
+  min-height: 44px;
+  padding: 8px;
+}
+.watermark-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.product-app .watermark-toolbar input {
+  width: 54px;
+  padding: 8px 4px;
+  text-align: center;
+  min-height: 44px;
+}
+.product-app .watermark-toolbar select {
+  min-height: 44px;
+  font-size: 13px;
+  padding: 8px;
+}
+.watermark-zoom {
+  margin-left: auto;
+}
+.watermark-viewport {
+  position: relative;
+  height: clamp(400px, 65dvh, 780px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+}
+.watermark-pages {
+  position: relative;
+}
+.watermark-sheet {
+  position: absolute;
+  background: white;
+  box-shadow: 0 2px 9px #19192226;
+}
+.watermark-page-label {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  padding: 2px 0;
+  font-size: 11px;
+  color: #575762;
+  white-space: nowrap;
+}
+.watermark-sheet .sign-canvas {
+  position: absolute;
+  inset: 0;
+}
+.watermark-sheet .sign-page-error {
+  position: absolute;
+  inset: 20px;
+  color: #8b2222;
+  font-size: 13px;
+}
+.watermark-sheet .watermark-overlay {
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: center;
+}
+.watermark-preview-status {
+  padding: 20px;
+}
+.watermark-settings {
+  min-width: 0;
+}
+.watermark-task .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.product-app .watermark-settings > fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.watermark-settings label {
+  font-size: 14px;
+}
+.watermark-settings
+  input:not([type="radio"]):not([type="range"]):not([type="color"]),
+.watermark-settings select {
+  width: 100%;
+  margin-top: 7px;
+  min-height: 44px;
+}
+.watermark-segments {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.watermark-segments > button {
+  flex: 1;
+  min-height: 44px;
+}
+.watermark-task .active {
+  background: #fff0ef;
+  border-color: #d53530;
+  color: #bd2622;
+}
+.watermark-text {
+  display: block;
+}
+.watermark-color {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 18px;
+}
+.watermark-color input {
+  width: 54px;
+  min-height: 40px;
+  padding: 4px;
+}
+.watermark-slider {
+  display: block;
+  margin: 18px 0;
+}
+.watermark-slider > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.watermark-slider output {
+  font-size: 12px;
+  color: var(--muted);
+}
+.watermark-slider input {
+  width: 100%;
+  min-height: 32px;
+  margin: 5px 0 0;
+  accent-color: #d53530;
+  padding: 0;
+}
+.product-app .watermark-position,
+.product-app .watermark-pages-choice {
+  padding: 0;
+  margin: 20px 0;
+  border: 0;
+}
+.watermark-position legend,
+.watermark-pages-choice legend {
+  margin-bottom: 9px;
+  font-size: 14px;
+}
+.watermark-position > div {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 156px;
+  gap: 5px;
+}
+.watermark-position button {
+  min-height: 44px;
+  padding: 8px;
+  font-size: 12px;
+}
+.watermark-pages-choice > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+  min-height: 32px;
+}
+.watermark-pages-choice input[type="radio"] {
+  width: auto;
+  accent-color: #d53530;
+}
+.watermark-image-input {
+  margin-bottom: 18px;
+}
+.watermark-image-input .file-label {
+  display: block;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+  background: #f3f3f7;
+  color: var(--ink);
+  cursor: pointer;
+}
+.watermark-image-input p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.watermark-error {
+  color: #9a2523;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.watermark-summary {
+  font-size: 13px;
+  color: var(--muted);
+}
+.watermark-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.watermark-actions > button {
+  width: 100%;
+  min-height: 48px;
+}
+@media (max-width: 900px) {
+  .watermark-task {
+    padding: 12px;
+  }
+  .watermark-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .watermark-preview {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    width: 100%;
+  }
+  .watermark-viewport {
+    height: clamp(180px, 30dvh, 280px);
+  }
+  .watermark-settings {
+    width: 100%;
+    padding-bottom: 90px;
+  }
+  .watermark-settings > fieldset {
+    max-width: 520px;
+    margin-inline: auto !important;
+  }
+  .watermark-actions {
+    position: fixed;
+    z-index: 15;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -3px 10px #20202b0a;
+  }
+  .watermark-actions > button:first-child {
+    flex: 1;
+  }
+  .watermark-actions > button.secondary {
+    width: auto;
+    flex: 0 0 auto;
+  }
+  .product-app .watermark-toolbar select {
+    max-width: 105px;
+  }
+  .watermark-toolbar label {
+    gap: 4px;
+    font-size: 12px;
+  }
+}
+@media (max-width: 360px) {
+  .watermark-page-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .watermark-toolbar {
+    gap: 4px;
+    padding: 5px;
+  }
+  .watermark-toolbar > button {
+    flex-basis: 38px;
+  }
+  .product-app .watermark-toolbar input {
+    width: 40px;
+  }
+  .product-app .watermark-toolbar select {
+    max-width: 90px;
+    padding-inline: 3px;
+  }
+}

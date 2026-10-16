@@ -1,0 +1,6 @@
+@pdf-lib/fontkit 1.1.1
+Author: "Andrew Dillon <andrew.dillon.j@gmail.com>"
+Contributors: ["Devon Govett <devongovett@gmail.com> (http://badassjs.com/)"]
+Declared license: MIT (installed package.json and README License section).
+Repository: git://github.com/Hopding/fontkit.git
+The published package and inspected fork do not supply a standalone copyright/license file. The full declared MIT terms are included without inventing a copyright year; upstream author/contributor metadata is retained here. README license reference: https://choosealicense.com/licenses/mit/

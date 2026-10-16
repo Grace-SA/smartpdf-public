@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>M2 手机验收 · 合并 PDF</title>
+    <style>
+      body {
+        font: 16px/1.6 system-ui;
+        margin: 18px;
+        background: #f8f8f3;
+        color: #173f32;
+      }
+      button {
+        padding: 14px;
+        margin: 8px 0;
+        background: #205843;
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        width: 100%;
+        font-size: 16px;
+      }
+      button:disabled {
+        opacity: 0.45;
+      }
+      iframe {
+        width: 100%;
+        height: 800px;
+        border: 1px solid #ccd5ce;
+        background: white;
+      }
+      label {
+        display: block;
+        margin: 12px 0;
+      }
+      body.running #app {
+        position: fixed;
+        left: 0;
+        top: 120px;
+        width: 100vw;
+        height: calc(100dvh - 120px);
+        z-index: 10;
+      }
+      body.running #status {
+        position: fixed;
+        left: 0;
+        top: 0;
+        box-sizing: border-box;
+        padding: 12px;
+        background: #f8f8f3;
+        width: 100%;
+        height: 120px;
+        z-index: 11;
+        margin: 0;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>手机验收 · M2</h1>
+    <p>
+      自动检查只使用合成 PDF，不上传你的文件。准备阶段约加载 20 MiB
+      样本。自动检查结束后，再手动验证选文件和保存。
+    </p>
+    <p>
+      自动测试会检查 3 份 PDF 合为 6 页、页序与撤销/重做，再执行百页性能测试（2
+      次预热、20
+      次测量）。运行时不必点击应用内按钮，也不要刷新或切换应用；结束后再做手动检查。
+    </p>
+    <p id="status">正在准备合成 PDF 和应用，请保持联网…</p>
+    <label
+      ><input id="offline" type="checkbox" />我已关闭 Wi-Fi
+      和蜂窝网络，并会保持页面前台、不锁屏</label
+    ><button id="run" disabled>开始离线测试</button>
+    <p>
+      可先下载 <a href="/__m2/a.pdf" download="sample-a.pdf">合成样本 A</a> 和
+      <a href="/__m2/b.pdf" download="sample-b.pdf">合成样本 B</a>
+      至手机文件中供手动选择。A 为 2 页、B 为 3 页，手动合并后应为 5 页。
+    </p>
+    <section id="manual" hidden>
+      <h2>自动检查完成后</h2>
+      <p>
+        在下面的应用内添加至少两个普通
+        PDF（可用上方合成样本），检查页数，调整文件顺序，点击 Apply
+        combine。然后点击 Save PDF，并在 iPhone“文件”或下载列表中打开
+        PDF，检查方向、页数和内容。请不要只以看到 Download started
+        作为保存成功。
+      </p>
+      <label
+        ><input id="picked" type="checkbox" />手动选择至少两个
+        PDF、排序并合并成功</label
+      ><label
+        ><input id="saved" type="checkbox" />已保存并在手机上打开
+        PDF，方向、页数和内容正确</label
+      ><label
+        ><input
+          id="orientation"
+          type="checkbox"
+        />横竖屏下预览与主要按钮可使用</label
+      >
+      <label
+        ><input id="confirmed" type="checkbox" />Clear session
+        确认框阻止背景操作；Stay here 后文档保留</label
+      >
+      <p>恢复 Wi-Fi 后点击回传。不包含文件名或 PDF 内容。</p>
+      <button id="send">将测试结果回传电脑</button>
+    </section>
+    <details>
+      <summary>测试明细</summary>
+      <pre id="results"></pre>
+    </details>
+    <iframe id="app" src="/" title="SmartWorks PDF 测试应用"></iframe>
+    <script>
+      window.m0Token = "TOKEN_VALUE";
+      window.m0Build = BUILD_VALUE;
+    </script>
+    <script src="/__m2/combine.js"></script>
+  </body>
+</html>

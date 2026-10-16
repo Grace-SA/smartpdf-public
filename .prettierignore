@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-*
+.local-python
+test-results-*
+pnpm-lock.yaml
+public/pdf-resources.json
+public/notices
+test-results
+docs/requirements-v1.1.md
+docs/evidence
+docs/private-samples
+releases
+.git-tools
+.git-bootstrap-check

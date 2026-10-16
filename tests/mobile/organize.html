@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>M3 手机验收 · 页面整理</title>
+    <style>
+      body {
+        font: 16px/1.6 system-ui;
+        margin: 18px;
+        background: #f8f8f3;
+        color: #173f32;
+      }
+      button {
+        padding: 14px;
+        margin: 8px 0;
+        background: #205843;
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        width: 100%;
+        font-size: 16px;
+      }
+      button:disabled {
+        opacity: 0.45;
+      }
+      iframe {
+        width: 100%;
+        height: 900px;
+        border: 1px solid #ccd5ce;
+      }
+      label {
+        display: block;
+        margin: 12px 0;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      body.running #app {
+        position: fixed;
+        left: 0;
+        top: 120px;
+        width: 100vw;
+        height: calc(100dvh - 120px);
+        z-index: 10;
+      }
+      body.running #status {
+        position: fixed;
+        left: 0;
+        top: 0;
+        box-sizing: border-box;
+        padding: 12px;
+        background: #f8f8f3;
+        width: 100%;
+        height: 120px;
+        z-index: 11;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>手机验收 · M3</h1>
+    <p>
+      仅使用合成 PDF，检查页面排序、删除、旋转、撤销重做和百页缩略图。不会上传
+      PDF。自动运行期间不必操作应用，不要切后台或锁屏。
+    </p>
+    <p id="status">正在准备，请保持联网…</p>
+    <label
+      ><input id="offline" type="checkbox" />我已关闭 Wi-Fi
+      和蜂窝网络，并保持页面前台</label
+    ><button id="run" disabled>开始离线测试</button>
+    <p>自动检查已经回传过？保持联网，点击下面按钮，只补做手动检查。</p>
+    <button id="manual-only" disabled>打开十页练习文件（只做手动检查）</button>
+    <p>
+      手动检查可使用<a href="/__m3/ten.pdf" download="ten-pages.pdf"
+        >十页合成样本</a
+      >。
+    </p>
+    <section id="manual" hidden>
+      <h2>手动练习：10 页变 8 页</h2>
+      <p>
+        十页样本已自动载入，下方应用已展开页面整理。页面列表在整理按钮下方，需要向下滚动。
+        Original page 是原页码，Position 是新位置；手机上无需拖动。
+      </p>
+      <ol>
+        <li>
+          在下方应用预览区找到 Go to page，输入 7 并点 Go，应显示 Page 7 of 10。
+          回到页面整理区，展开 Select a page range，输入 2-3，点 Select range，
+          应显示 2 selected。范围数字表示当前 Position，不是 Original page。
+        </li>
+        <li>
+          点击 None（清空选择），勾选原第 2、3 页。目标位置填 1，点击
+          Move（移到目标位置），再点 Rotate 90°（旋转）。 点 Enlarge selected
+          pages，应看到旋转后的原第 2 页；点 Next selected 应看到原第 3 页。尝试
+          Zoom 200%、横竖屏和滚动，再点 Close enlarged page。
+        </li>
+        <li>
+          点击 None，滚动缩略图列表到底部，勾选原第 9、10 页，点击
+          Delete（删除选中页）。此时应剩 8 页。
+        </li>
+        <li>
+          先点 Combine PDFs 切换任务，应出现草稿确认框；点 Stay
+          here（留在这里），确认刚才的修改还在。
+        </li>
+        <li>
+          点 Apply changes（应用修改），然后 Save
+          PDF（保存）。在手机文件中打开：应为 8 页，顺序为
+          2、3、1、4、5、6、7、8，前两页旋转 90°。
+        </li>
+        <li>
+          再次点 Organize
+          pages，横竖屏切换，确认缩略图和操作按钮可用。完成哪一项就勾选哪一项，恢复
+          Wi-Fi 后回传。
+        </li>
+      </ol>
+      <p>
+        如果在普通应用中看到 Organize pages 灰置，需要先点 Choose a PDF
+        打开文件，等预览出现后才能整理。
+      </p>
+      <label
+        ><input id="edited" type="checkbox" />触控选择、多选、移动、旋转、删除和
+        Apply 成功</label
+      ><label
+        ><input
+          id="saved"
+          type="checkbox"
+        />已保存并在手机上打开，页数、顺序、方向正确</label
+      ><label
+        ><input
+          id="orientation"
+          type="checkbox"
+        />横竖屏下缩略图和主要按钮可用</label
+      ><label
+        ><input
+          id="confirmed"
+          type="checkbox"
+        />有未提交修改时切换任务会确认，Stay here 保留草稿</label
+      ><label><input id="jumped" type="checkbox" />页码跳转到第 7 页成功</label>
+      <label><input id="ranged" type="checkbox" />范围 2-3 正确选中两页</label>
+      <label
+        ><input id="enlarged" type="checkbox" />放大查看、切换选中页、200%
+        缩放及横竖屏可用，关闭后草稿仍在</label
+      >
+      <button id="send">将测试结果回传电脑</button>
+    </section>
+    <details>
+      <summary>测试明细</summary>
+      <pre id="results"></pre>
+    </details>
+    <iframe id="app" src="/" title="SmartWorks PDF 测试应用"></iframe>
+    <script>
+      window.m0Token = "TOKEN_VALUE";
+      window.m0Build = BUILD_VALUE;
+    </script>
+    <script src="/__m3/organize.js"></script>
+  </body>
+</html>

@@ -1,0 +1,220 @@
+.rotate-task {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+}
+.rotate-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.rotate-topbar .source-context {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rotate-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 24px;
+}
+.rotate-viewport {
+  height: min(660px, 70dvh);
+  overflow: auto;
+  background: #f4f4f8;
+  border-radius: 10px;
+  scrollbar-gutter: stable;
+}
+.rotate-card {
+  padding: 8px;
+}
+.rotate-face {
+  width: 100%;
+  padding: 8px;
+  background: white;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 9px 9px 0 0;
+  display: block;
+  font-size: 13px;
+}
+.rotate-thumbnail {
+  display: flex;
+  width: 100%;
+  height: 150px;
+  align-items: center;
+  justify-content: center;
+}
+.rotate-thumbnail > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 142px);
+  aspect-ratio: 1;
+}
+.rotate-thumbnail canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+.rotate-card-actions {
+  min-height: 46px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 9px 9px;
+}
+.rotate-card-actions button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 4px 10px;
+  font-size: 23px;
+}
+.rotate-card-actions label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 12px;
+}
+.rotate-card-actions input {
+  width: 20px;
+  height: 20px;
+}
+.rotate-card[data-selected="true"] .rotate-face {
+  border-color: #e5322d;
+  box-shadow: inset 0 0 0 1px #e5322d;
+}
+.rotate-settings h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+.rotate-settings > p {
+  color: var(--muted);
+  font-size: 14px;
+}
+.rotate-settings fieldset {
+  padding: 0;
+  margin: 20px 0;
+  border: 0;
+}
+.rotate-settings legend {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.rotate-settings label {
+  display: grid;
+  gap: 6px;
+}
+.rotate-settings select,
+.rotate-settings input {
+  max-width: 100%;
+  min-width: 0;
+}
+.rotate-settings select {
+  width: 100%;
+}
+.rotate-directions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.rotate-directions button {
+  flex: 1;
+  padding: 10px 6px;
+  min-height: 44px;
+  font-size: 14px;
+}
+.rotate-settings details {
+  margin: 10px 0;
+  font-size: 14px;
+}
+.rotate-settings details label {
+  margin: 10px 0;
+}
+.rotate-submit {
+  display: grid;
+  gap: 10px;
+}
+.rotate-submit > button:first-child {
+  min-height: 58px;
+  font-size: 19px;
+}
+.rotate-summary {
+  min-height: 24px;
+}
+@media (max-width: 800px) {
+  .rotate-task {
+    padding: 12px;
+  }
+  .rotate-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .rotate-settings {
+    display: contents;
+  }
+  .rotate-settings > h2,
+  .rotate-settings > p:not(.rotate-summary) {
+    display: none;
+  }
+  .rotate-settings fieldset {
+    grid-row: 1;
+    margin: 0;
+  }
+  .rotate-summary {
+    grid-row: 2;
+    margin: 0;
+  }
+  .rotate-viewport {
+    grid-row: 3;
+    height: min(520px, 56dvh);
+  }
+  .rotate-task {
+    padding-bottom: 96px;
+  }
+  .rotate-submit {
+    position: fixed;
+    z-index: 5;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 16px #24252d0a;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .rotate-submit > button:first-child {
+    min-height: 48px;
+    font-size: 17px;
+  }
+  .rotate-submit > button.secondary {
+    padding-inline: 12px;
+    font-size: 13px;
+  }
+  .rotate-topbar .workspace-toolbar {
+    width: 100%;
+  }
+  .rotate-thumbnail canvas {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .rotate-thumbnail {
+    height: 150px;
+  }
+  .rotate-face {
+    padding: 6px 2px;
+  }
+  .rotate-settings h2 {
+    font-size: 20px;
+  }
+}
