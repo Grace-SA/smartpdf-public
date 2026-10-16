@@ -2,6 +2,7 @@ import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import ProbeWorker from "./probe.worker?worker&inline";
 import { readLocalFile, untilAborted } from "./abort";
+import { waitForBoot } from "./worker-boot";
 import { installMemoryResources, resourceOrigin } from "./memory-resources";
 import {
   LIMITS,
@@ -21,43 +22,6 @@ export type Preview = {
   dispose: () => Promise<void>;
 };
 type ResourcePack = Record<string, Uint8Array>;
-function waitForBoot(
-  port: Worker,
-  ready: (data: Record<string, unknown> | null) => boolean,
-  signal?: AbortSignal,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const clean = () => {
-      clearTimeout(timer);
-      port.removeEventListener("message", message);
-      port.removeEventListener("error", error);
-      signal?.removeEventListener("abort", abort);
-    };
-    const fail = (reason: Error) => {
-      clean();
-      reject(reason);
-    };
-    const message = (event: MessageEvent) => {
-      if (ready(event.data)) {
-        clean();
-        resolve();
-      }
-    };
-    const error = (event: ErrorEvent) => {
-      event.preventDefault();
-      fail(new Error("RESOURCE_LOAD_FAILED"));
-    };
-    const abort = () => fail(new ProbeFailure("CANCELLED"));
-    const timer = setTimeout(
-      () => fail(new Error("RESOURCE_LOAD_FAILED")),
-      15000,
-    );
-    port.addEventListener("message", message);
-    port.addEventListener("error", error);
-    signal?.addEventListener("abort", abort, { once: true });
-    if (signal?.aborted) abort();
-  });
-}
 export class Engine {
   private workerUrl = "";
   private resources: ResourcePack = {};
@@ -136,8 +100,20 @@ export class Engine {
     }
   }
 
-  private probe(bytes: Uint8Array, signal: AbortSignal): Promise<ProbeResult> {
+  private async probe(
+    bytes: Uint8Array,
+    signal: AbortSignal,
+  ): Promise<ProbeResult> {
     const worker = new ProbeWorker();
+    try {
+      // Every newly created probe must be ready, not just the startup canary.
+      await waitForBoot(worker, (data) => data?.ready === true, signal);
+    } catch (error) {
+      worker.terminate();
+      throw error instanceof ProbeFailure
+        ? error
+        : new ProbeFailure("PROCESSING_FAILED");
+    }
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       let cleaned = false;
