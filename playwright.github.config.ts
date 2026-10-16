@@ -9,7 +9,9 @@ export default defineConfig({
     "raster-return-paths.spec.ts",
     "processing-overlay.spec.ts",
   ],
-  workers: 2,
+  // CI browser engines run in separate jobs; give each test the full runner.
+  workers: process.env.CI ? 1 : 2,
+  globalTimeout: 30 * 60 * 1000,
   reporter: [
     ["list"],
     ["json", { outputFile: "docs/evidence/github-browser.json" }],

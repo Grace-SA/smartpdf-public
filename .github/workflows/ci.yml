@@ -11,8 +11,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
+    name: verify (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,6 +45,21 @@ jobs:
         run: pnpm test
       - name: Build all public pages
         run: pnpm build
-      - run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
+      - run: node node_modules/@playwright/test/cli.js install --with-deps ${{ matrix.browser }}
+      - name: WebKit environment preflight
+        if: matrix.browser == 'webkit'
+        run: pnpm exec playwright test --config playwright.github.config.ts --project webkit --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews'
+        env:
+          DEBUG: pw:browser
       - name: Browser regression across all nine tools
-        run: pnpm exec playwright test --config playwright.github.config.ts
+        run: pnpm exec playwright test --config playwright.github.config.ts --project ${{ matrix.browser }}
+      - name: Retain synthetic diagnostic text on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-diagnostics-${{ matrix.browser }}
+          path: |
+            docs/evidence/github-browser.json
+            test-results-github/**/error-context.md
+          retention-days: 3
+          if-no-files-found: ignore
