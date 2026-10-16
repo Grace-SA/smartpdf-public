@@ -5,13 +5,47 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
 const git = (...args) =>
-  execFileSync("git", args, { maxBuffer: 96 * 1024 * 1024 });
-const files = git("ls-files", "-z")
+  execFileSync("git", args, { maxBuffer: 256 * 1024 * 1024 });
+const entries = git("ls-files", "--stage", "-z")
   .toString("utf8")
   .split("\0")
-  .filter(Boolean);
+  .filter(Boolean)
+  .map((entry) => {
+    const match = entry.match(/^\d+ ([0-9a-f]+) (\d+)\t([\s\S]+)$/);
+    if (!match || match[2] !== "0")
+      throw new Error(
+        "Resolve unmerged Git entries before checking the repository.",
+      );
+    return { oid: match[1], file: match[3] };
+  });
+const files = entries.map((entry) => entry.file);
+const ids = [...new Set(entries.map((entry) => entry.oid))];
+const packed = execFileSync("git", ["cat-file", "--batch"], {
+  input: ids.join("\n") + "\n",
+  maxBuffer: 256 * 1024 * 1024,
+});
+const blobs = new Map();
+let offset = 0;
+for (const oid of ids) {
+  const end = packed.indexOf(10, offset);
+  const header = packed.subarray(offset, end).toString("ascii").split(" ");
+  const size = Number(header[2]);
+  if (
+    end < 0 ||
+    header[0] !== oid ||
+    header[1] !== "blob" ||
+    !Number.isSafeInteger(size) ||
+    size < 0 ||
+    end + 1 + size >= packed.length
+  )
+    throw new Error("Git object batch could not be verified.");
+  blobs.set(oid, packed.subarray(end + 1, end + 1 + size));
+  offset = end + 1 + size + 1;
+}
+const contentFor = (file) =>
+  blobs.get(entries.find((entry) => entry.file === file)?.oid);
 const inventory = JSON.parse(
-  git("show", ":config/repository-assets.json").toString("utf8"),
+  contentFor("config/repository-assets.json").toString("utf8"),
 );
 const assets = new Map(inventory.assets.map((entry) => [entry.path, entry]));
 const failures = [];
@@ -30,7 +64,7 @@ for (const file of files) {
     failures.push(`${file}: local-only path`);
     continue;
   }
-  const content = git("show", `:${file}`);
+  const content = contentFor(file);
   if (content.length >= 90 * 1024 * 1024)
     failures.push(`${file}: exceeds repository size limit`);
   if (binary.test(file) || content.includes(0)) {

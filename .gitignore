@@ -84,11 +84,13 @@ private-samples/
 !/scripts/run-local-tool.ps1
 !/scripts/windows-realpath-compat.cjs
 !/scripts/check-repository.mjs
+!/scripts/test-repository-guard.mjs
 !/scripts/prepare-release.mjs
 
 /tests/review-color.spec.ts
 /tests/ux-performance.spec.ts
 /tests/ux5-performance.test.ts
+/playwright.sign-private.config.ts
 /tests/fixtures/m5/large-50mb.pdf
 /tests/fixtures/m5/100mb.pdf
 
