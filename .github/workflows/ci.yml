@@ -48,7 +48,9 @@ jobs:
       - run: node node_modules/@playwright/test/cli.js install --with-deps ${{ matrix.browser }}
       - name: WebKit environment preflight
         if: matrix.browser == 'webkit'
-        run: pnpm exec playwright test --config playwright.github.config.ts --project webkit --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews'
+        run: >-
+          pnpm exec playwright test --config playwright.github.config.ts --project webkit
+          --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews'
         env:
           DEBUG: pw:browser
       - name: Browser regression across all nine tools
