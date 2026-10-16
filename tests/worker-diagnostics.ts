@@ -1,13 +1,21 @@
 import type { Page } from "@playwright/test";
+const summaries = new WeakMap<Page, string[]>();
 
 // Synthetic browser tests only: record lifecycle categories, never payloads.
 export async function workerDiagnostics(page: Page) {
+  const events: string[] = [];
+  summaries.set(page, events);
+  page.on("console", (message) => {
+    if (!message.text().startsWith("SMARTPDF_SYNTHETIC_WORKER ")) return;
+    events.push(message.text());
+    if (events.length > 160) events.shift();
+  });
   await page.addInitScript(() => {
-    const events: string[] = [];
-    Reflect.set(window, "syntheticWorkerEvents", events);
     const record = (value: string) => {
-      events.push(`${Math.round(performance.now())}:${value}`);
-      if (events.length > 160) events.shift();
+      console.debug(
+        "SMARTPDF_SYNTHETIC_WORKER",
+        `${Math.round(performance.now())}:${value}`,
+      );
     };
     let sequence = 0;
     const ids = new WeakMap<Worker, number>();
@@ -53,9 +61,5 @@ export async function workerDiagnostics(page: Page) {
 }
 
 export async function reportWorkerDiagnostics(page: Page) {
-  if (page.isClosed()) return;
-  console.log(
-    "SYNTHETIC_WORKER_EVENTS",
-    await page.evaluate(() => Reflect.get(window, "syntheticWorkerEvents")),
-  );
+  console.log("SYNTHETIC_WORKER_EVENTS", summaries.get(page));
 }
