@@ -9,7 +9,7 @@ import {
   PDFRef,
   PDFNull,
 } from "pdf-lib";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { combinePdfs, inspectPdf } from "../src/combine/generate";
 import { inspectTags } from "../src/combine/tags";
 import { inspectNavigation } from "../src/combine/navigation";
@@ -177,6 +177,7 @@ test("tags preserve semantic roles, class collisions, language and MCID mappings
   );
   await writeFile("tests/fixtures/combine/tag-a.pdf", a);
   await writeFile("tests/fixtures/combine/tag-b.pdf", b);
+  await mkdir("docs/private-samples/m2", { recursive: true });
   await writeFile("docs/private-samples/m2/tags.pdf", bytes);
   const plain = await PDFDocument.create();
   plain.addPage();

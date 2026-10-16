@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { PDFDocument, PDFName, PDFString, PDFDict, PDFArray } from "pdf-lib";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { combinePdfs, inspectPdf } from "../src/combine/generate";
 import { inspectNavigation } from "../src/combine/navigation";
 const k = PDFName.of;
@@ -115,6 +115,7 @@ test("navigation survives reordered and repeated inputs with colliding destinati
   }
   await writeFile("tests/fixtures/combine/navigation-a.pdf", a);
   await writeFile("tests/fixtures/combine/navigation-b.pdf", b);
+  await mkdir("docs/private-samples/m2", { recursive: true });
   await writeFile("docs/private-samples/m2/navigation.pdf", bytes);
 });
 test("invalid, cyclic and unsupported navigation is rejected before copying", async () => {
