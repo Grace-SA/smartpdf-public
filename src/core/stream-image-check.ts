@@ -7,6 +7,9 @@ export async function checkFlateImage(
   bytes: Uint8Array,
   remainingWork: number = LIMITS.decodedImageBytes,
 ): Promise<number> {
+  const stage = (value: string) =>
+    Reflect.get(globalThis, "syntheticProbeStage")?.(value);
+  stage("flate-enter");
   if (
     bytes.length < 6 ||
     (bytes[0]! & 15) !== 8 ||
@@ -43,13 +46,19 @@ export async function checkFlateImage(
   try {
     for (;;) {
       const chunk = await reader.read();
-      if (chunk.done) return decoded;
+      if (chunk.done) {
+        stage("flate-eof");
+        return decoded;
+      }
       decoded += chunk.value.byteLength;
       if (decoded > Math.min(LIMITS.decodedImageBytes, remainingWork))
         throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
     }
   } finally {
+    stage("flate-cancel");
     await reader.cancel().catch(() => {});
+    stage("flate-cancelled");
     reader.releaseLock();
+    stage("flate-released");
   }
 }
