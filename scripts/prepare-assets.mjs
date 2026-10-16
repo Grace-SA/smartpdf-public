@@ -72,6 +72,7 @@ await copyFile(
   "vendor-licenses/pako-1.0.11-LICENSE.txt",
   "public/notices/pako-1.0.11-LICENSE.txt",
 );
+await copyFile("vendor-licenses/pako-ZLIB.txt", "public/notices/pako-ZLIB.txt");
 if (licenses.error)
   throw new Error("Dependency license inventory is unavailable");
 for (const entries of Object.values(licenses)) {
