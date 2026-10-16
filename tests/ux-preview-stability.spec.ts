@@ -2,10 +2,18 @@ import { selectTool } from "./navigation";
 import { test, expect } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
 import { readFile } from "node:fs/promises";
+import {
+  workerDiagnostics,
+  reportWorkerDiagnostics,
+} from "./worker-diagnostics";
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) await reportWorkerDiagnostics(page);
+});
 test.use({ trace: "off", screenshot: "off", video: "off" });
 test("image and generated PDF previews stay stable while idle and after resize", async ({
   page,
 }) => {
+  await workerDiagnostics(page);
   await page.goto("/");
   await page.addStyleTag({
     content: ".page-detail-canvas::-webkit-scrollbar{width:17px;height:17px}",
@@ -40,6 +48,7 @@ test("image and generated PDF previews stay stable while idle and after resize",
   await page
     .getByRole("button", { name: "Convert to PDF →", exact: true })
     .click();
+  await expect(page.locator(".delivery")).toBeVisible({ timeout: 30000 });
   const pending = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF", exact: true }).click();
   const output = (await (await pending).path())!;

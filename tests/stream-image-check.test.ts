@@ -6,6 +6,47 @@ import { randomBytes } from "node:crypto";
 import { checkFlateImage } from "../src/core/stream-image-check";
 import { probePdf } from "../src/core/probe";
 
+test("bounded validation retains input bytes and needs no native stream implementation", async () => {
+  const raw = randomBytes(180_000),
+    compressed = deflateSync(raw),
+    original = compressed.slice();
+  vi.stubGlobal(
+    "DecompressionStream",
+    class {
+      constructor() {
+        throw new Error("Synthetic unavailable native stream");
+      }
+    },
+  );
+  try {
+    expect(await checkFlateImage(compressed)).toBe(raw.length);
+    expect(compressed).toEqual(original);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test("streamed validation requires the complete zlib terminator and rejects trailing input", async () => {
+  const compressed = deflateSync(randomBytes(10_000));
+  for (const strip of [1, 2, 4, 7])
+    await expect(
+      checkFlateImage(compressed.subarray(0, compressed.length - strip)),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  for (const tail of [Buffer.from([0]), Buffer.from([1, 2, 3]), compressed])
+    await expect(
+      checkFlateImage(Buffer.concat([compressed, tail])),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+});
+
+test("image output budget accepts the exact boundary and rejects the next byte", async () => {
+  const compressed = deflateSync(Buffer.alloc(100_000, 42));
+  expect(await checkFlateImage(compressed, 100_000)).toBe(100_000);
+  await expect(checkFlateImage(compressed, 99_999)).rejects.toMatchObject({
+    code: "RESOURCE_LIMIT",
+  });
+  expect(await checkFlateImage(deflateSync(Buffer.alloc(0)))).toBe(0);
+});
+
 test("understated zlib windows retain full-window compatibility without skipping checksum validation", async () => {
   const seed = randomBytes(10000),
     input = Buffer.concat([seed, seed, seed]);
@@ -90,14 +131,11 @@ test("image work is bounded even though image buffers are streamed", async () =>
     code: "RESOURCE_LIMIT",
   });
 }, 30000);
-test("older runtimes retain the bounded decoder fallback", async () => {
+test("bounded image validation works without native decompression streams", async () => {
   const bytes = await images(12);
   vi.stubGlobal("DecompressionStream", undefined);
   try {
-    expect(await probePdf(bytes, "preview")).toMatchObject({
-      ok: false,
-      code: "RESOURCE_LIMIT",
-    });
+    expect(await probePdf(bytes, "preview")).toMatchObject({ ok: true });
   } finally {
     vi.unstubAllGlobals();
   }

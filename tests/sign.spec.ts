@@ -2,7 +2,14 @@ import { selectTool } from "./navigation";
 import { test, expect, type Page } from "@playwright/test";
 import { PDFDocument, PDFName, PDFDict } from "pdf-lib";
 import { readFile, writeFile } from "node:fs/promises";
+import {
+  workerDiagnostics,
+  reportWorkerDiagnostics,
+} from "./worker-diagnostics";
 const root = "tests/fixtures/m5/";
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) await reportWorkerDiagnostics(page);
+});
 async function start(page: Page, file = "normal-a4.pdf") {
   await page.goto("/");
   await selectTool(page, "Sign PDF");
@@ -525,6 +532,7 @@ test("PERF-SIGN ordinary PDF: two warmups and 20 end-to-end generation measureme
   page,
 }, info) => {
   test.setTimeout(240000);
+  await workerDiagnostics(page);
   await start(page);
   const measurements: number[] = [];
   for (let i = 0; i < 22; i++) {

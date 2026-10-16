@@ -82,6 +82,13 @@ for (const tool of ["photos", "combine", "organize", "split"] as const) {
       name: "Leave this task?",
       exact: true,
     });
+    // This case exercises a ready editing task. The separate import-race test
+    // above intentionally clicks during FileReader startup instead.
+    if (tool === "photos")
+      await expect(
+        page.getByRole("button", { name: "Preview image 1", exact: true }),
+      ).toBeEnabled();
+    await expect(allTools).toBeEnabled();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 844 });
       await allTools.click();

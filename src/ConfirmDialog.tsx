@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 export function ConfirmDialog({
   title,
@@ -14,15 +14,17 @@ export function ConfirmDialog({
   action: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current!;
     const previous = document.activeElement;
     dialog.showModal();
-    dialog.querySelector<HTMLButtonElement>("[data-stay]")?.focus();
+    dialog
+      .querySelector<HTMLButtonElement>("[data-stay]")
+      ?.focus({ preventScroll: true });
     return () => {
       dialog.close();
       if (previous instanceof HTMLElement && previous.isConnected)
-        previous.focus();
+        previous.focus({ preventScroll: true });
     };
   }, []);
   return (

@@ -9,6 +9,8 @@ export default defineConfig({
     "raster-return-paths.spec.ts",
     "processing-overlay.spec.ts",
     "probe-startup.spec.ts",
+    "probe-image-stress.spec.ts",
+    "leave-focus.spec.ts",
   ],
   // CI browser engines run in separate jobs; give each test the full runner.
   workers: process.env.CI ? 1 : 2,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 export function PreviewDialog({
   title,
@@ -19,14 +19,14 @@ export function PreviewDialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousFocus = document.activeElement;
     const node = ref.current!;
     node.showModal();
     return () => {
       node.close();
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
-        previousFocus.focus();
+        previousFocus.focus({ preventScroll: true });
     };
   }, []);
   return (

@@ -172,7 +172,7 @@
   "(MIT AND Zlib)": [
     {
       "name": "pako",
-      "versions": ["1.0.11"],
+      "versions": ["3.0.2", "1.0.11"],
       "paths": ["o"],
       "license": "(MIT AND Zlib)",
       "homepage": "https://github.com/nodeca/pako",

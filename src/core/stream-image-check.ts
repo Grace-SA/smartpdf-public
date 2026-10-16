@@ -1,8 +1,8 @@
+import { Inflate, type ZStream } from "pako";
 import { LIMITS, ProbeFailure } from "./contracts";
 
-// Validate lossless image data without keeping a whole decoded image buffer.
-// Feeding at most 4 KiB per pull also bounds output produced by each inflater
-// transform, including highly compressible input. The output is never retained.
+// Validate and discard fixed-size decoded chunks in the probe worker. Avoid
+// native stream scheduling/cleanup, which can stall WebKit's worker process.
 export async function checkFlateImage(
   bytes: Uint8Array,
   remainingWork: number = LIMITS.decodedImageBytes,
@@ -15,41 +15,35 @@ export async function checkFlateImage(
     (bytes[1]! & 32) !== 0
   )
     throw new ProbeFailure("INVALID_INPUT", "malformed");
-  let offset = 0;
-  const input = new ReadableStream<BufferSource>({
-    pull(controller) {
-      if (offset === bytes.length) {
-        controller.close();
-        return;
-      }
-      const end = Math.min(offset + 4096, bytes.length);
-      const chunk = bytes.slice(offset, end);
-      // Some ordinary exporters understate the zlib window in CMF. PDF readers
-      // decode these with the full 32 KiB window. Validate with that same bounded
-      // window; keep the original compressed stream and Adler checksum untouched.
-      if (offset === 0) {
-        chunk[0] = 0x78;
-        chunk[1] = bytes[1]! & 0xe0;
-        chunk[1] += (31 - ((0x7800 + chunk[1]) % 31)) % 31;
-      }
-      controller.enqueue(chunk);
-      offset = end;
-    },
-  });
-  const reader = input
-    .pipeThrough(new DecompressionStream("deflate"))
-    .getReader();
+  const inflater = new Inflate({ windowBits: 15, chunkSize: 64 * 1024 });
   let decoded = 0;
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) return decoded;
-      decoded += chunk.value.byteLength;
-      if (decoded > Math.min(LIMITS.decodedImageBytes, remainingWork))
-        throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
+  let stream: ZStream | undefined;
+  inflater.onStart = (value) => {
+    stream = value;
+  };
+  inflater.onData = (chunk) => {
+    decoded += chunk.byteLength;
+    if (decoded > Math.min(LIMITS.decodedImageBytes, remainingWork))
+      throw new ProbeFailure("RESOURCE_LIMIT", "complexity");
+    // Do not call the default handler: it retains all decompressed chunks.
+  };
+  for (let offset = 0; offset < bytes.length; offset += 4096) {
+    const end = Math.min(offset + 4096, bytes.length);
+    const chunk = bytes.slice(offset, end);
+    // Ordinary exporters sometimes understate the zlib window. Use the same
+    // full 32 KiB window as PDF readers; still validate the original Adler sum.
+    if (offset === 0) {
+      chunk[0] = 0x78;
+      chunk[1] = bytes[1]! & 0xe0;
+      chunk[1] += (31 - ((0x7800 + chunk[1]) % 31)) % 31;
     }
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
+    if (!inflater.push(chunk, end === bytes.length) || inflater.err)
+      throw new ProbeFailure("INVALID_INPUT", "malformed");
+    if (inflater.ended) {
+      if (end !== bytes.length || stream?.total_in !== bytes.length)
+        throw new ProbeFailure("INVALID_INPUT", "malformed");
+      return decoded;
+    }
   }
+  throw new ProbeFailure("INVALID_INPUT", "malformed");
 }

@@ -47,11 +47,47 @@ for (const alreadyAborted of [false, true])
   test(`boot cancellation cleans up (already aborted: ${alreadyAborted})`, async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
+    const start = vi.fn();
     if (alreadyAborted) controller.abort();
     const pending = expect(
-      waitForBoot(port(), () => false, controller.signal),
+      waitForBoot(port(), () => false, controller.signal, start),
     ).rejects.toMatchObject({ code: "CANCELLED" });
     controller.abort();
     await pending;
     expect(vi.getTimerCount()).toBe(0);
+    expect(start).toHaveBeenCalledTimes(alreadyAborted ? 0 : 1);
   });
+
+test("request listeners are installed before a synchronous acknowledgement", async () => {
+  vi.useFakeTimers();
+  const worker = port();
+  await waitForBoot(
+    worker,
+    (data) => data?.ready === true,
+    undefined,
+    () => {
+      worker.dispatchEvent(
+        new MessageEvent("message", { data: { ready: true } }),
+      );
+    },
+  );
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("a synchronous request failure clears listeners and its deadline", async () => {
+  vi.useFakeTimers();
+  const worker = port();
+  const remove = vi.spyOn(worker, "removeEventListener");
+  await expect(
+    waitForBoot(
+      worker,
+      () => false,
+      undefined,
+      () => {
+        throw new Error("SYNTHETIC_SEND_FAILURE");
+      },
+    ),
+  ).rejects.toThrow("SYNTHETIC_SEND_FAILURE");
+  expect(vi.getTimerCount()).toBe(0);
+  expect(remove.mock.calls.map(([type]) => type)).toEqual(["message", "error"]);
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 export function LeaveTaskDialog({
   description,
@@ -11,15 +11,17 @@ export function LeaveTaskDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const keepButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
+  // Close the native modal before React detaches it. Passive cleanup can race
+  // WebKit's own focus restoration when the detached dialog is removed.
+  useLayoutEffect(() => {
     const previous = document.activeElement;
     const node = dialog.current!;
     node.showModal();
-    keepButton.current?.focus();
+    keepButton.current?.focus({ preventScroll: true });
     return () => {
       node.close();
       if (previous instanceof HTMLElement && previous.isConnected)
-        previous.focus();
+        previous.focus({ preventScroll: true });
     };
   }, []);
   return (
