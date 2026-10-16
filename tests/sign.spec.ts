@@ -19,9 +19,13 @@ async function type(page: Page, name = "Alex Chen") {
     .getByRole("button", { name: "Add signature", exact: true })
     .click();
   await page.getByRole("tab", { name: "Type", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "Your name", exact: true })
-    .fill(name);
+  const nameInput = page.getByRole("textbox", {
+    name: "Your name",
+    exact: true,
+  });
+  await nameInput.click();
+  await nameInput.fill(name);
+  await expect(nameInput).toHaveValue(name);
   await expect(page.locator(".sign-font-sample text").first()).toHaveCSS(
     "font-weight",
     "400",

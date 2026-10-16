@@ -9,12 +9,17 @@ test("photo import never drops a navigation click before busy state commits", as
     .locator("#photo-files")
     .setInputFiles("docs/ux/public-synthetic-only/image-a.png");
   await expect(page.locator(".photo-list>li")).toHaveCount(1);
+  // The first import must have released its busy flag before testing a new
+  // import's synchronous navigation race. The visible item alone is earlier.
+  await expect(
+    page.getByRole("button", { name: "← All tools", exact: true }),
+  ).toBeEnabled();
   await page.evaluate(() => {
     const original = FileReader.prototype.readAsArrayBuffer;
     FileReader.prototype.readAsArrayBuffer = function (blob) {
       FileReader.prototype.readAsArrayBuffer = original;
       const button = [...document.querySelectorAll("button")].find(
-        (b) => b.textContent === "← All tools",
+        (b) => b.textContent?.trim() === "← All tools",
       );
       button?.click();
       original.call(this, blob);

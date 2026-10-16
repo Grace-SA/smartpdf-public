@@ -20,8 +20,10 @@ async function tapPicker(
     "Visible picker centre must hit the native file input",
   ).toBe(true);
   const chooser = page.waitForEvent("filechooser", { timeout: 8000 });
-  if (touch) await page.touchscreen.tap(point.x, point.y);
-  else await page.mouse.click(point.x, point.y);
+  // Use the native input's real pointer action, with Playwright's layout and
+  // actionability checks, rather than clicking a coordinate sampled earlier.
+  if (touch) await page.locator(`#${id}`).tap();
+  else await page.locator(`#${id}`).click();
   await (await chooser).setFiles(files);
 }
 
