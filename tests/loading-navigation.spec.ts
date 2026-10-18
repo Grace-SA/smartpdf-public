@@ -11,6 +11,7 @@ const tools = [
   ["rotate-pdf", "pdf-file"],
   ["pdf-to-jpg", "pdf-file"],
   ["watermark-pdf", "pdf-file"],
+  ["add-page-numbers", "pdf-file"],
 ] as const;
 
 async function checkPicker(page: Page, id: string) {
@@ -78,7 +79,7 @@ test("rapid navigation while cold resources are delayed leaves only the latest t
   await expect(page.locator(".status.ready")).toBeAttached();
   await expect(page.locator(".tool-nav a.active")).toHaveAttribute(
     "href",
-    "/watermark-pdf/",
+    `/${tools.at(-1)![0]}/`,
   );
   await navigate(page, "compress-pdf");
   await page

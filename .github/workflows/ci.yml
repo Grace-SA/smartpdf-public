@@ -43,6 +43,10 @@ jobs:
         run: pnpm exec eslint src scripts/check-repository.mjs scripts/prepare-release.mjs
       - name: Unit and integration regression
         run: pnpm test
+      - name: Independent page-number output verification
+        run: python -B scripts/verify-number-output.py
+        env:
+          PYTHONPATH: .local-python
       - name: Build all public pages
         run: pnpm build
       - run: node node_modules/@playwright/test/cli.js install --with-deps ${{ matrix.browser }}
@@ -53,7 +57,7 @@ jobs:
           --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation|leave confirmation restores focus before removal|photos leave confirmation|renderer waits for PDF.js readiness|credentials consent prepares|dialog closes before removal'
         env:
           DEBUG: pw:browser
-      - name: Browser regression across all nine tools
+      - name: Browser regression across all tools
         run: pnpm exec playwright test --config playwright.github.config.ts --project ${{ matrix.browser }}
       - name: Retain synthetic diagnostic text on failure
         if: failure()

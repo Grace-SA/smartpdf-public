@@ -18,6 +18,34 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  numbers: {
+    title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
+    description:
+      "Add page numbers to PDF files for free on your device. Skip a cover, choose a range, position and starting number, then download a new PDF. No upload.",
+    keywords:
+      "free add page numbers to pdf, number pdf pages, pdf page numbering, private pdf tools",
+    heading: "Add page numbers",
+    intro: "Number your pages, privately.",
+    steps: [
+      "Choose a PDF.",
+      "Choose the numbering and position.",
+      "Download a new PDF.",
+    ],
+    faq: [
+      [
+        "Can I skip the cover page?",
+        "Yes. Choose Skip first page; your cover stays in the PDF and numbering starts on the next page.",
+      ],
+      [
+        "Will this replace existing page numbers?",
+        "No. It adds visible numbers in the position you choose. Existing numbers and PDF page labels are unchanged; check the preview for a clear position.",
+      ],
+      [
+        "What does the total mean?",
+        "The total is the last printed number. For example, five numbered pages starting at 3 show 3 / 7 through 7 / 7. Files are processed on your device without upload.",
+      ],
+    ],
+  },
   watermark: {
     title: "Watermark PDF Free Online – Text & Image, No Upload | Smart PDF",
     description:

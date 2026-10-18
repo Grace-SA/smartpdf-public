@@ -56,6 +56,12 @@
       "origin": "Public OFL font or renamed derived font; adjacent OFL and modification notices apply."
     },
     {
+      "path": "public/number-fonts/SmartPDFNumberSans-Regular.ttf",
+      "bytes": 10248,
+      "sha256": "555c56acbc63cf0881d11594ac322585e60104da157b1e666b5d4273df710a54",
+      "origin": "Reviewed ASCII 32-126 subset of the approved Smart PDF Sans Regular font, renamed Smart PDF Number Sans. SIL OFL 1.1; deterministic generator scripts/prepare-number-font.py. No user material."
+    },
+    {
       "path": "tests/fixtures/annotations.pdf",
       "bytes": 1705,
       "sha256": "243c0e6196a63a4dcf4fe2fc1b4c9f1ea3b63803be3888a836a2ba90a70995d4",

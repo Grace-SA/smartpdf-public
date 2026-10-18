@@ -84,6 +84,7 @@ export const SignPanel = forwardRef<SignHandle, Props>(function SignPanel(
     };
   }, []);
   const viewport = useRef<HTMLDivElement>(null),
+    pageInput = useRef<HTMLInputElement>(null),
     job = useRef<AbortController | null>(null),
     gesture = useRef<{
       x: number;
@@ -178,6 +179,9 @@ export const SignPanel = forwardRef<SignHandle, Props>(function SignPanel(
   }, []);
   useEffect(() => {
     if (creator || adjust || pagesOpen || busy) return;
+    // A queued placement-focus effect must not interrupt a page number entry.
+    // WebKit can otherwise send the edit to the newly focused preview instead.
+    if (document.activeElement === pageInput.current) return;
     if (pending) {
       viewport.current?.focus({ preventScroll: true });
       return;
@@ -435,6 +439,7 @@ export const SignPanel = forwardRef<SignHandle, Props>(function SignPanel(
             <input
               type="number"
               aria-label="Signature page"
+              ref={pageInput}
               min={1}
               max={geometry.length || 1}
               value={page + 1}

@@ -1,8 +1,5 @@
 import {
-  PDFArray,
-  PDFDict,
   PDFName,
-  PDFNumber,
   PDFOperator,
   PDFOperatorNames,
   concatTransformationMatrix,
@@ -12,12 +9,7 @@ import {
 } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { inspectOverlay } from "../overlay/document";
-import {
-  pdfPoint,
-  stampMatrix,
-  type Geometry,
-  type Rect,
-} from "../overlay/geometry";
+import { stampMatrix, type Geometry, type Rect } from "../overlay/geometry";
 import { inspectPdf } from "../combine/generate";
 import { compactStreamStorage } from "../organize/stream-storage";
 import { LIMITS } from "../core/contracts";
@@ -33,44 +25,8 @@ export type WatermarkImage = {
   width: number;
   height: number;
 };
-export async function inspectWatermark(bytes: Uint8Array) {
-  const { doc, geometry } = await inspectOverlay(bytes, "watermarked");
-  const annotations = doc.getPages().map((page, index) => {
-    const rects: Rect[] = [],
-      list = page.node.Annots();
-    for (let i = 0; i < (list?.size() ?? 0); i++) {
-      const annot = list!.lookup(i, PDFDict),
-        flags = annot.lookupMaybe(PDFName.of("F"), PDFNumber)?.asNumber() ?? 0;
-      if (flags & (1 | 2 | 32)) continue;
-      if (
-        annot.lookupMaybe(PDFName.of("Subtype"), PDFName)?.toString() ===
-          "/Link" &&
-        !annot.has(PDFName.of("AP"))
-      )
-        continue;
-      const rect = annot.lookupMaybe(PDFName.of("Rect"), PDFArray);
-      if (!rect || rect.size() !== 4) continue;
-      const p = Array.from({ length: 4 }, (_, j) =>
-        rect.lookup(j, PDFNumber).asNumber(),
-      );
-      const points = [
-        [p[0]!, p[1]!],
-        [p[0]!, p[3]!],
-        [p[2]!, p[1]!],
-        [p[2]!, p[3]!],
-      ].map(([x, y]) => pdfPoint(geometry[index]!, x!, y!));
-      const x = Math.min(...points.map((p) => p[0])),
-        y = Math.min(...points.map((p) => p[1]));
-      rects.push({
-        x,
-        y,
-        width: Math.max(...points.map((p) => p[0])) - x,
-        height: Math.max(...points.map((p) => p[1])) - y,
-      });
-    }
-    return rects;
-  });
-  return { doc, geometry, annotations };
+export function inspectWatermark(bytes: Uint8Array) {
+  return inspectOverlay(bytes, "watermarked");
 }
 export type WatermarkInspection = {
   geometry: Geometry[];

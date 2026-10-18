@@ -242,6 +242,7 @@ Resources:
             "rotate",
             "raster",
             "watermark",
+            "numbers",
           ]);
           const reasons = new Set([
             "cancelled",
