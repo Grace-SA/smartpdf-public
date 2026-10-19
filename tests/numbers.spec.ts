@@ -67,6 +67,13 @@ test("defaults produce a downloadable numbered PDF and end the task cleanly", as
   page,
 }) => {
   await open(page);
+  const position = page.getByRole("button", {
+    name: "Bottom center",
+    exact: true,
+  });
+  await position.hover();
+  await expect(position).toHaveCSS("filter", "none");
+  await expect(position).not.toHaveCSS("transition-property", /filter/);
   await expect(
     page.getByRole("button", { name: "Bottom center", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");

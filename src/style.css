@@ -35,7 +35,8 @@ input:disabled {
   cursor: not-allowed;
 }
 button:hover:not(:disabled) {
-  filter: brightness(0.92);
+  /* Avoid color-filter layers on older WebKit compositors (Playwright #42637). */
+  opacity: 0.92;
 }
 :focus-visible {
   outline: 3px solid #bc641d;
@@ -412,7 +413,7 @@ footer a {
 }
 @media (prefers-reduced-motion: no-preference) {
   button {
-    transition: filter 0.15s ease;
+    transition: opacity 0.15s ease;
   }
 }
 select {
