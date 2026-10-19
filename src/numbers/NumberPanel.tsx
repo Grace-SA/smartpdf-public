@@ -74,6 +74,7 @@ export const NumberPanel = forwardRef<OrganizeHandle, Props>(
       [page, setPage] = useState(0),
       [scrollTop, setScrollTop] = useState(0),
       [pageError, setPageError] = useState("");
+    const [pageDraft, setPageDraft] = useState<string | null>(null);
     const [readyPages, setReadyPages] = useState(new Set<number>());
     const ready = useCallback(
       (index: number, value: boolean) =>
@@ -125,11 +126,18 @@ export const NumberPanel = forwardRef<OrganizeHandle, Props>(
     useEffect(() => {
       const node = viewport.current;
       if (!node) return;
-      const resize = () =>
-        setDimensions({
-          width: Math.max(100, node.clientWidth - 40),
-          height: Math.max(100, node.clientHeight - 16),
-        });
+      const resize = () => {
+        // A fitted sheet changes the scrollbar area. Its client size must not
+        // feed back into the next fit; use the stable frame, as signing does.
+        const rect = node.getBoundingClientRect();
+        const width = Math.max(100, Math.round(rect.width) - 56),
+          height = Math.max(100, Math.round(rect.height) - 16);
+        setDimensions((old) =>
+          old.width === width && old.height === height
+            ? old
+            : { width, height },
+        );
+      };
       const observer = new ResizeObserver(resize);
       observer.observe(node);
       resize();
@@ -311,16 +319,22 @@ export const NumberPanel = forwardRef<OrganizeHandle, Props>(
               <label>
                 <span className="watermark-page-word">Page</span>{" "}
                 <input
-                  key={page}
                   aria-label="Preview page"
                   inputMode="numeric"
-                  defaultValue={page + 1}
+                  value={pageDraft ?? String(page + 1)}
                   disabled={busy || initialising}
-                  onBlur={(e) => go(Number(e.target.value) - 1)}
+                  onFocus={() => setPageDraft(String(page + 1))}
+                  onChange={(e) => setPageDraft(e.target.value)}
+                  onBlur={(e) => {
+                    const next = Number(e.target.value) - 1;
+                    setPageDraft(null);
+                    if (next !== page) go(next);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
                       go(Number(e.currentTarget.value) - 1);
+                      setPageDraft(null);
                     }
                   }}
                 />
@@ -477,7 +491,15 @@ export const NumberPanel = forwardRef<OrganizeHandle, Props>(
               </div>
             </div>
           </div>
-          <aside className="watermark-settings number-settings">
+          <aside
+            className="watermark-settings number-settings"
+            onPointerDownCapture={() => {
+              requestedPage.current = null;
+            }}
+            onTouchStartCapture={() => {
+              requestedPage.current = null;
+            }}
+          >
             <fieldset disabled={busy || initialising}>
               <legend className="sr-only">Page number settings</legend>
               <fieldset className="number-position">

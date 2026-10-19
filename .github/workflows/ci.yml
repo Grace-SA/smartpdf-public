@@ -57,6 +57,11 @@ jobs:
           --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation|leave confirmation restores focus before removal|photos leave confirmation|renderer waits for PDF.js readiness|credentials consent prepares|dialog closes before removal'
         env:
           DEBUG: pw:browser
+      - name: M9 WebKit navigation stability
+        if: matrix.browser == 'webkit'
+        run: pnpm exec playwright test --config playwright.github.config.ts --project webkit --grep 'continuous preview navigation|being typed survives' --repeat-each 3
+        env:
+          DEBUG: pw:browser
       - name: Browser regression across all tools
         run: pnpm exec playwright test --config playwright.github.config.ts --project ${{ matrix.browser }}
       - name: Retain synthetic diagnostic text on failure

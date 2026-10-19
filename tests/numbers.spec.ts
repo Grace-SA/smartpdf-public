@@ -200,6 +200,19 @@ test("continuous preview navigation, six positions and appearance stay usable on
       "Bottom center",
       "Bottom right",
     ]) {
+      const before = await page
+        .locator(".numbers-task .watermark-viewport")
+        .evaluate((e) => ({
+          width: innerWidth,
+          height: innerHeight,
+          outer: scrollY,
+          frame: e.getBoundingClientRect().toJSON(),
+          inner: e.scrollTop,
+        }));
+      console.log(
+        "SYNTHETIC_M9_POSITION",
+        JSON.stringify({ label, ...before }),
+      );
       await page.getByRole("button", { name: label, exact: true }).click();
       await expect(
         page.getByRole("button", { name: label, exact: true }),
@@ -234,6 +247,25 @@ test("continuous preview navigation, six positions and appearance stay usable on
     page.getByLabel("Preview page", { exact: true }),
   ).not.toHaveValue("150");
 });
+test("a page number being typed survives viewport reflow before Enter", async ({
+  page,
+}) => {
+  await open(page, "200-pages.pdf");
+  const input = page.getByLabel("Preview page", { exact: true });
+  await input.fill("150");
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(input).toHaveValue("150");
+  await input.press("Enter");
+  await expect(input).toHaveValue("150");
+  await expect(page.locator('.number-sheet[data-page="150"]')).toBeInViewport();
+  await page.getByRole("button", { name: "Bottom left", exact: true }).click();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await input.fill("80");
+  await input.press("Enter");
+  await expect(input).toHaveValue("80");
+  await expect(page.locator('.number-sheet[data-page="80"]')).toBeInViewport();
+});
+
 test("settings do not replace an idle page canvas and preview size matches the physical numbering plan", async ({
   page,
 }) => {
