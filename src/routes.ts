@@ -3,6 +3,7 @@ export const toolGroups = [
   "Convert PDF",
   "Optimize PDF",
   "Sign & mark",
+  "PDF security",
 ] as const;
 
 // All public tool discovery surfaces share this catalogue.
@@ -76,6 +77,13 @@ export const toolCatalog = {
     label: "Add page numbers",
     summary: "Number PDF pages, with an optional cover page.",
     group: "Sign & mark",
+  },
+  unlock: {
+    path: "/unlock-pdf/",
+    title: "Unlock PDF",
+    label: "Unlock PDF",
+    summary: "Remove a known password on your device.",
+    group: "PDF security",
   },
 } as const;
 

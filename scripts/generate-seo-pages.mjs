@@ -3,6 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
 const pages = {
+  "unlock-pdf": {
+    title: "Unlock PDF Free Online – Remove Password, No Upload | Smart PDF",
+    description:
+      "Remove a known PDF password for free on your device. Download an unlocked copy without uploading your document or password.",
+    keywords:
+      "free unlock pdf, remove pdf password, decrypt pdf, private pdf unlock",
+    heading: "Unlock PDF without uploading your document or password",
+  },
   "add-page-numbers": {
     title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
     description:

@@ -21,7 +21,15 @@ describe("public tool routes and search metadata", () => {
       expect(page.title).toContain("Smart PDF");
       expect(page.description.length).toBeGreaterThan(80);
       expect(page.steps).toHaveLength(3);
-      expect(page.faq).toHaveLength(tool === "numbers" ? 3 : 2);
+      expect(page.faq).toHaveLength(
+        tool === "numbers" || tool === "unlock" ? 3 : 2,
+      );
+      if (tool === "unlock")
+        expect(page.faq.map((item) => item[0])).toEqual([
+          "Are my PDF and password uploaded?",
+          "Can this recover a forgotten password?",
+          "Will the new PDF ask for a password?",
+        ]);
     }
   });
 });

@@ -19,6 +19,7 @@ const tools = new Set([
   "raster",
   "watermark",
   "numbers",
+  "unlock",
 ]);
 const reasons = new Set([
   "cancelled",

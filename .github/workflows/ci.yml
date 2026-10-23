@@ -37,6 +37,9 @@ jobs:
         run: node scripts/test-repository-guard.mjs
       - name: Generate synthetic boundary fixtures
         run: python -B scripts/m5-fixtures.py
+      - name: Generate synthetic unlock fixtures
+        # Unlock variants are reproducible synthetic data, never private files.
+        run: node scripts/m12-fixtures.mjs
       - name: Type check
         run: pnpm typecheck
       - name: Application lint
@@ -45,6 +48,11 @@ jobs:
         run: pnpm test
       - name: Independent page-number output verification
         run: python -B scripts/verify-number-output.py
+        env:
+          PYTHONPATH: .local-python
+      - name: Independent unlock output verification
+        # Verify decrypted contents independently of the qpdf engine.
+        run: python -B scripts/verify-unlock-output.py
         env:
           PYTHONPATH: .local-python
       - name: Build all public pages

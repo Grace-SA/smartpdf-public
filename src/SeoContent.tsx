@@ -18,6 +18,34 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  unlock: {
+    title: "Unlock PDF Free Online – Remove Password, No Upload | Smart PDF",
+    description:
+      "Remove a known PDF password for free on your device. Download an unlocked copy without uploading your document or password.",
+    keywords:
+      "free unlock pdf, remove pdf password, decrypt pdf, private pdf unlock",
+    heading: "Unlock PDF",
+    intro: "Remove a known password, privately.",
+    steps: [
+      "Choose a protected PDF.",
+      "Enter its password if needed.",
+      "Unlock and download a copy.",
+    ],
+    faq: [
+      [
+        "Are my PDF and password uploaded?",
+        "No. Both stay on this device; unlocking happens in your browser.",
+      ],
+      [
+        "Can this recover a forgotten password?",
+        "No. A valid opening or owner password is needed unless the PDF can already be accessed without one. Only unlock files you own or have permission to change.",
+      ],
+      [
+        "Will the new PDF ask for a password?",
+        "A verified unlocked copy opens without the removed password. Your original stays unchanged. Digital signatures and unsupported protection methods are refused.",
+      ],
+    ],
+  },
   numbers: {
     title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
     description:
