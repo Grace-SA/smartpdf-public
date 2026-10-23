@@ -65,6 +65,7 @@ private-samples/
 !/docs/ux/
 /docs/ux/*
 !/docs/ux/m9-page-numbers-design.md
+!/docs/ux/m12-unlock-design.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
