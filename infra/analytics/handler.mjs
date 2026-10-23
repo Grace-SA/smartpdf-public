@@ -18,6 +18,7 @@ const tools = new Set([
   "rotate",
   "raster",
   "watermark",
+  "numbers",
 ]);
 const reasons = new Set([
   "cancelled",

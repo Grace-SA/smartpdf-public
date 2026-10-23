@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { openTools, selectToolPath } from "./navigation";
+import { publicTools } from "../src/routes";
 const tools = [
   ["merge-pdf", "combine-files", ".combine-task:not(.empty-inputs)"],
   ["split-pdf", "pdf-file", ".split-task"],
@@ -10,6 +11,7 @@ const tools = [
   ["rotate-pdf", "pdf-file", ".rotate-task"],
   ["pdf-to-jpg", "pdf-file", ".raster-task"],
   ["watermark-pdf", "pdf-file", ".watermark-task"],
+  ["add-page-numbers", "pdf-file", ".numbers-task"],
 ] as const;
 async function nativePick(page: Page, id: string, files: string[]) {
   const chooser = page.waitForEvent("filechooser");
@@ -40,7 +42,7 @@ for (const width of [390, 1440]) {
     ]);
     await expect(page.locator(".photo-list>li")).toHaveCount(1);
   });
-  test(`${width}: all nine tools retain navigation before and after file selection`, async ({
+  test(`${width}: all tools retain navigation before and after file selection`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width, height: 900 });
@@ -49,7 +51,9 @@ for (const width of [390, 1440]) {
         await page.goto(`/${path}/`);
         const before = (await page.locator("header").boundingBox())!.height;
         await openTools(page);
-        await expect(page.locator(".tool-nav a:visible")).toHaveCount(9);
+        await expect(page.locator(".tool-nav a:visible")).toHaveCount(
+          publicTools.length,
+        );
         await expect(
           page.locator(`.tool-nav a[href="/${path}/"]`),
         ).toHaveAttribute("aria-current", "page");
@@ -72,7 +76,9 @@ for (const width of [390, 1440]) {
           (await page.locator("header").boundingBox())!.height,
         ).toBeCloseTo(before, 0);
         await openTools(page);
-        await expect(page.locator(".tool-nav a:visible")).toHaveCount(9);
+        await expect(page.locator(".tool-nav a:visible")).toHaveCount(
+          publicTools.length,
+        );
         // Choosing the current tool closes the menu and preserves the task.
         await page.locator(`.tool-nav a[href="/${path}/"]`).click();
         await expect(page.locator(editor).first()).toBeVisible();
@@ -148,7 +154,9 @@ test("menu keyboard, outside click, resizing and all viewport layouts", async ({
   for (const width of [320, 390, 800, 1024, 1280, 1400, 1401, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     await openTools(page);
-    await expect(page.locator(".tool-nav a:visible")).toHaveCount(9);
+    await expect(page.locator(".tool-nav a:visible")).toHaveCount(
+      publicTools.length,
+    );
     const layout = await page.evaluate(() => {
       const nav = document.querySelector(".tool-nav")!.getBoundingClientRect();
       const brand = document

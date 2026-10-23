@@ -640,6 +640,8 @@ for (const width of [1280, 390])
     await second.click({ position: { x: 60, y: 80 } });
     await expect(second.locator(".sign-placement")).toHaveCount(1);
     await input.fill("80");
+    await expect(input).toHaveValue("80");
+    await expect(input).toBeFocused();
     await expect(
       page.locator('.sign-sheet[data-page="80"] canvas'),
     ).toBeVisible();

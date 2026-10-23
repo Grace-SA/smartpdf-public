@@ -117,6 +117,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  numbers: "Add page numbers without uploading your PDF.",
   watermark: "Add text or image watermarks without uploading your PDF.",
   raster: "Turn PDF pages into images without uploading your file.",
   rotate: "Turn pages the right way without uploading your PDF.",
@@ -202,6 +203,11 @@ export function App() {
   >(null);
   const watermarkPanel = useRef<OrganizeHandle>(null);
   const watermarking = tool === "watermark" && screen === "task" && !!current;
+  const [NumberPanel, setNumberPanel] = useState<
+    (typeof import("./numbers/NumberPanel"))["NumberPanel"] | null
+  >(null);
+  const numberPanel = useRef<OrganizeHandle>(null);
+  const numbering = tool === "numbers" && screen === "task" && !!current;
   const [CompressPanel, setCompressPanel] = useState<
     (typeof import("./compress/CompressPanel"))["CompressPanel"] | null
   >(null);
@@ -389,6 +395,7 @@ export function App() {
     } else if (
       toolRef.current === "sign" ||
       toolRef.current === "raster" ||
+      toolRef.current === "numbers" ||
       toolRef.current === "watermark"
     ) {
       setScreen("task");
@@ -470,7 +477,8 @@ export function App() {
       });
       return;
     }
-    if (watermarking && watermarkPanel.current)
+    if (numbering && numberPanel.current) numberPanel.current.guard(action);
+    else if (watermarking && watermarkPanel.current)
       watermarkPanel.current.guard(action);
     else if (rastering && rasterPanel.current)
       rasterPanel.current.guard(action);
@@ -558,81 +566,91 @@ export function App() {
     // A ready tool includes its operation UI and inline workers, so selecting a
     // file after going offline does not need to download another code chunk.
     const panelPreparation =
-      tool === "watermark"
+      tool === "numbers"
         ? loadModule(
-            "watermark",
-            () => import("./watermark/WatermarkPanel"),
+            "numbers",
+            () => import("./numbers/NumberPanel"),
             retry,
             controller.signal,
           ).then(async (module) => {
-            if (mounted) setWatermarkPanel(() => module.WatermarkPanel);
-            await module.prepareWatermark(controller.signal);
+            if (mounted) setNumberPanel(() => module.NumberPanel);
+            await module.prepareNumberFont(controller.signal);
           })
-        : tool === "raster"
+        : tool === "watermark"
           ? loadModule(
-              "raster",
-              () => import("./raster/RasterPanel"),
+              "watermark",
+              () => import("./watermark/WatermarkPanel"),
               retry,
               controller.signal,
-            ).then((module) => {
-              if (mounted) setRasterPanel(() => module.RasterPanel);
+            ).then(async (module) => {
+              if (mounted) setWatermarkPanel(() => module.WatermarkPanel);
+              await module.prepareWatermark(controller.signal);
             })
-          : tool === "sign"
+          : tool === "raster"
             ? loadModule(
-                "sign",
-                () => import("./sign/SignPanel"),
+                "raster",
+                () => import("./raster/RasterPanel"),
                 retry,
                 controller.signal,
               ).then((module) => {
-                if (mounted) setSignPanel(() => module.SignPanel);
+                if (mounted) setRasterPanel(() => module.RasterPanel);
               })
-            : tool === "compress"
+            : tool === "sign"
               ? loadModule(
-                  "compress",
-                  () => import("./compress/CompressPanel"),
+                  "sign",
+                  () => import("./sign/SignPanel"),
                   retry,
                   controller.signal,
                 ).then((module) => {
-                  if (mounted) setCompressPanel(() => module.CompressPanel);
+                  if (mounted) setSignPanel(() => module.SignPanel);
                 })
-              : tool === "photos"
+              : tool === "compress"
                 ? loadModule(
-                    "photos",
-                    () => import("./photos/PhotoPanel"),
+                    "compress",
+                    () => import("./compress/CompressPanel"),
                     retry,
                     controller.signal,
                   ).then((module) => {
-                    if (mounted) setPhoto(() => module.PhotoPanel);
+                    if (mounted) setCompressPanel(() => module.CompressPanel);
                   })
-                : tool === "split"
+                : tool === "photos"
                   ? loadModule(
-                      "split",
-                      () => import("./split/SplitPanel"),
+                      "photos",
+                      () => import("./photos/PhotoPanel"),
                       retry,
                       controller.signal,
                     ).then((module) => {
-                      if (mounted) setSplitPanel(() => module.SplitPanel);
+                      if (mounted) setPhoto(() => module.PhotoPanel);
                     })
-                  : tool === "rotate"
+                  : tool === "split"
                     ? loadModule(
-                        "rotate",
-                        () => import("./rotate/RotatePanel"),
+                        "split",
+                        () => import("./split/SplitPanel"),
                         retry,
                         controller.signal,
                       ).then((module) => {
-                        if (mounted) setRotatePanel(() => module.RotatePanel);
+                        if (mounted) setSplitPanel(() => module.SplitPanel);
                       })
-                    : tool === "organize"
+                    : tool === "rotate"
                       ? loadModule(
-                          "organize",
-                          () => import("./organize/OrganizePanel"),
+                          "rotate",
+                          () => import("./rotate/RotatePanel"),
                           retry,
                           controller.signal,
                         ).then((module) => {
-                          if (mounted)
-                            setOrganizePanel(() => module.OrganizePanel);
+                          if (mounted) setRotatePanel(() => module.RotatePanel);
                         })
-                      : Promise.resolve();
+                      : tool === "organize"
+                        ? loadModule(
+                            "organize",
+                            () => import("./organize/OrganizePanel"),
+                            retry,
+                            controller.signal,
+                          ).then((module) => {
+                            if (mounted)
+                              setOrganizePanel(() => module.OrganizePanel);
+                          })
+                        : Promise.resolve();
     const initialize = async () => {
       try {
         const prepareEngine = async () => {
@@ -1005,7 +1023,11 @@ export function App() {
             : "Create copy without Content Credentials",
         }))
       ) {
-        if (toolRef.current === "sign" || toolRef.current === "watermark") {
+        if (
+          toolRef.current === "sign" ||
+          toolRef.current === "watermark" ||
+          toolRef.current === "numbers"
+        ) {
           setScreen("task");
         } else if (toolRef.current === "split") {
           setScreen("task");
@@ -1142,6 +1164,7 @@ export function App() {
         if (
           (toolRef.current === "sign" ||
             toolRef.current === "compress" ||
+            toolRef.current === "numbers" ||
             toolRef.current === "watermark") &&
           !options.generated &&
           candidate.previewFeatures.includes("standard")
@@ -1197,7 +1220,7 @@ export function App() {
 
   return (
     <div
-      className={`app product-app ${screen === "task" && (photos || combining || organizing || splitting || signing || compressing || rastering || watermarking) ? "is-editing" : ""} ${pristineTask ? "is-pristine" : ""}`}
+      className={`app product-app ${screen === "task" && (photos || combining || organizing || splitting || signing || compressing || rastering || watermarking || numbering) ? "is-editing" : ""} ${pristineTask ? "is-pristine" : ""}`}
       data-screen={screen}
       data-tool={tool}
     >
@@ -1510,6 +1533,7 @@ export function App() {
               <Completion
                 title={
                   {
+                    numbers: "Your numbered PDF is ready",
                     watermark: "Your watermarked PDF is ready",
                     raster: "Your images are ready",
                     sign: "Your signed PDF is ready",
@@ -1588,6 +1612,32 @@ export function App() {
                     onBusy={setPhotoBusy}
                   />
                 </Suspense>
+              )}
+            {numbering &&
+              NumberPanel &&
+              current &&
+              currentRevision &&
+              !current.previewFeatures.includes("standard") && (
+                <NumberPanel
+                  key={`${taskKey}-${currentRevision.id}`}
+                  ref={numberPanel}
+                  file={currentRevision.file}
+                  preview={current}
+                  pageIds={currentRevision.pageIds ?? []}
+                  retainedFiles={sessionFiles(taskState)}
+                  apply={(file, ids, signal) =>
+                    run(file, 1, {
+                      generated: true,
+                      label: "Add page numbers",
+                      pageIds: ids,
+                      signal,
+                      expectedPages: current.doc.numPages,
+                    })
+                  }
+                  onClose={closeTask}
+                  onDirty={setPhotoDirty}
+                  onBusy={setPhotoBusy}
+                />
               )}
             {watermarking &&
               WatermarkPanel &&

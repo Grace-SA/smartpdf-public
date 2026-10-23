@@ -61,8 +61,10 @@ private-samples/
 !/docs/requirements-v1.1.md
 !/docs/dependency-licenses.json
 !/docs/repository-workflow.md
+!/docs/m9-report.md
 !/docs/ux/
 /docs/ux/*
+!/docs/ux/m9-page-numbers-design.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
@@ -80,6 +82,8 @@ private-samples/
 !/scripts/m5-fixtures.py
 !/scripts/m10-fixtures.py
 !/scripts/prepare-watermark-font.py
+!/scripts/prepare-number-font.py
+!/scripts/verify-number-output.py
 !/scripts/requirements-test.txt
 !/scripts/run-local-tool.ps1
 !/scripts/windows-realpath-compat.cjs

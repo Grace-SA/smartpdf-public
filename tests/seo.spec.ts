@@ -1,12 +1,15 @@
 import { selectTool } from "./navigation";
 import { expect, test } from "@playwright/test";
+import { publicTools } from "../src/routes";
 
-test("homepage exposes all nine crawlable tools and the new wordmark", async ({
+test("homepage exposes every crawlable tool and the wordmark", async ({
   page,
 }) => {
   await page.goto("/");
   await expect(page.locator("header .brand-wordmark")).toHaveText("SmartPDF");
-  await expect(page.locator('.tool-nav a[role="button"]')).toHaveCount(9);
+  await expect(page.locator('.tool-nav a[role="button"]')).toHaveCount(
+    publicTools.length,
+  );
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
     "https://smartpdf.com.au/",
@@ -40,6 +43,7 @@ test("homepage stays ready and initializes only the selected PDF tool", async ({
     ["/rotate-pdf/", "#pdf-file"],
     ["/pdf-to-jpg/", "#pdf-file"],
     ["/watermark-pdf/", "#pdf-file"],
+    ["/add-page-numbers/", "#pdf-file"],
   ];
   for (const [path, input] of tools) {
     await page.locator(`.tool-cards a[href="${path}"]`).click();
@@ -95,6 +99,7 @@ test("every indexable page includes free-focused SEO metadata", async ({
     "/rotate-pdf/",
     "/pdf-to-jpg/",
     "/watermark-pdf/",
+    "/add-page-numbers/",
   ];
 
   for (const path of paths) {

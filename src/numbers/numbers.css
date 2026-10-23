@@ -1,0 +1,120 @@
+.numbers-task .watermark-viewport {
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+.product-app .number-position {
+  border: 0;
+  padding: 0;
+  margin: 0 0 20px;
+}
+.number-position legend,
+.number-pages legend {
+  font-weight: 650;
+  margin-bottom: 10px;
+}
+.number-position > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.number-position button {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 3px;
+  min-height: 74px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.number-position-paper {
+  position: relative;
+  display: block;
+  width: 29px;
+  height: 35px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: #fff;
+}
+.number-position-paper b {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  font-weight: 700;
+}
+.number-control {
+  display: block;
+  margin: 16px 0;
+}
+.product-app .number-pages {
+  border: 0;
+  padding: 0;
+  margin: 22px 0 12px;
+}
+.number-pages > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 9px 0;
+  min-height: 32px;
+}
+.number-pages input {
+  accent-color: var(--red);
+}
+.product-app .number-pages input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  margin: 0;
+}
+.number-pages > label {
+  min-height: 44px;
+  margin: 0;
+}
+.number-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.number-summary {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.number-hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 8px 0;
+}
+.number-appearance {
+  margin: 20px 0;
+}
+.number-appearance summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 14px;
+}
+.number-appearance > label:not(.watermark-color) {
+  display: block;
+  margin: 12px 0;
+}
+.numbers-task .watermark-filename {
+  font-size: 16px;
+  font-weight: 600;
+}
+@media (max-width: 900px) {
+  .numbers-task .watermark-preview {
+    scroll-margin-bottom: 80px;
+  }
+}
+@media (max-width: 900px) and (max-height: 600px) {
+  /* A pinned preview plus the action bar leaves no usable settings area. */
+  .numbers-task .watermark-preview {
+    position: static;
+  }
+}

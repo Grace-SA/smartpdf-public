@@ -5,7 +5,11 @@ test("homepage does not load PDF engines or signature fonts", async ({
 }) => {
   const heavyRequests: string[] = [];
   page.on("request", (request) => {
-    if (/pdf-resources\.json|qpdf\.wasm|\/sign-fonts\//.test(request.url()))
+    if (
+      /pdf-resources\.json|qpdf\.wasm|\/(sign|number|watermark)-fonts\//.test(
+        request.url(),
+      )
+    )
       heavyRequests.push(request.url());
   });
   await page.goto("/");
@@ -27,6 +31,9 @@ for (const [path, picker] of [
   ["sign-pdf", "#pdf-file"],
   ["compress-pdf", "#pdf-file"],
   ["rotate-pdf", "#pdf-file"],
+  ["pdf-to-jpg", "#pdf-file"],
+  ["watermark-pdf", "#pdf-file"],
+  ["add-page-numbers", "#pdf-file"],
 ] as const) {
   test(`${path} prepares silently without moving the file picker`, async ({
     page,

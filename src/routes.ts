@@ -70,6 +70,13 @@ export const toolCatalog = {
     summary: "Add a text or image watermark privately.",
     group: "Sign & mark",
   },
+  numbers: {
+    path: "/add-page-numbers/",
+    title: "Page Numbers",
+    label: "Add page numbers",
+    summary: "Number PDF pages, with an optional cover page.",
+    group: "Sign & mark",
+  },
 } as const;
 
 export type PublicTool = keyof typeof toolCatalog;

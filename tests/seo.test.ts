@@ -17,11 +17,11 @@ describe("public tool routes and search metadata", () => {
     expect(new Set(pages.map((page) => page.description)).size).toBe(
       pages.length,
     );
-    for (const page of pages) {
+    for (const [tool, page] of Object.entries(seoPages)) {
       expect(page.title).toContain("Smart PDF");
       expect(page.description.length).toBeGreaterThan(80);
       expect(page.steps).toHaveLength(3);
-      expect(page.faq).toHaveLength(2);
+      expect(page.faq).toHaveLength(tool === "numbers" ? 3 : 2);
     }
   });
 });

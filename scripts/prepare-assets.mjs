@@ -165,6 +165,14 @@ await writeFile(
   "public/notices/watermark-font-modifications.txt",
   "Smart PDF Sans Regular is derived from Google Fonts Noto Sans SC at commit 2894aab31764f10f29c421bdfd2340d3b382d384. The weight axis is fixed at 400 with fontTools and family/style names are changed to Smart PDF Sans Regular. Glyph data is padded to four bytes for compatible TrueType subsetting. Original copyright and SIL Open Font License 1.1 are preserved in watermark-font-OFL.txt. PDF output embeds only required glyphs. This font is served from this site; no external font request is made at runtime.\n",
 );
+await copyFile(
+  "public/number-fonts/OFL.txt",
+  "public/notices/number-font-OFL.txt",
+);
+await copyFile(
+  "public/number-fonts/MODIFICATIONS.txt",
+  "public/notices/number-font-modifications.txt",
+);
 const links = (await readdir("public/notices"))
   .map((file) => `<li><a href="./${file}">${file}</a></li>`)
   .join("");

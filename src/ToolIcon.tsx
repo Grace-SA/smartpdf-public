@@ -12,7 +12,12 @@ export function ToolIcon({ tool }: { tool: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {tool === "watermark" ? (
+      {tool === "numbers" ? (
+        <>
+          <rect x="9" y="5" width="30" height="38" rx="3" />
+          <path d="M16 14h16M16 20h16M16 26h10M21 33l3-2v8m-3 0h6" />
+        </>
+      ) : tool === "watermark" ? (
         <>
           <rect x="9" y="5" width="30" height="38" rx="3" />
           <path d="m14 30 8-16 5 12 4-8 5 12M16 25h8" />

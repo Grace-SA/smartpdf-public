@@ -3,6 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
 const pages = {
+  "add-page-numbers": {
+    title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
+    description:
+      "Add page numbers to PDF files for free on your device. Skip a cover, choose a range, position and starting number, then download a new PDF. No upload.",
+    keywords:
+      "free add page numbers to pdf, number pdf pages, pdf page numbering, private pdf tools",
+    heading: "Add page numbers without uploading your PDF",
+  },
   "watermark-pdf": {
     title: "Watermark PDF Free Online – Text & Image, No Upload | Smart PDF",
     description:

@@ -11,6 +11,7 @@ export default defineConfig({
     "probe-startup.spec.ts",
     "probe-image-stress.spec.ts",
     "leave-focus.spec.ts",
+    "numbers.spec.ts",
   ],
   // CI browser engines run in separate jobs; give each test the full runner.
   workers: process.env.CI ? 1 : 2,

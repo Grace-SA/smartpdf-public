@@ -60,6 +60,7 @@ test("every upload page shows every other tool; all discovery surfaces share the
 }) => {
   await page.goto("/");
   const expected = publicTools.map((id) => toolPaths[id]).sort();
+  await expect(page.locator(".tool-cards a")).toHaveCount(publicTools.length);
   expect(
     (
       await page
