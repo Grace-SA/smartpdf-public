@@ -4,7 +4,7 @@ Private, on-device PDF tools at https://smartpdf.com.au.
 
 Nine tools are currently live: Merge, Split, Organize, Images to PDF, Sign, Compress, Rotate, PDF to JPG/PNG, and Watermark. Original documents stay on the user's device; results are new downloads. Signing is a visible mark, not a certificate-based digital signature. Compatibility and resource limits still apply.
 
-M9 Add Page Numbers is being developed locally on its feature branch. It is not a production release. The research → design → implement → full regression → self-review workflow is standing instruction for every feature; it need not be requested again.
+M9 Add Page Numbers was accepted by the product owner on 23 October 2026 and is included in this source as the tenth tool. Final code/UX review found no release blockers; publication is authorized and remains gated on exact-main CI, a versioned artifact and post-deployment verification. Actual production state is recorded separately from the source. The research → design → implement → full regression → self-review workflow is standing instruction for every feature; it need not be requested again.
 
 ## Delivery
 
