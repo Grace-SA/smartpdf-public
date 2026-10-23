@@ -58,9 +58,8 @@ jobs:
       - name: Build all public pages
         run: pnpm build
       - name: Select Ubuntu primary mirror for browser dependencies
-        if: matrix.browser == 'webkit'
         run: |
-          # The runner's Azure mirror can stall while downloading WebKit's
+          # The runner's Azure mirror can stall while downloading browsers'
           # system packages. Keep Ubuntu's signed packages and all checks.
           if [ -f /etc/apt/apt-mirrors.txt ]; then
             printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
