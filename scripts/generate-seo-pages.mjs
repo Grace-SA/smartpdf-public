@@ -207,4 +207,24 @@ for (const [slug, page] of Object.entries(pages)) {
   await mkdir(folder, { recursive: true });
   await writeFile(`${folder}/index.html`, html);
 }
+// Use the same catalogue as navigation and tool recommendations. A separately
+// maintained public XML file can silently omit newly published tools.
+const sitemapPages = [
+  { path: "/", frequency: "weekly", priority: "1.0" },
+  ...publicTools.map((tool) => ({
+    path: toolCatalog[tool].path,
+    frequency: "monthly",
+    priority: "0.9",
+  })),
+  { path: "/privacy/", frequency: "yearly", priority: "0.3" },
+];
+await writeFile(
+  "dist/sitemap.xml",
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapPages
+    .map(
+      (page) =>
+        `  <url><loc>${origin}${page.path}</loc><changefreq>${page.frequency}</changefreq><priority>${page.priority}</priority></url>`,
+    )
+    .join("\n")}\n</urlset>\n`,
+);
 console.log(`Generated ${Object.keys(pages).length} indexable SEO pages.`);

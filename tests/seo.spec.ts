@@ -1,6 +1,30 @@
 import { selectTool } from "./navigation";
 import { expect, test } from "@playwright/test";
-import { publicTools } from "../src/routes";
+import { publicTools, toolPaths } from "../src/routes";
+
+test("sitemap includes every public tool exactly once with working canonical pages", async ({
+  request,
+}) => {
+  const response = await request.get("/sitemap.xml");
+  expect(response.status()).toBe(200);
+  const xml = await response.text();
+  const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => match[1],
+  );
+  expect(new Set(locations).size).toBe(locations.length);
+  expect(locations).toHaveLength(publicTools.length + 2);
+  for (const path of [
+    "/",
+    ...publicTools.map((tool) => toolPaths[tool]),
+    "/privacy/",
+  ]) {
+    const canonical = `https://smartpdf.com.au${path}`;
+    expect(locations).toContain(canonical);
+    const page = await request.get(path);
+    expect(page.status()).toBe(200);
+    expect(await page.text()).toContain(`rel="canonical" href="${canonical}"`);
+  }
+});
 
 test("homepage exposes every crawlable tool and the wordmark", async ({
   page,
