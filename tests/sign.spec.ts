@@ -8,7 +8,33 @@ import {
 } from "./worker-diagnostics";
 const root = "tests/fixtures/m5/";
 test.afterEach(async ({ page }, info) => {
-  if (info.status !== info.expectedStatus) await reportWorkerDiagnostics(page);
+  if (info.status !== info.expectedStatus) {
+    await reportWorkerDiagnostics(page);
+    // Synthetic tests only: no name, password, document text or parser messages.
+    console.log(
+      "SYNTHETIC_SIGN_STATE",
+      await page.evaluate(() => ({
+        route: location.pathname,
+        inputLength:
+          document.querySelector<HTMLInputElement>(".sign-type input")?.value
+            .length ?? null,
+        inputFocused: document.activeElement?.matches(".sign-type input"),
+        selectedStyle: Array.from(
+          document.querySelectorAll(".sign-fonts button"),
+        ).findIndex((button) => button.getAttribute("aria-pressed") === "true"),
+        readyStylePreviews:
+          document.querySelectorAll(".sign-font-sample").length,
+        retryStyleVisible: Array.from(document.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Retry style",
+        ),
+        fonts: Array.from(document.fonts)
+          .filter((font) =>
+            ["Kalam", "Caveat", "MaShanZheng"].includes(font.family),
+          )
+          .map((font) => ({ family: font.family, status: font.status })),
+      })),
+    );
+  }
 });
 async function start(page: Page, file = "normal-a4.pdf") {
   await page.goto("/");
@@ -99,9 +125,14 @@ test("Type: offline multilingual signing, sizes, undo and download end the task"
     .getByRole("button", { name: "Add signature", exact: true })
     .click();
   await page.getByRole("tab", { name: "Type", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "Your name", exact: true })
-    .fill("王小明 Alex");
+  const warmupName = page.getByRole("textbox", {
+    name: "Your name",
+    exact: true,
+  });
+  // Match the real focused typing path already used by the shared type helper.
+  await warmupName.click();
+  await warmupName.fill("王小明 Alex");
+  await expect(warmupName).toHaveValue("王小明 Alex");
   await expect(
     page.getByRole("button", { name: "Use signature", exact: true }),
   ).toBeEnabled();

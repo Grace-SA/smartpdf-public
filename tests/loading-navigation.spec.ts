@@ -1,18 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
 import { selectToolPath } from "./navigation";
+import { publicTools, toolCatalog } from "../src/routes";
 
-const tools = [
-  ["merge-pdf", "combine-files"],
-  ["split-pdf", "pdf-file"],
-  ["organize-pdf", "pdf-file"],
-  ["images-to-pdf", "photo-files"],
-  ["sign-pdf", "pdf-file"],
-  ["compress-pdf", "pdf-file"],
-  ["rotate-pdf", "pdf-file"],
-  ["pdf-to-jpg", "pdf-file"],
-  ["watermark-pdf", "pdf-file"],
-  ["add-page-numbers", "pdf-file"],
-] as const;
+const tools = publicTools.map(
+  (tool) =>
+    [
+      toolCatalog[tool].path.replace(/^\//, "").replace(/\/$/, ""),
+      tool === "combine"
+        ? "combine-files"
+        : tool === "photos"
+          ? "photo-files"
+          : "pdf-file",
+    ] as const,
+);
 
 async function checkPicker(page: Page, id: string) {
   const input = page.locator(`#${id}`);
@@ -101,22 +101,30 @@ test("browser back and forward restore clean tool pickers without stale overlays
   });
   for (const [path] of tools) await selectToolPath(page, path);
   for (const [path, id] of tools.slice(0, -1).reverse()) {
-    await page.goBack();
+    console.log("SYNTHETIC_HISTORY", "back-commit", path);
+    // This is same-document SPA history. Assert the route and real picker below
+    // instead of waiting for an unrelated document-wide load event in WebKit.
+    await page.goBack({ waitUntil: "commit" });
+    console.log("SYNTHETIC_HISTORY", "back-picker", path);
     await expect(page).toHaveURL(new RegExp(`/${path}/$`));
     await expect(page.locator("html")).toHaveAttribute(
       "data-audit-document",
       "history-navigation",
     );
     await checkPicker(page, id);
+    console.log("SYNTHETIC_HISTORY", "back-complete", path);
   }
   for (const [path, id] of tools.slice(1)) {
-    await page.goForward();
+    console.log("SYNTHETIC_HISTORY", "forward-commit", path);
+    await page.goForward({ waitUntil: "commit" });
+    console.log("SYNTHETIC_HISTORY", "forward-picker", path);
     await expect(page).toHaveURL(new RegExp(`/${path}/$`));
     await expect(page.locator("html")).toHaveAttribute(
       "data-audit-document",
       "history-navigation",
     );
     await checkPicker(page, id);
+    console.log("SYNTHETIC_HISTORY", "forward-complete", path);
   }
 });
 
