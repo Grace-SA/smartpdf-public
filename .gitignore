@@ -62,14 +62,17 @@ private-samples/
 !/docs/dependency-licenses.json
 !/docs/repository-workflow.md
 !/docs/m9-report.md
+!/docs/m13-report.md
 !/docs/ux/
 /docs/ux/*
 !/docs/ux/m9-page-numbers-design.md
+!/docs/ux/m13-word-to-pdf-design.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
 # Private-corpus research scripts are intentionally local-only.
 /scripts/*
+!/scripts/m13/
 !/scripts/prepare-assets.mjs
 !/scripts/generate-module-map.mjs
 !/scripts/generate-seo-pages.mjs

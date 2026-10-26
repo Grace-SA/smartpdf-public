@@ -1,5 +1,25 @@
 // Synthetic index-only probes; no personal files are created or opened.
 import { spawnSync } from "node:child_process";
+const rootCheck = spawnSync(
+  process.execPath,
+  ["scripts/check-repository.mjs"],
+  {
+    encoding: "utf8",
+  },
+);
+if (rootCheck.status !== 0)
+  throw new Error(
+    "Repository guard must accept a clean repository/worktree root.",
+  );
+const nestedCheck = spawnSync(process.execPath, ["check-repository.mjs"], {
+  cwd: "scripts",
+  encoding: "utf8",
+});
+if (
+  nestedCheck.status === 0 ||
+  !nestedCheck.stderr.includes("Run from the Smart PDF repository root")
+)
+  throw new Error("Repository guard must reject a nested working directory.");
 const git = (args, input) => {
   const result = spawnSync("git", args, { encoding: "utf8", input });
   if (result.status !== 0) throw new Error("Git index probe operation failed.");

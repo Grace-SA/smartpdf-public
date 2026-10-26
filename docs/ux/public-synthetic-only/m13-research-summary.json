@@ -1,0 +1,172 @@
+{
+  "researchDates": ["2026-10-26", "2026-10-27"],
+  "status": "Design: engine gates not passed; not a product acceptance build",
+  "baseCommit": "6c24dee",
+  "syntheticOnly": true,
+  "candidateVersions": {
+    "libreoffice-converter": "2.7.2",
+    "docx-preview": "0.4.1",
+    "mammoth": "1.13.0"
+  },
+  "chromiumIndependentChecks": [
+    {
+      "fixture": "explicit-pages-table-image",
+      "inputSha256": "a58d95d85ddb0b960860158d7b0769641a2980c51cb779b9a5c8a7b9e1d1cde0",
+      "outputSha256": "ab1dc9bf55d356203fef41b13b10014ab6b683eb0c395db7a7e5ec9e81f036c9",
+      "pages": 2,
+      "missing": [],
+      "duplicates": [],
+      "geometry": [
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528]
+      ],
+      "images": 2,
+      "structuralChecksPassed": true
+    },
+    {
+      "fixture": "automatic-pagination",
+      "inputSha256": "31682b9c51cdc5c81a70cd7114b4e0db96d207ebf3643e816113f19ce2b970e9",
+      "outputSha256": "339e39ede806067b970d4931041bbadaae37cb3d10f7b6125a3d5c79e70ee874",
+      "pages": 4,
+      "missing": [],
+      "duplicates": [],
+      "geometry": [
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528]
+      ],
+      "images": 0,
+      "structuralChecksPassed": true
+    },
+    {
+      "fixture": "mixed-orientation",
+      "inputSha256": "c9146c396969ae21d8a4830335c12ce7d4a38e0f5944fc4b41f9fae3db80fdb5",
+      "outputSha256": "2e50820147b0d098320ca1d23378e60e13b8bd8c4c0a367fa5740bcba591ad47",
+      "pages": 2,
+      "missing": [],
+      "duplicates": [],
+      "geometry": [
+        [595.303937007874, 841.889763779528],
+        [841.889763779528, 595.303937007874]
+      ],
+      "images": 0,
+      "structuralChecksPassed": true
+    },
+    {
+      "fixture": "cjk",
+      "inputSha256": "408392e890bba1502b1f5877c6899f34b41a825a7d602288a77ef09d5c6622f3",
+      "outputSha256": "30beff3040e58755e522765cc9cb23fec888ecf7bc06d5e601271afe36bff87a",
+      "pages": 1,
+      "missing": [],
+      "duplicates": [],
+      "geometry": [[595.303937007874, 841.889763779528]],
+      "images": 0,
+      "structuralChecksPassed": true
+    },
+    {
+      "fixture": "missing-font",
+      "inputSha256": "cf4c1c2cb075323c9a54c16750bcf63baed25fe2d0d23cda6630f2aedf5054e8",
+      "outputSha256": "ab84431d7a360129d19c5bb90255e6ea72fa463170374dc005b4cee3ef6261f3",
+      "pages": 1,
+      "missing": [],
+      "duplicates": [],
+      "geometry": [[595.303937007874, 841.889763779528]],
+      "images": 0,
+      "structuralChecksPassed": true
+    },
+    {
+      "fixture": "long-table",
+      "inputSha256": "64098fbd3ef1ab91516f4ed304818c82feb402880c819c1c33239393c917b483",
+      "outputSha256": "376b4734dbb6ee59cbf09e3e9f3be83c89f7de7d9ba8ec24f42bb0a7b3bd78fc",
+      "pages": 4,
+      "missing": [],
+      "duplicates": [],
+      "geometry": [
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528],
+        [595.303937007874, 841.889763779528]
+      ],
+      "images": 0,
+      "structuralChecksPassed": true
+    }
+  ],
+  "resourceMeasurements": [
+    {
+      "file": "soffice.wasm",
+      "bytes": 147416331,
+      "gzip6": 48766176
+    },
+    {
+      "file": "soffice.data",
+      "bytes": 99735918,
+      "gzip6": 28604370
+    },
+    {
+      "file": "soffice.js",
+      "bytes": 444153,
+      "gzip6": 88823
+    },
+    {
+      "file": "soffice.worker.js",
+      "bytes": 3221,
+      "gzip6": 1358
+    },
+    {
+      "file": "browser.js",
+      "bytes": 73956,
+      "gzip6": 16005
+    },
+    {
+      "file": "browser.worker.global.js",
+      "bytes": 110190,
+      "gzip6": 25019
+    },
+    {
+      "file": "NotoSansSC-variable.ttf",
+      "bytes": 17772300,
+      "gzip6": 11296746
+    }
+  ],
+  "memory": {
+    "initialLinearMemoryBytes": 1073741824,
+    "shared": true,
+    "minimum512MiBProbe": "LinkError: supplied memory smaller than module declared initial import",
+    "notMeasured": "peak RSS / physical resident memory"
+  },
+  "webkit": {
+    "simpleCjk": "success",
+    "tableOnly": "success",
+    "simpleExplicitTwoPages": "success",
+    "imageOnly": "15s timeout",
+    "headerFooterOnly": "15s timeout",
+    "originalCombinedInput": "60s timeout; 15s repeat timeout"
+  },
+  "cleanup": {
+    "upstreamDestroy": "not released within 2s in Chromium and WebKit",
+    "observedError": "PThread was not exported",
+    "harnessCleanup": "closed complete browser context; not product cancellation"
+  },
+  "lightweight": {
+    "automaticPagination": "one long section, approximately 3494px tall",
+    "longTable": "one long section, approximately 1493px tall",
+    "notPdfConversions": true
+  },
+  "network": {
+    "blockedAndCountedContexts": "initial Office engine run and isolated diagnostics",
+    "externalRequestAttempts": 0,
+    "maliciousDocxSafetyProven": false
+  },
+  "notRun": [
+    "real iPhone",
+    "peak process memory",
+    "slow network",
+    "malicious ZIP/macro/external relationship corpus",
+    "Word reference fidelity comparison",
+    "product flows",
+    "full cumulative regression",
+    "CI"
+  ],
+  "implementation": "research harness only; no product runtime changes"
+}

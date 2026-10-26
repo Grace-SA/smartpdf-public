@@ -1,0 +1,130 @@
+<!doctype html><meta charset="utf-8" /><title>M13 isolated engine probe</title>
+<h1>Word to PDF engine research</h1>
+<p>Synthetic local fixtures only. This is not the Smart PDF product.</p>
+<label
+  >Research engine
+  <select id="engine">
+    <option>libreoffice</option>
+    <option>docx-preview</option>
+    <option>mammoth</option>
+  </select></label
+>
+<button id="initialize">Initialize</button
+><input type="file" id="file" accept=".docx" />
+<button id="cancel">Cancel and release</button
+><a id="download" hidden>Download research PDF</a>
+<pre id="status">Not initialized</pre>
+<div id="preview"></div>
+<script src="/jszip.js"></script>
+<script src="/docx/package/dist/docx-preview.js"></script>
+<script src="/mammoth/package/mammoth.browser.js"></script>
+<script type="module">
+  import {
+    WorkerBrowserConverter,
+    createWasmPaths,
+  } from "/matbee/package/dist/browser.js";
+  const status = document.querySelector("#status"),
+    preview = document.querySelector("#preview");
+  let converter,
+    generation = 0,
+    objectUrl;
+  window.research = {};
+  const NativeWorker = window.Worker;
+  window.Worker = class extends NativeWorker {
+    constructor(...args) {
+      super(...args);
+      this.addEventListener("message", (event) => {
+        if (event.data.type === "m13Memory")
+          window.research.memory = event.data;
+      });
+    }
+  };
+  document.querySelector("#initialize").onclick = async () => {
+    const id = ++generation,
+      start = performance.now();
+    status.textContent = "Initializing";
+    try {
+      const font = new Uint8Array(
+        await (await fetch("/font.ttf")).arrayBuffer(),
+      );
+      converter = new WorkerBrowserConverter({
+        ...createWasmPaths(location.origin + "/matbee/package/wasm/"),
+        browserWorkerJs: "/memory-worker.js" + location.search,
+        fonts: [{ filename: "NotoSansSC.ttf", data: font }],
+      });
+      await converter.initialize();
+      if (id !== generation) return;
+      window.research.initMs = performance.now() - start;
+      status.textContent = "Ready";
+    } catch (e) {
+      status.textContent = "Initialization failed: " + e.message;
+    }
+  };
+  document.querySelector("#cancel").onclick = () => {
+    generation++;
+    // Dedicated context teardown by the harness is the hard cancellation boundary.
+    // Upstream destroy() awaits a message and is tested separately for boundedness.
+    status.textContent = "Cancellation requested";
+    if (converter)
+      converter.destroy().then(() => (status.textContent = "Released"));
+  };
+  document.querySelector("#file").onchange = async (event) => {
+    const id = ++generation,
+      file = event.target.files[0];
+    const start = performance.now();
+    status.textContent = "Converting";
+    preview.replaceChildren();
+    document.querySelector("#download").hidden = true;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    try {
+      const data = new Uint8Array(await file.arrayBuffer());
+      const engine = document.querySelector("#engine").value;
+      if (engine === "libreoffice") {
+        const result = await converter.convert(
+          data,
+          { outputFormat: "pdf" },
+          file.name,
+        );
+        if (id !== generation) return;
+        objectUrl = URL.createObjectURL(
+          new Blob([result.data], { type: "application/pdf" }),
+        );
+        const link = document.querySelector("#download");
+        link.href = objectUrl;
+        link.download = file.name.replace(/\.docx$/i, ".pdf");
+        link.hidden = false;
+        window.research.outputBytes = result.data.length;
+      } else if (engine === "docx-preview") {
+        await docx.renderAsync(data, preview, preview, {
+          renderAltChunks: false,
+        });
+        window.research.pages = [
+          ...preview.querySelectorAll("section.docx"),
+        ].map((section) => {
+          const article = section.querySelector("article");
+          const p = section.getBoundingClientRect(),
+            a = article?.getBoundingClientRect();
+          return {
+            height: p.height,
+            width: p.width,
+            scrollHeight: section.scrollHeight,
+            articleHeight: a?.height,
+            articleBottom: a?.bottom,
+            pageBottom: p.bottom,
+            text: section.innerText,
+          };
+        });
+      } else {
+        const result = await mammoth.convertToHtml({
+          arrayBuffer: data.buffer,
+        });
+        preview.innerHTML = result.value;
+        window.research.html = result.value;
+      }
+      window.research.convertMs = performance.now() - start;
+      status.textContent = "Complete";
+    } catch (e) {
+      status.textContent = "Conversion failed: " + e.message;
+    }
+  };
+</script>

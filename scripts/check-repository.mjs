@@ -1,11 +1,12 @@
 // Inspect the Git index, never local private PDFs or credential stores.
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
 const git = (...args) =>
   execFileSync("git", args, { maxBuffer: 256 * 1024 * 1024 });
+// Linked worktrees use a .git file, so validate the repository root through Git.
+if (git("rev-parse", "--show-prefix").toString("utf8").trim() !== "")
+  throw new Error("Run from the Smart PDF repository root");
 const entries = git("ls-files", "--stage", "-z")
   .toString("utf8")
   .split("\0")
@@ -91,8 +92,6 @@ if (failures.length) {
   console.error("Repository check blocked:\n" + failures.join("\n"));
   process.exit(1);
 }
-if (!fs.existsSync(path.join(".git", "HEAD")))
-  throw new Error("Run from the Smart PDF repository root");
 console.log(
   `Repository check passed: ${files.length} files; ${assets.size} reviewed binary assets; no detected credentials or personal paths.`,
 );
