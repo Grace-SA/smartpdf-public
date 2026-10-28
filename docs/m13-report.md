@@ -1,5 +1,10 @@
 # M13 Word 转 PDF研究报告
 
+2026-10-28 PoC更新：按用户选择完成本机WSL/Docker安装和原生Gotenberg＋LibreOffice
+实测，见[PoC实测报告](ux/m13-gotenberg-poc-results.md)。受控Noto字体环境16份源、
+双轮32份PDF共68页通过当前结构检查；空输入被接受、默认字体改变分页等事实均保留。
+本轮只交付PoC，不启动正式产品开发；下文旧WASM研究结论作为历史证据保留。
+
 2026-10-28补充：应用户要求完成[云端转换技术选型与工期预估](ux/m13-cloud-selection-estimate.md)，
 初选自建Gotenberg＋原生LibreOffice，托管Adobe API为快速接入备选。这是可选路径评估，
 未启用上传、付费服务或生产部署，不以本地WASM成绩替代云端原生引擎实测。

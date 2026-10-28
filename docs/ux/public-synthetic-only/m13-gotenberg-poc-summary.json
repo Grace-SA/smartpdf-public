@@ -1,0 +1,346 @@
+{
+  "date": "2026-10-28",
+  "status": "Design: PoC results for review, no production implementation",
+  "syntheticOnly": true,
+  "originalSourcesUnchanged": true,
+  "sourceDocuments": 16,
+  "fontVariants": 2,
+  "repeatCycles": 2,
+  "positivePdfOutputs": 64,
+  "positivePdfPages": 130,
+  "baseImage": "gotenberg/gotenberg@sha256:13672f317b443c793e972b1bd2155ec62a3e7b6891b411e8196442cc053ee5f5",
+  "gotenberg": "8.39.0",
+  "libreoffice": "26.8.1.1 680(Build:1)",
+  "containerLimits": {
+    "cpus": 2,
+    "memoryBytes": 4294967296,
+    "pids": 512
+  },
+  "variants": {
+    "default-fonts": {
+      "conversionHttpSuccesses": 32,
+      "conversionRuns": 32,
+      "strictStructuralPassed": 28,
+      "firstCyclePages": 31,
+      "timingMs": {
+        "min": 170.7,
+        "median": 200.25,
+        "max": 829.9,
+        "scope": "localhost serial; not production SLA"
+      },
+      "fontMatch": "NotoSans-Regular.ttf: \"Noto Sans\" \"Regular\"",
+      "negativeRuns": [
+        {
+          "name": "empty",
+          "status": 200,
+          "expectedRejection": false
+        },
+        {
+          "name": "corrupt",
+          "status": 500,
+          "expectedRejection": false
+        }
+      ],
+      "documents": [
+        {
+          "name": "explicit-pages-table-image",
+          "pages": 2,
+          "fonts": ["BAAAAA+LiberationSans", "CAAAAA+Carlito-Regular"],
+          "faults": [],
+          "outputSha256": "f6765907f5020dff81fc79efba3154067b653fa3a88a7123d0820fa8d606db84"
+        },
+        {
+          "name": "automatic-pagination",
+          "pages": 4,
+          "fonts": ["BAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "30e8d6a6d552c05f412b117fb899eb9418c4a1908bd91b24f8d9ab94c847deb1"
+        },
+        {
+          "name": "mixed-orientation",
+          "pages": 2,
+          "fonts": ["BAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "8660903a457c3d61cf87248fb8c9a4251183a58740f160c8bd3914e9e0e14f7e"
+        },
+        {
+          "name": "cjk",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSansCJKhk-Regular", "CAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "4be2143bb05e6673d6c414ed0606b689220355db1ff77e63788ceb81db539bf1"
+        },
+        {
+          "name": "missing-font",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSerif-Regular"],
+          "faults": [],
+          "outputSha256": "c77aa7e7233e373fa4caab2abb78e74a7407530407bacfd38d78967b3bc64571"
+        },
+        {
+          "name": "long-table",
+          "pages": 4,
+          "fonts": ["BAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "d8cc4020431a9848eb4384275093af17a26e2e93d7caf1e62fb6be92a804fc6f"
+        },
+        {
+          "name": "chinese-punctuation",
+          "pages": 1,
+          "fonts": [
+            "BAAAAA+NotoSansCJKhk-Regular",
+            "CAAAAA+NotoSerif-Regular",
+            "DAAAAA+NotoSans-Regular"
+          ],
+          "faults": ["missing_text", "duplicate_body_marker"],
+          "outputSha256": "fddbeb3f6634de52c358341a010ace897d5e9e0cde7a863d2238f50eb591427d"
+        },
+        {
+          "name": "chinese-sizes",
+          "pages": 1,
+          "fonts": [
+            "BAAAAA+NotoSerif-Regular",
+            "CAAAAA+NotoSansCJKhk-Regular",
+            "DAAAAA+NotoSerif-Bold",
+            "EAAAAA+NotoSansCJKhk-Bold",
+            "FAAAAA+NotoSerif-Regular",
+            "GAAAAA+NotoSerif-Bold",
+            "HAAAAA+NotoSerif-Regular"
+          ],
+          "faults": [],
+          "outputSha256": "ef418161cf189a6170796a2447a55a22c97f65a955f3dd598ffbfa9440d462f2"
+        },
+        {
+          "name": "chinese-merged-table",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "095a44a342f84b0dd3a28889aa4201aa43ea7733f82fdec0353c766cf04b2e99"
+        },
+        {
+          "name": "nested-table",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "9c196fc4112fb54a3abc42afc25500b9fd685bb8d94c30f3c0d5bdb6bc9057d4"
+        },
+        {
+          "name": "chinese-long-table",
+          "pages": 3,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "8ab28c0b83a1dd30c33cb77980024e3d1c1403162696d49b3d46084bc1de4e20"
+        },
+        {
+          "name": "long-row-split",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": ["automatic_pagination"],
+          "outputSha256": "baa438a44fb123f645d81f6e0b7c0142d08bf6bf1cda9aa845c840c064b3466f"
+        },
+        {
+          "name": "chinese-explicit-pages",
+          "pages": 3,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "cd7a6cae048c32abeb0b8e73759f368bcf1ae1687540777c53230dc47c653b0b"
+        },
+        {
+          "name": "landscape-wide-table",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "758602fb32736a5ea18d9f352f148222019a816732fa7ffe7ca677f444cb6575"
+        },
+        {
+          "name": "separate-section-headers",
+          "pages": 2,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "2d837f83acd19a1b9ea8a518a901a45de7e964c95cf960bafa882f37f3818b9f"
+        },
+        {
+          "name": "chinese-auto-pagination",
+          "pages": 3,
+          "fonts": ["BAAAAA+NotoSerif-Regular", "CAAAAA+NotoSansCJKhk-Regular"],
+          "faults": [],
+          "outputSha256": "fcf561dfb4793871775ce72a0a50660fe3754b93412ddd5ac41c7634fb00a580"
+        }
+      ]
+    },
+    "noto-fonts": {
+      "conversionHttpSuccesses": 32,
+      "conversionRuns": 32,
+      "strictStructuralPassed": 32,
+      "firstCyclePages": 34,
+      "timingMs": {
+        "min": 168.7,
+        "median": 196.7,
+        "max": 791.4,
+        "scope": "localhost serial; not production SLA"
+      },
+      "fontMatch": "NotoSansSC-variable.ttf: \"Noto Sans SC\" \"Regular\"",
+      "negativeRuns": [
+        {
+          "name": "empty",
+          "status": 200,
+          "expectedRejection": false
+        },
+        {
+          "name": "corrupt",
+          "status": 500,
+          "expectedRejection": false
+        }
+      ],
+      "documents": [
+        {
+          "name": "explicit-pages-table-image",
+          "pages": 2,
+          "fonts": ["BAAAAA+LiberationSans", "CAAAAA+Carlito-Regular"],
+          "faults": [],
+          "outputSha256": "b8499a65db77b88d391abb72d69092772a9b6f9b5e41344246c032cd5d78f6bc"
+        },
+        {
+          "name": "automatic-pagination",
+          "pages": 4,
+          "fonts": ["BAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "a409d5b125114a271092ad4527c61953f55b5608e56168ccb1eaf94924331376"
+        },
+        {
+          "name": "mixed-orientation",
+          "pages": 2,
+          "fonts": ["BAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "620571caa92a96bb5ff0165cbb894ac4531616050a2bea82e0a83996bc9e09de"
+        },
+        {
+          "name": "cjk",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSansSC-Regular", "CAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "c8cf27cb8627763160f2856095460740d0c3f63de490c4f80301e378d145c906"
+        },
+        {
+          "name": "missing-font",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSerif-Regular"],
+          "faults": [],
+          "outputSha256": "888c485d7a61f688ad70eb9ac7d77083645efbaba4aa8e2f02a31985dc9bbb65"
+        },
+        {
+          "name": "long-table",
+          "pages": 4,
+          "fonts": ["BAAAAA+LiberationSans"],
+          "faults": [],
+          "outputSha256": "b7eb7836acb83721542614416df0d9667d61cd0a8f0504b3d677ccbfc1f67e5e"
+        },
+        {
+          "name": "chinese-punctuation",
+          "pages": 1,
+          "fonts": [
+            "BAAAAA+NotoSansCJKhk-Regular",
+            "CAAAAA+NotoSansSC-Regular"
+          ],
+          "faults": [],
+          "outputSha256": "b4d3f054986842c9407801ce0d379d34cc3fbdb3f33f7ed925b42ac13d7520f4"
+        },
+        {
+          "name": "chinese-sizes",
+          "pages": 1,
+          "fonts": [
+            "BAAAAA+NotoSansSC-Regular",
+            "CAAAAA+NotoSansSC-Bold",
+            "DAAAAA+NotoSansSC-Regular",
+            "EAAAAA+NotoSansSC-Bold",
+            "FAAAAA+NotoSansSC-Regular"
+          ],
+          "faults": [],
+          "outputSha256": "e777153201b993990ab945076f4776ea3ec8a872b93993ae36a98eceea3cca4a"
+        },
+        {
+          "name": "chinese-merged-table",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "cf236590d69952fe75c4097bb35008069ea719bb2bd408f6de2c9f5d663caf3f"
+        },
+        {
+          "name": "nested-table",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "063fd282ce2352739e718de655527ba12e3c853a669ac210265af65d81e66759"
+        },
+        {
+          "name": "chinese-long-table",
+          "pages": 4,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "de9ae74356aed9eba332d83baf037a74142c69358f90a06344c22845ff668758"
+        },
+        {
+          "name": "long-row-split",
+          "pages": 2,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "bb040d0cd6074a243340ffa419011a31e691bbbdeb5c199ed6415417c3a2345b"
+        },
+        {
+          "name": "chinese-explicit-pages",
+          "pages": 3,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "7407045f260510c55af8a8e64fc56dafae27da7ca1d4e3ba425c87af11c94c01"
+        },
+        {
+          "name": "landscape-wide-table",
+          "pages": 1,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "c324df1d5b153137d6b63312c9914247681fcb7c6e4a82148bd1ff217010fbd8"
+        },
+        {
+          "name": "separate-section-headers",
+          "pages": 2,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "b91c0bf9460592732498a864214b37de1ec45b0b00e136e7ff61e80b0c127e40"
+        },
+        {
+          "name": "chinese-auto-pagination",
+          "pages": 4,
+          "fonts": ["BAAAAA+NotoSansSC-Regular"],
+          "faults": [],
+          "outputSha256": "ff223895f330015c5e16dd0689a018e72c2dc93f1ec48b7430fc385abda51893"
+        }
+      ]
+    }
+  },
+  "visualReview": {
+    "uniqueFirstCyclePagesRendered": 65,
+    "dpi": 100,
+    "overviewPagesInspected": 65,
+    "selectedDetailedPagesInspected": true,
+    "secondCycleAllPagesVisuallyReinspected": false,
+    "wordReferenceComparison": false
+  },
+  "initialTransportFailure": "Preserved separately; WSL lifetime stopped container cleanly; resolved with live WSL session",
+  "notRun": [
+    "Microsoft Word reference alignment",
+    "private document quality",
+    "peak process memory",
+    "production throughput",
+    "malicious package corpus",
+    "production UI and lifecycle",
+    "real phone upload",
+    "cumulative product regression"
+  ],
+  "overallAcceptancePassed": false,
+  "nextDecision": "Review native engine PoC, font policy and input preflight before formal product development",
+  "tableAudit": {
+    "passed": 229,
+    "total": 229,
+    "auditSha256": "df0660aa3e676eb9416dac1e915fe1c5dbea3a0e24a322cddbf0d65b62fd49ac"
+  }
+}
