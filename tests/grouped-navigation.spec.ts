@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { openTools } from "./navigation";
-import { publicTools, toolPaths, toolCatalog } from "../src/routes";
+import { publicTools, toolPaths, toolCatalog, toolGroups } from "../src/routes";
 
 for (const width of [320, 390, 844, 1099, 1100, 1440, 1920]) {
   test(`${width}: grouped menu is bounded, stationary and fully reachable`, async ({
@@ -22,7 +22,12 @@ for (const width of [320, 390, 844, 1099, 1100, 1440, 1920]) {
     await expect(page.locator(".tool-nav a:visible")).toHaveCount(
       publicTools.length,
     );
-    await expect(page.locator(".tool-menu-group")).toHaveCount(4);
+    await expect(page.locator(".tool-menu-group")).toHaveCount(
+      toolGroups.length,
+    );
+    await expect(page.locator(".tool-menu-group h2")).toHaveText([
+      ...toolGroups,
+    ]);
     await expect(page.locator(".tool-nav a.active")).toHaveAttribute(
       "href",
       toolPaths.raster,
@@ -52,6 +57,21 @@ for (const width of [320, 390, 844, 1099, 1100, 1440, 1920]) {
     const chooser = page.waitForEvent("filechooser");
     await page.locator("#pdf-file").click();
     await (await chooser).setFiles([]);
+    await openTools(page);
+    const last = publicTools.at(-1)!;
+    await page.locator(`.tool-nav a[href="${toolPaths[last]}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`${toolPaths[last]}$`));
+    const lastPicker = page.waitForEvent("filechooser");
+    await page
+      .locator(
+        last === "photos"
+          ? "#photo-files"
+          : last === "combine"
+            ? "#combine-files"
+            : "#pdf-file",
+      )
+      .click();
+    await (await lastPicker).setFiles([]);
   });
 }
 

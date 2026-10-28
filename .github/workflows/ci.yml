@@ -37,6 +37,9 @@ jobs:
         run: node scripts/test-repository-guard.mjs
       - name: Generate synthetic boundary fixtures
         run: python -B scripts/m5-fixtures.py
+      - name: Generate synthetic unlock fixtures
+        # Unlock variants are reproducible synthetic data, never private files.
+        run: node scripts/m12-fixtures.mjs
       - name: Type check
         run: pnpm typecheck
       - name: Application lint
@@ -47,12 +50,16 @@ jobs:
         run: python -B scripts/verify-number-output.py
         env:
           PYTHONPATH: .local-python
+      - name: Independent unlock output verification
+        # Verify decrypted contents independently of the qpdf engine.
+        run: python -B scripts/verify-unlock-output.py
+        env:
+          PYTHONPATH: .local-python
       - name: Build all public pages
         run: pnpm build
       - name: Select Ubuntu primary mirror for browser dependencies
-        if: matrix.browser == 'webkit'
         run: |
-          # The runner's Azure mirror can stall while downloading WebKit's
+          # The runner's Azure mirror can stall while downloading browsers'
           # system packages. Keep Ubuntu's signed packages and all checks.
           if [ -f /etc/apt/apt-mirrors.txt ]; then
             printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
@@ -62,7 +69,7 @@ jobs:
         if: matrix.browser == 'webkit'
         run: >-
           pnpm exec playwright test --config playwright.github.config.ts --project webkit
-          --grep '1280: every tool-to-tool|back from a completed task|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation|leave confirmation restores focus before removal|photos leave confirmation|renderer waits for PDF.js readiness|credentials consent prepares|dialog closes before removal'
+          --grep '1280: every tool-to-tool|back from a completed task|browser back and forward restore clean tool pickers|Type: offline multilingual signing|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation|leave confirmation restores focus before removal|photos leave confirmation|renderer waits for PDF.js readiness|credentials consent prepares|dialog closes before removal'
         env:
           DEBUG: pw:browser
       - name: M9 WebKit navigation stability

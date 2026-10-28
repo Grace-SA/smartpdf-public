@@ -274,6 +274,10 @@ body {
 .product-app .workspace {
   display: block;
 }
+.icon-unlock {
+  color: #227a58;
+  background: #eaf6ef;
+}
 .product-app .panel {
   background: transparent;
   border: 0;

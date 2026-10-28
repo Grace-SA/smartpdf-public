@@ -12,6 +12,7 @@ export default defineConfig({
     "probe-image-stress.spec.ts",
     "leave-focus.spec.ts",
     "numbers.spec.ts",
+    "unlock.spec.ts",
   ],
   // CI browser engines run in separate jobs; give each test the full runner.
   workers: process.env.CI ? 1 : 2,
@@ -30,7 +31,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4240 --strictPort",
+      "node scripts/m12-fixtures.mjs --dense && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4240 --strictPort",
     port: 4240,
     reuseExistingServer: false,
   },
