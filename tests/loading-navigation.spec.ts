@@ -99,7 +99,11 @@ test("browser back and forward restore clean tool pickers without stale overlays
   await page.locator("html").evaluate((element) => {
     element.setAttribute("data-audit-document", "history-navigation");
   });
-  for (const [path] of tools) await selectToolPath(page, path);
+  for (const [path] of tools) {
+    console.log("SYNTHETIC_HISTORY", "select", path);
+    await selectToolPath(page, path);
+    await expect(page).toHaveURL(new RegExp(`/${path}/$`));
+  }
   for (const [path, id] of tools.slice(0, -1).reverse()) {
     console.log("SYNTHETIC_HISTORY", "back-commit", path);
     // This is same-document SPA history. Assert the route and real picker below
