@@ -1,0 +1,592 @@
+{
+  "date": "2026-10-28",
+  "syntheticOnly": true,
+  "sourceDocuments": 16,
+  "sourceHashesUnchanged": true,
+  "wordVersion": "16.0.20430.20182",
+  "wordExport": "Standard PDF desktop UI",
+  "wordReferencePages": 34,
+  "notoComparedPages": 34,
+  "baseAsciiMarkers": 605,
+  "sameFontExperiment": false,
+  "wordChineseExtractionReliable": false,
+  "productAcceptanceCompleted": false,
+  "documents": [
+    {
+      "name": "explicit-pages-table-image",
+      "inputSha256": "a58d95d85ddb0b960860158d7b0769641a2980c51cb779b9a5c8a7b9e1d1cde0",
+      "wordPdfSha256": "137c1be70e8e872af44b67c4ae38771f9b8564a162197e2352b5f204044e0335",
+      "wordPages": 2,
+      "default-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.156
+      },
+      "noto-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.156
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "automatic-pagination",
+      "inputSha256": "31682b9c51cdc5c81a70cd7114b4e0db96d207ebf3643e816113f19ce2b970e9",
+      "wordPdfSha256": "0287da89285e71010e82d217a5425a4055cd94ca02055240ec82038853d5023f",
+      "wordPages": 4,
+      "default-fonts": {
+        "pages": 4,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 1.696
+      },
+      "noto-fonts": {
+        "pages": 4,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 1.696
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "mixed-orientation",
+      "inputSha256": "c9146c396969ae21d8a4830335c12ce7d4a38e0f5944fc4b41f9fae3db80fdb5",
+      "wordPdfSha256": "e81d05da93bb3477b1de514025221c68f4da46f538a01cd9cb5c80df769823d8",
+      "wordPages": 2,
+      "default-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.156
+      },
+      "noto-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.156
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "cjk",
+      "inputSha256": "408392e890bba1502b1f5877c6899f34b41a825a7d602288a77ef09d5c6622f3",
+      "wordPdfSha256": "668fe2c7accf02db160f0c0ebd1731820cf8a3e006acbc8977a3a954d38e7f54",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 6.746
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.746
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "missing-font",
+      "inputSha256": "cf4c1c2cb075323c9a54c16750bcf63baed25fe2d0d23cda6630f2aedf5054e8",
+      "wordPdfSha256": "7d516255fd854f0fbcdaa70ba945e03ba45456e287e71b53f4a828251fff833b",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 11.82
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 11.82
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "long-table",
+      "inputSha256": "64098fbd3ef1ab91516f4ed304818c82feb402880c819c1c33239393c917b483",
+      "wordPdfSha256": "218b3eeaaf71347dc73b75b055b5680a9b5be1bfa948a43c2c53da64a1ff0756",
+      "wordPages": 4,
+      "default-fonts": {
+        "pages": 4,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.167
+      },
+      "noto-fonts": {
+        "pages": 4,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 0.167
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "chinese-punctuation",
+      "inputSha256": "e4b5ab9fdeba140f4b0ebb12ff2e639a3b8304594f1ca47e0a5ad1a2e0589893",
+      "wordPdfSha256": "b71b9c5ca26088f821a53834d3a7ec52ceacff8e5d8495f376b404abfc52cf78",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 24.183
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 6.938
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "chinese-sizes",
+      "inputSha256": "d851c090b3ba466937cffa07baed6b6f885e0cdd6657584b78fe333c24f9cd45",
+      "wordPdfSha256": "f57d93b550ad0cfccd6c70b37d1adfcf79d58bd49102df573f9fa67daa4d464c",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 34.921
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 5.009
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "chinese-merged-table",
+      "inputSha256": "7d8f22ff44a97fec5e3c87931346e95411a19c4b08e0dbf22da2fbc0aedac730",
+      "wordPdfSha256": "065262084847fa4be63688c867d77a86c95ed402c189b6d711908e223fc307bf",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 30.283
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 3.482
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "nested-table",
+      "inputSha256": "c698ce9137709f964736cacfc1a1aa86daa8f0b05998220232bdbab66d1ecbe0",
+      "wordPdfSha256": "67d1d742a5b8796d8b91ed5c774cf9470a7ef379652f768ec32171610c73a8e0",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 24.543
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 6.203
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "chinese-long-table",
+      "inputSha256": "1613ded787bb6acc5faee054e579d59f47afadf7fab9d49f0dbf96557e3b949f",
+      "wordPdfSha256": "a987422d94688481f6084a4b961886875ef22f1f7368a15d329596ca4f49cbae",
+      "wordPages": 4,
+      "default-fonts": {
+        "pages": 3,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 4,
+        "maxMarkerBoxDeltaPt": 562.023
+      },
+      "noto-fonts": {
+        "pages": 4,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 11.528
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "long-row-split",
+      "inputSha256": "e47f8e2823de113456d746bde724e81abe9d72cf5e1c11aa238ae0ce7e81e5a6",
+      "wordPdfSha256": "c735e808cc8b7cc725662782a2cd6f3caac2b47714461e7449d747bfcf4513d0",
+      "wordPages": 2,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 2,
+        "maxMarkerBoxDeltaPt": 195.703
+      },
+      "noto-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 11.958
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "chinese-explicit-pages",
+      "inputSha256": "417316b917d8365c1640562dc9689bff63f42ef1e9985860b2d0add90ecda3d3",
+      "wordPdfSha256": "cbc9e382925a3d01a15ecdec99ed607dfa92c70e91ee818f160aa2784a11ee8d",
+      "wordPages": 3,
+      "default-fonts": {
+        "pages": 3,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 7.728
+      },
+      "noto-fonts": {
+        "pages": 3,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 4.072
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "landscape-wide-table",
+      "inputSha256": "6d3c3ca8227e82dab10ecc26769cb62fe15425455ad1bb20d044ba4b047c3eaf",
+      "wordPdfSha256": "0cde2af35b8d6dcccbc6c5e0e992f9f116f08ac8a9d2754063eca10b241f535c",
+      "wordPages": 1,
+      "default-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 100.507
+      },
+      "noto-fonts": {
+        "pages": 1,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 3.462
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "separate-section-headers",
+      "inputSha256": "badb584b6774c8552b3875b05ebb2f39206876f87d975306130ee04652ceffc4",
+      "wordPdfSha256": "941117764577e57a7e0a47fb0dd8ed29046cb562da8a64f41641a342b174c6d5",
+      "wordPages": 2,
+      "default-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 5.958
+      },
+      "noto-fonts": {
+        "pages": 2,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 3.462
+      },
+      "wordMissingMarkers": []
+    },
+    {
+      "name": "chinese-auto-pagination",
+      "inputSha256": "70b366a25b6c033d9504798660b316b0751a1289c9af070da48720379ed34c50",
+      "wordPdfSha256": "ffaa0c6912bc3f56d06ca1b4c0717d823b13083d4f32cc8ba1c1aaa35417385f",
+      "wordPages": 4,
+      "default-fonts": {
+        "pages": 3,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 4,
+        "maxMarkerBoxDeltaPt": 449.043
+      },
+      "noto-fonts": {
+        "pages": 4,
+        "missingMarkers": [],
+        "repeatedMarkerFailures": [],
+        "markerPageDifferences": 0,
+        "maxMarkerBoxDeltaPt": 8.798
+      },
+      "wordMissingMarkers": []
+    }
+  ],
+  "pageComparisons": [
+    {
+      "name": "explicit-pages-table-image",
+      "page": 1,
+      "sharedMarkers": 5,
+      "maxMarkerBoxDeltaPt": 0.146,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "explicit-pages-table-image",
+      "page": 2,
+      "sharedMarkers": 3,
+      "maxMarkerBoxDeltaPt": 0.156,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "automatic-pagination",
+      "page": 1,
+      "sharedMarkers": 31,
+      "maxMarkerBoxDeltaPt": 1.696,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "automatic-pagination",
+      "page": 2,
+      "sharedMarkers": 31,
+      "maxMarkerBoxDeltaPt": 1.696,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "automatic-pagination",
+      "page": 3,
+      "sharedMarkers": 31,
+      "maxMarkerBoxDeltaPt": 1.696,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "automatic-pagination",
+      "page": 4,
+      "sharedMarkers": 27,
+      "maxMarkerBoxDeltaPt": 1.436,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "mixed-orientation",
+      "page": 1,
+      "sharedMarkers": 1,
+      "maxMarkerBoxDeltaPt": 0.156,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "mixed-orientation",
+      "page": 2,
+      "sharedMarkers": 1,
+      "maxMarkerBoxDeltaPt": 0.156,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "cjk",
+      "page": 1,
+      "sharedMarkers": 1,
+      "maxMarkerBoxDeltaPt": 0.746,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "missing-font",
+      "page": 1,
+      "sharedMarkers": 1,
+      "maxMarkerBoxDeltaPt": 11.82,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "long-table",
+      "page": 1,
+      "sharedMarkers": 26,
+      "maxMarkerBoxDeltaPt": 0.167,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "long-table",
+      "page": 2,
+      "sharedMarkers": 26,
+      "maxMarkerBoxDeltaPt": 0.167,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "long-table",
+      "page": 3,
+      "sharedMarkers": 27,
+      "maxMarkerBoxDeltaPt": 0.167,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "long-table",
+      "page": 4,
+      "sharedMarkers": 1,
+      "maxMarkerBoxDeltaPt": 0.167,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-punctuation",
+      "page": 1,
+      "sharedMarkers": 3,
+      "maxMarkerBoxDeltaPt": 6.938,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-sizes",
+      "page": 1,
+      "sharedMarkers": 5,
+      "maxMarkerBoxDeltaPt": 5.009,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-merged-table",
+      "page": 1,
+      "sharedMarkers": 15,
+      "maxMarkerBoxDeltaPt": 3.482,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "nested-table",
+      "page": 1,
+      "sharedMarkers": 9,
+      "maxMarkerBoxDeltaPt": 6.203,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-long-table",
+      "page": 1,
+      "sharedMarkers": 34,
+      "maxMarkerBoxDeltaPt": 11.528,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-long-table",
+      "page": 2,
+      "sharedMarkers": 34,
+      "maxMarkerBoxDeltaPt": 11.528,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-long-table",
+      "page": 3,
+      "sharedMarkers": 34,
+      "maxMarkerBoxDeltaPt": 11.528,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-long-table",
+      "page": 4,
+      "sharedMarkers": 2,
+      "maxMarkerBoxDeltaPt": 3.482,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "long-row-split",
+      "page": 1,
+      "sharedMarkers": 69,
+      "maxMarkerBoxDeltaPt": 11.958,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "long-row-split",
+      "page": 2,
+      "sharedMarkers": 23,
+      "maxMarkerBoxDeltaPt": 3.482,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-explicit-pages",
+      "page": 1,
+      "sharedMarkers": 3,
+      "maxMarkerBoxDeltaPt": 4.072,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-explicit-pages",
+      "page": 2,
+      "sharedMarkers": 3,
+      "maxMarkerBoxDeltaPt": 4.072,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-explicit-pages",
+      "page": 3,
+      "sharedMarkers": 3,
+      "maxMarkerBoxDeltaPt": 4.072,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "landscape-wide-table",
+      "page": 1,
+      "sharedMarkers": 96,
+      "maxMarkerBoxDeltaPt": 3.462,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "separate-section-headers",
+      "page": 1,
+      "sharedMarkers": 2,
+      "maxMarkerBoxDeltaPt": 3.462,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "separate-section-headers",
+      "page": 2,
+      "sharedMarkers": 2,
+      "maxMarkerBoxDeltaPt": 3.462,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-auto-pagination",
+      "page": 1,
+      "sharedMarkers": 23,
+      "maxMarkerBoxDeltaPt": 8.798,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-auto-pagination",
+      "page": 2,
+      "sharedMarkers": 23,
+      "maxMarkerBoxDeltaPt": 8.798,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-auto-pagination",
+      "page": 3,
+      "sharedMarkers": 23,
+      "maxMarkerBoxDeltaPt": 8.798,
+      "pageBoxMaxDeltaPt": 0.21
+    },
+    {
+      "name": "chinese-auto-pagination",
+      "page": 4,
+      "sharedMarkers": 1,
+      "maxMarkerBoxDeltaPt": 3.582,
+      "pageBoxMaxDeltaPt": 0.21
+    }
+  ]
+}

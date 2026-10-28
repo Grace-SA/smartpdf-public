@@ -73,3 +73,20 @@ version, empty DOCX returned 200 and corrupt ZIP returned 500, so batch exit cod
 is 1 even when all positive PDFs pass. Retain this result; it identifies required
 outer input checks and error classification. Do not weaken it to report an
 overall pass. The full report distinguishes valid output quality from admission.
+
+The completed Word follow-up has 16 actual desktop Word exports and 34 page
+comparisons. With references under `.research/m13/word-reference/word-pdf`, run:
+
+```powershell
+python scripts/m13/gotenberg/compare_word.py
+python scripts/m13/gotenberg/summarize_word.py
+```
+
+Close only task-owned synthetic Word documents before reading frozen source
+hashes: Word may hold a read lock. Never save source edits to make a comparison
+pass. The comparator retains raw text locally, tolerates extractor-inserted
+whitespace in ASCII identifiers, and checks repeated markers separately.
+The summary exporter asserts complete reference coverage and unchanged sources,
+and emits only allow-listed synthetic numeric fields. Human visual review is
+recorded in the report, not inferred by these scripts. The actual Word host has
+different font files/fallbacks; this is not a same-font engine experiment.

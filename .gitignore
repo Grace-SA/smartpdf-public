@@ -69,6 +69,8 @@ private-samples/
 !/docs/ux/m13-word-to-pdf-design.md
 !/docs/ux/m13-cloud-selection-estimate.md
 !/docs/ux/m13-gotenberg-poc-results.md
+!/docs/ux/m13-word-reference-results.md
+!/docs/ux/m13-cloud-product-technical-plan.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
