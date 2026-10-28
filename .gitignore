@@ -67,6 +67,7 @@ private-samples/
 /docs/ux/*
 !/docs/ux/m9-page-numbers-design.md
 !/docs/ux/m13-word-to-pdf-design.md
+!/docs/ux/m13-cloud-selection-estimate.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
