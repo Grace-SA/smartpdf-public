@@ -1,3 +1,4 @@
+import { qpdfPreparation } from "../platform/qpdf-preparation";
 import UnlockWorker from "./unlock.worker?worker&inline";
 import { LIMITS } from "../core/contracts";
 import { UnlockFailure, unlockMessages } from "./model";
@@ -6,44 +7,9 @@ type Reply =
   | { kind: "stage"; stage: "unlock" | "verify" }
   | { kind: "result"; ok: true; result: UnlockResult }
   | { kind: "result"; ok: false; reason: keyof typeof unlockMessages };
-let wasmRequest: Promise<Uint8Array<ArrayBuffer>> | null = null;
-/** Cache only immutable public engine bytes. Never cache inputs or passwords. */
-export function prepareUnlock(
-  signal: AbortSignal,
-): Promise<Uint8Array<ArrayBuffer>> {
-  if (signal.aborted) return Promise.reject(new UnlockFailure("cancelled"));
-  if (wasmRequest) return wasmRequest;
-  const controller = new AbortController(),
-    abort = () => controller.abort();
-  signal.addEventListener("abort", abort, { once: true });
-  const timer = setTimeout(() => controller.abort(), 30000);
-  const request = Promise.resolve()
-    .then(() =>
-      fetch("/qpdf.wasm", {
-        signal: controller.signal,
-        credentials: "omit",
-      }),
-    )
-    .then(async (response) => {
-      if (!response.ok) throw new UnlockFailure("engine");
-      const length = Number(response.headers.get("content-length") || 0);
-      if (length > 8 * 1024 * 1024) throw new UnlockFailure("engine");
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.length > 8 * 1024 * 1024 || !WebAssembly.validate(bytes))
-        throw new UnlockFailure("engine");
-      return bytes;
-    })
-    .catch(() => {
-      if (wasmRequest === request) wasmRequest = null;
-      throw new UnlockFailure(signal.aborted ? "cancelled" : "engine");
-    })
-    .finally(() => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", abort);
-    });
-  wasmRequest = request;
-  return request;
-}
+export const prepareUnlock = qpdfPreparation(
+  (reason) => new UnlockFailure(reason),
+);
 function waitFor<T>(
   promise: Promise<T>,
   signal: AbortSignal,

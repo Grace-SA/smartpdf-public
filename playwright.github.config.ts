@@ -13,6 +13,7 @@ export default defineConfig({
     "leave-focus.spec.ts",
     "numbers.spec.ts",
     "unlock.spec.ts",
+    "protect.spec.ts",
   ],
   // CI browser engines run in separate jobs; give each test the full runner.
   workers: process.env.CI ? 1 : 2,

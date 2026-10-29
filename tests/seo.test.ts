@@ -22,7 +22,11 @@ describe("public tool routes and search metadata", () => {
       expect(page.description.length).toBeGreaterThan(80);
       expect(page.steps).toHaveLength(3);
       expect(page.faq).toHaveLength(
-        tool === "numbers" || tool === "unlock" ? 3 : 2,
+        tool === "protect"
+          ? 4
+          : tool === "numbers" || tool === "unlock"
+            ? 3
+            : 2,
       );
       if (tool === "unlock")
         expect(page.faq.map((item) => item[0])).toEqual([

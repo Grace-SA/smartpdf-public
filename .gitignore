@@ -63,10 +63,12 @@ private-samples/
 !/docs/repository-workflow.md
 !/docs/m9-report.md
 !/docs/m12-report.md
+!/docs/m11-report.md
 !/docs/ux/
 /docs/ux/*
 !/docs/ux/m9-page-numbers-design.md
 !/docs/ux/m12-unlock-design.md
+!/docs/ux/m11-protect-design.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
@@ -89,6 +91,7 @@ private-samples/
 !/scripts/prepare-number-font.py
 !/scripts/verify-number-output.py
 !/scripts/verify-unlock-output.py
+!/scripts/verify-protect-output.py
 !/scripts/requirements-test.txt
 !/scripts/run-local-tool.ps1
 !/scripts/windows-realpath-compat.cjs

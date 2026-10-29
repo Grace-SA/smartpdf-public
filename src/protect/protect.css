@@ -1,0 +1,85 @@
+.product-app .protect-task {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--border, #dddfe9);
+  border-radius: 18px;
+  padding: 28px;
+  box-sizing: border-box;
+}
+.protect-file {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border, #dddfe9);
+}
+.protect-file > svg {
+  width: 40px;
+  height: 40px;
+  color: #19824b;
+}
+.protect-file strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.protect-file span {
+  display: block;
+  color: var(--muted, #647084);
+  margin-top: 6px;
+}
+.protect-task form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+}
+.protect-task h2 {
+  margin: 0 0 12px;
+}
+.protect-task label {
+  font-weight: 650;
+}
+.product-app .protect-task input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid #c7c9d8;
+  border-radius: 8px;
+  font-size: 16px;
+}
+.protect-reveal {
+  align-self: flex-start;
+}
+.protect-task p {
+  line-height: 1.55;
+  margin: 4px 0 12px;
+}
+.protect-task #protect-password-help,
+.protect-security {
+  font-size: 14px;
+  color: var(--muted, #647084);
+}
+.protect-error {
+  background: #fff1f0;
+  padding: 14px;
+  border-radius: 9px;
+}
+@media (max-width: 600px) {
+  .product-app .protect-task {
+    padding: 20px;
+  }
+  .protect-file {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .protect-file > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .protect-task form {
+    padding-top: 20px;
+  }
+}

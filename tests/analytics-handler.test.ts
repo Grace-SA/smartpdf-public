@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { handler, validate } from "../infra/analytics/handler.mjs";
+import { readFileSync } from "node:fs";
+import { publicTools } from "../src/routes";
 
 describe("analytics collector", () => {
+  it("keeps standalone and deployable collector tool lists aligned with every public route", () => {
+    for (const tool of publicTools)
+      expect(validate({ schema: 1, event: "tool_view", tool })).not.toBeNull();
+    const template = readFileSync("infra/site/template.yaml", "utf8");
+    const list = template.match(/const tools = new Set\(\[([\s\S]*?)\]\)/)![1]!;
+    expect(
+      [...list.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort(),
+    ).toEqual([...publicTools].sort());
+  });
   it("rejects unexpected or identifying fields", () => {
     expect(
       validate({
