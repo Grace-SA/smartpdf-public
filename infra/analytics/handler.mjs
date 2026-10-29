@@ -20,6 +20,7 @@ const tools = new Set([
   "watermark",
   "numbers",
   "unlock",
+  "protect",
 ]);
 const reasons = new Set([
   "cancelled",

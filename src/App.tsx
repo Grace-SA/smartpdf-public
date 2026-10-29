@@ -44,6 +44,7 @@ import {
 import { track } from "./analytics";
 import { TrustHighlights } from "./TrustHighlights";
 import type { UnlockHandle } from "./unlock/UnlockPanel";
+import type { ProtectHandle } from "./protect/ProtectPanel";
 
 function ToolLoading() {
   return (
@@ -57,16 +58,24 @@ function SourcePicker({
   kind,
   select,
 }: {
-  kind: "photos" | "combine" | "unlock";
+  kind: "photos" | "combine" | "unlock" | "protect";
   select: (files: File[]) => void;
 }) {
   const photos = kind === "photos";
   const unlock = kind === "unlock";
+  const protect = kind === "protect";
+  const single = unlock || protect;
   return (
     <section
       className={`photo-task ${photos ? "" : "combine-task"} empty-inputs`}
       aria-label={
-        photos ? "Images to PDF" : unlock ? "Unlock PDF" : "Combine PDFs"
+        photos
+          ? "Images to PDF"
+          : unlock
+            ? "Unlock PDF"
+            : protect
+              ? "Protect PDF"
+              : "Combine PDFs"
       }
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes("Files")) event.preventDefault();
@@ -80,20 +89,24 @@ function SourcePicker({
       <h2>
         {photos
           ? "Select images"
-          : unlock
-            ? "Select a protected PDF"
-            : "Select PDFs to merge"}
+          : protect
+            ? "Select a PDF to protect"
+            : unlock
+              ? "Select a protected PDF"
+              : "Select PDFs to merge"}
       </h2>
       <p>
-        {unlock
-          ? "Remove password protection and download an unlocked copy."
-          : photos
-            ? "Choose images, arrange them, then create one PDF."
-            : "Choose 2–10 PDFs, then arrange them in order."}
+        {protect
+          ? "Add an opening password and download a protected copy."
+          : unlock
+            ? "Remove password protection and download an unlocked copy."
+            : photos
+              ? "Choose images, arrange them, then create one PDF."
+              : "Choose 2–10 PDFs, then arrange them in order."}
       </p>
       <FilePicker
-        id={photos ? "photo-files" : unlock ? "pdf-file" : "combine-files"}
-        multiple={!unlock}
+        id={photos ? "photo-files" : single ? "pdf-file" : "combine-files"}
+        multiple={!single}
         accept={photos ? "image/*,.heic,.heif" : ".pdf,application/pdf"}
         disabled={false}
         onChange={(event) => {
@@ -102,14 +115,14 @@ function SourcePicker({
           if (files.length) select(files);
         }}
       >
-        {unlock
+        {single
           ? "Select PDF file"
           : photos
             ? "Choose JPEG, PNG or HEIC images"
             : "Select PDF files or drop them here"}
       </FilePicker>
       <p className="limits">
-        {unlock
+        {single
           ? "One PDF · up to 30 MiB · 200 pages · no upload"
           : photos
             ? "Up to 20 images · 15 MiB / 16 MP each · 50 MiB total"
@@ -118,11 +131,13 @@ function SourcePicker({
       <details className="input-support">
         <summary>File support</summary>
         <p>
-          {unlock
-            ? "Use a PDF you own or have permission to unlock. You may need its current password. Digital signatures and unsupported protection methods are refused without changing your original."
-            : photos
-              ? "JPEG, PNG and supported HEIC still photos. Images are converted locally; your originals stay unchanged."
-              : "Ordinary, unencrypted PDFs. Supported links, bookmarks and page structure are preserved; unsupported files are explained before merging."}
+          {protect
+            ? "Ordinary, unencrypted PDFs. Digital signatures, Content Credentials, conformance declarations and unsupported structures are refused. Your original stays unchanged."
+            : unlock
+              ? "Use a PDF you own or have permission to unlock. You may need its current password. Digital signatures and unsupported protection methods are refused without changing your original."
+              : photos
+                ? "JPEG, PNG and supported HEIC still photos. Images are converted locally; your originals stay unchanged."
+                : "Ordinary, unencrypted PDFs. Supported links, bookmarks and page structure are preserved; unsupported files are explained before merging."}
         </p>
       </details>
     </section>
@@ -135,6 +150,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  protect: "Add an opening password. Keep your PDF on your device.",
   unlock: "Remove a known password. Keep your PDF on your device.",
   numbers: "Add page numbers without uploading your PDF.",
   watermark: "Add text or image watermarks without uploading your PDF.",
@@ -158,6 +174,14 @@ export function App() {
   const [tool, setTool] = useState<Tool>(initialTool ?? "read");
   const toolRef = useRef<Tool>(initialTool ?? "read");
   const [deliveryIds, setDeliveryIds] = useState<string[]>([]);
+  const [ProtectPanel, setProtectPanel] = useState<
+    (typeof import("./protect/ProtectPanel"))["ProtectPanel"] | null
+  >(null);
+  const protectPanel = useRef<ProtectHandle>(null);
+  const [protectResult, setProtectResult] = useState<{
+    file: File;
+    pages: number;
+  } | null>(null);
   const [UnlockPanel, setUnlockPanel] = useState<
     (typeof import("./unlock/UnlockPanel"))["UnlockPanel"] | null
   >(null);
@@ -504,7 +528,9 @@ export function App() {
       });
       return;
     }
-    if (tool === "unlock" && unlockPanel.current)
+    if (tool === "protect" && protectPanel.current)
+      protectPanel.current.guard(action);
+    else if (tool === "unlock" && unlockPanel.current)
       unlockPanel.current.guard(action);
     else if (numbering && numberPanel.current)
       numberPanel.current.guard(action);
@@ -596,106 +622,117 @@ export function App() {
     // A ready tool includes its operation UI and inline workers, so selecting a
     // file after going offline does not need to download another code chunk.
     const panelPreparation =
-      tool === "unlock"
+      tool === "protect"
         ? loadModule(
-            "unlock",
-            () => import("./unlock/UnlockPanel"),
+            "protect",
+            () => import("./protect/ProtectPanel"),
             retry,
             controller.signal,
           ).then(async (module) => {
-            if (mounted) setUnlockPanel(() => module.UnlockPanel);
-            await module.prepareUnlock(controller.signal);
+            if (mounted) setProtectPanel(() => module.ProtectPanel);
+            await module.prepareProtect(controller.signal);
           })
-        : tool === "numbers"
+        : tool === "unlock"
           ? loadModule(
-              "numbers",
-              () => import("./numbers/NumberPanel"),
+              "unlock",
+              () => import("./unlock/UnlockPanel"),
               retry,
               controller.signal,
             ).then(async (module) => {
-              if (mounted) setNumberPanel(() => module.NumberPanel);
-              await module.prepareNumberFont(controller.signal);
+              if (mounted) setUnlockPanel(() => module.UnlockPanel);
+              await module.prepareUnlock(controller.signal);
             })
-          : tool === "watermark"
+          : tool === "numbers"
             ? loadModule(
-                "watermark",
-                () => import("./watermark/WatermarkPanel"),
+                "numbers",
+                () => import("./numbers/NumberPanel"),
                 retry,
                 controller.signal,
               ).then(async (module) => {
-                if (mounted) setWatermarkPanel(() => module.WatermarkPanel);
-                await module.prepareWatermark(controller.signal);
+                if (mounted) setNumberPanel(() => module.NumberPanel);
+                await module.prepareNumberFont(controller.signal);
               })
-            : tool === "raster"
+            : tool === "watermark"
               ? loadModule(
-                  "raster",
-                  () => import("./raster/RasterPanel"),
+                  "watermark",
+                  () => import("./watermark/WatermarkPanel"),
                   retry,
                   controller.signal,
-                ).then((module) => {
-                  if (mounted) setRasterPanel(() => module.RasterPanel);
+                ).then(async (module) => {
+                  if (mounted) setWatermarkPanel(() => module.WatermarkPanel);
+                  await module.prepareWatermark(controller.signal);
                 })
-              : tool === "sign"
+              : tool === "raster"
                 ? loadModule(
-                    "sign",
-                    () => import("./sign/SignPanel"),
+                    "raster",
+                    () => import("./raster/RasterPanel"),
                     retry,
                     controller.signal,
                   ).then((module) => {
-                    if (mounted) setSignPanel(() => module.SignPanel);
+                    if (mounted) setRasterPanel(() => module.RasterPanel);
                   })
-                : tool === "compress"
+                : tool === "sign"
                   ? loadModule(
-                      "compress",
-                      () => import("./compress/CompressPanel"),
+                      "sign",
+                      () => import("./sign/SignPanel"),
                       retry,
                       controller.signal,
                     ).then((module) => {
-                      if (mounted) setCompressPanel(() => module.CompressPanel);
+                      if (mounted) setSignPanel(() => module.SignPanel);
                     })
-                  : tool === "photos"
+                  : tool === "compress"
                     ? loadModule(
-                        "photos",
-                        () => import("./photos/PhotoPanel"),
+                        "compress",
+                        () => import("./compress/CompressPanel"),
                         retry,
                         controller.signal,
                       ).then((module) => {
-                        if (mounted) setPhoto(() => module.PhotoPanel);
+                        if (mounted)
+                          setCompressPanel(() => module.CompressPanel);
                       })
-                    : tool === "split"
+                    : tool === "photos"
                       ? loadModule(
-                          "split",
-                          () => import("./split/SplitPanel"),
+                          "photos",
+                          () => import("./photos/PhotoPanel"),
                           retry,
                           controller.signal,
                         ).then((module) => {
-                          if (mounted) setSplitPanel(() => module.SplitPanel);
+                          if (mounted) setPhoto(() => module.PhotoPanel);
                         })
-                      : tool === "rotate"
+                      : tool === "split"
                         ? loadModule(
-                            "rotate",
-                            () => import("./rotate/RotatePanel"),
+                            "split",
+                            () => import("./split/SplitPanel"),
                             retry,
                             controller.signal,
                           ).then((module) => {
-                            if (mounted)
-                              setRotatePanel(() => module.RotatePanel);
+                            if (mounted) setSplitPanel(() => module.SplitPanel);
                           })
-                        : tool === "organize"
+                        : tool === "rotate"
                           ? loadModule(
-                              "organize",
-                              () => import("./organize/OrganizePanel"),
+                              "rotate",
+                              () => import("./rotate/RotatePanel"),
                               retry,
                               controller.signal,
                             ).then((module) => {
                               if (mounted)
-                                setOrganizePanel(() => module.OrganizePanel);
+                                setRotatePanel(() => module.RotatePanel);
                             })
-                          : Promise.resolve();
+                          : tool === "organize"
+                            ? loadModule(
+                                "organize",
+                                () => import("./organize/OrganizePanel"),
+                                retry,
+                                controller.signal,
+                              ).then((module) => {
+                                if (mounted)
+                                  setOrganizePanel(() => module.OrganizePanel);
+                              })
+                            : Promise.resolve();
     const initialize = async () => {
       try {
         const prepareEngine = async () => {
-          if (tool === "unlock") return;
+          if (tool === "unlock" || tool === "protect") return;
           const engineModule = await loadModule(
             "engine",
             () => import("./platform/engine"),
@@ -905,6 +942,7 @@ export function App() {
     setCompressionSummary(null);
     setRasterResult(null);
     setUnlockResult(null);
+    setProtectResult(null);
     setPhotoDirty(false);
     completed.current = false;
   }
@@ -1263,7 +1301,7 @@ export function App() {
 
   return (
     <div
-      className={`app product-app ${screen === "task" && (tool === "unlock" || photos || combining || organizing || splitting || signing || compressing || rastering || watermarking || numbering) ? "is-editing" : ""} ${pristineTask ? "is-pristine" : ""}`}
+      className={`app product-app ${screen === "task" && (tool === "protect" || tool === "unlock" || photos || combining || organizing || splitting || signing || compressing || rastering || watermarking || numbering) ? "is-editing" : ""} ${pristineTask ? "is-pristine" : ""}`}
       data-screen={screen}
       data-tool={tool}
     >
@@ -1422,7 +1460,7 @@ export function App() {
         >
           <aside className="panel">
             <div
-              className={`status ${resource}${(resource === "loading" && !waitingForResources) || (tool === "unlock" && sourceStage !== "empty" && UnlockPanel) ? " silent" : ""}`}
+              className={`status ${resource}${(resource === "loading" && !waitingForResources) || (tool === "unlock" && sourceStage !== "empty" && UnlockPanel) || (tool === "protect" && sourceStage !== "empty" && ProtectPanel) ? " silent" : ""}`}
               role="status"
             >
               <span className="status-dot" />
@@ -1437,9 +1475,9 @@ export function App() {
                     : null}
             </div>
             {resource === "error" &&
-              (tool !== "unlock" ||
+              ((tool !== "unlock" && tool !== "protect") ||
                 sourceStage === "empty" ||
-                !UnlockPanel) && (
+                (tool === "unlock" ? !UnlockPanel : !ProtectPanel)) && (
                 <button
                   onClick={() => {
                     setResource("loading");
@@ -1449,7 +1487,7 @@ export function App() {
                   Retry loading
                 </button>
               )}
-            {tool !== "unlock" && (
+            {tool !== "unlock" && tool !== "protect" && (
               <div
                 className="document-input"
                 onDragOver={(e) => {
@@ -1583,6 +1621,7 @@ export function App() {
                 title={
                   {
                     unlock: "Your unlocked PDF is ready",
+                    protect: "Your protected PDF is ready",
                     numbers: "Your numbered PDF is ready",
                     watermark: "Your watermarked PDF is ready",
                     raster: "Your images are ready",
@@ -1600,15 +1639,18 @@ export function App() {
                 }
                 imageResult={rasterResult}
                 files={
-                  unlockResult
-                    ? [unlockResult.file]
-                    : rasterResult
-                      ? [rasterResult.file]
-                      : deliveryIds
-                          .map((id) => taskState.present.documents[id]?.file)
-                          .filter((file): file is File => !!file)
+                  protectResult
+                    ? [protectResult.file]
+                    : unlockResult
+                      ? [unlockResult.file]
+                      : rasterResult
+                        ? [rasterResult.file]
+                        : deliveryIds
+                            .map((id) => taskState.present.documents[id]?.file)
+                            .filter((file): file is File => !!file)
                 }
                 pages={
+                  protectResult?.pages ??
                   unlockResult?.pages ??
                   deliveryIds.reduce(
                     (sum, id) =>
@@ -1623,6 +1665,10 @@ export function App() {
                 compression={tool === "compress" ? compressionSummary : null}
                 restart={() => chooseTool(tool)}
                 download={() => {
+                  if (protectResult) {
+                    download(protectResult.file, protectResult.file.name);
+                    return;
+                  }
                   if (unlockResult) {
                     download(unlockResult.file, unlockResult.file.name);
                     return;
@@ -1815,6 +1861,62 @@ export function App() {
                     onBusy={setPhotoBusy}
                   />
                 </Suspense>
+              )}
+            {tool === "protect" &&
+              screen === "task" &&
+              sourceStage === "empty" && (
+                <SourcePicker
+                  kind="protect"
+                  select={(files) => {
+                    if (files.length !== 1) {
+                      setMessage("Choose one PDF for this tool.");
+                      return;
+                    }
+                    selectSources(files);
+                  }}
+                />
+              )}
+            {tool === "protect" &&
+              screen === "task" &&
+              sourceStage !== "empty" &&
+              !ProtectPanel &&
+              resource !== "error" && (
+                <section className="photo-task">
+                  <p role="status">Opening your PDF…</p>
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      resetTask();
+                      setTaskKey((key) => key + 1);
+                    }}
+                  >
+                    Cancel task
+                  </button>
+                </section>
+              )}
+            {tool === "protect" &&
+              screen === "task" &&
+              sourceStage !== "empty" &&
+              ProtectPanel && (
+                <ProtectPanel
+                  key={taskKey}
+                  ref={protectPanel}
+                  seed={sourceFiles}
+                  consume={sourceConsumed}
+                  pause={!!pendingSourceAction}
+                  replace={() => {
+                    resetTask();
+                    setTaskKey((key) => key + 1);
+                  }}
+                  onDirty={setPhotoDirty}
+                  onBusy={setPhotoBusy}
+                  publish={(file, pages) => {
+                    completed.current = true;
+                    setProtectResult({ file, pages });
+                    setPhotoDirty(false);
+                    setScreen("result");
+                  }}
+                />
               )}
             {tool === "unlock" &&
               screen === "task" &&

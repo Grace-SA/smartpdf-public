@@ -2,9 +2,9 @@
 
 Private, on-device PDF tools at https://smartpdf.com.au.
 
-The recorded production baseline `release-20261023-1` includes ten tools: Merge, Split, Organize, Images to PDF, Sign, Compress, Rotate, PDF to JPG/PNG, Watermark and Page Numbers. Original documents stay on the user's device; results are new downloads. Signing is a visible mark, not a certificate-based digital signature. Compatibility and resource limits still apply.
+The recorded production baseline `release-20261028-1` includes eleven tools: Merge, Split, Organize, Images to PDF, Sign, Compress, Rotate, PDF to JPG/PNG, Watermark, Page Numbers and Unlock. Original documents stay on the user's device; results are new downloads. Signing is a visible mark, not a certificate-based digital signature. Compatibility and resource limits still apply.
 
-M12 Unlock PDF is implemented on this feature branch for local testing and real-device acceptance, with known-password access, one-shot workers and verified structure preservation. It is not deployed; M11 is not implemented. See [the M12 report](docs/m12-report.md). The research → design → implement → full regression → self-review workflow is standing instruction for every feature; it need not be requested again. Actual production state is recorded separately from source changes.
+M12 Unlock PDF passed user acceptance and was released. M11 Protect PDF is under source review and testing, with AES-256 opening protection, one-shot workers and independent validation; it is not deployed or accepted on a real device. See [the M11 report](docs/m11-report.md) and [M12 report](docs/m12-report.md). The research → design → implement → full regression → self-review workflow is standing instruction for every feature; it need not be requested again. Actual production state is recorded separately from source changes.
 
 ## Delivery
 

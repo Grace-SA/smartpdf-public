@@ -243,6 +243,8 @@ Resources:
             "raster",
             "watermark",
             "numbers",
+            "unlock",
+            "protect",
           ]);
           const reasons = new Set([
             "cancelled",

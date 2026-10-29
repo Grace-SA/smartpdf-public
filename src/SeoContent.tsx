@@ -18,6 +18,38 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  protect: {
+    title: "Protect PDF Free Online – AES-256, No Upload | Smart PDF",
+    description:
+      "Add an opening password to a PDF for free on your device. Verified AES-256 protection without uploading your PDF or password.",
+    keywords:
+      "free protect pdf, password protect pdf, encrypt pdf, aes-256 pdf, private pdf protection",
+    heading: "Protect PDF",
+    intro: "Set an opening password, privately.",
+    steps: [
+      "Choose an ordinary PDF.",
+      "Enter and confirm your password.",
+      "Protect and download your PDF.",
+    ],
+    faq: [
+      [
+        "Are my PDF and password uploaded?",
+        "No. Encryption and verification happen in your browser. Your original stays unchanged.",
+      ],
+      [
+        "What protection is added?",
+        "AES-256 opening protection. Anyone who knows the password can read, copy or print the content. No printing or copying restrictions are promised.",
+      ],
+      [
+        "Can you recover a forgotten password?",
+        "No. Keep your password safe and share it with your recipient separately.",
+      ],
+      [
+        "Which PDFs are supported?",
+        "One ordinary, unencrypted PDF up to 30 MiB and 200 pages, within the resource limits. Existing encryption, digital signatures, Content Credentials, conformance declarations and unsupported structures are refused.",
+      ],
+    ],
+  },
   unlock: {
     title: "Unlock PDF Free Online – Remove Password, No Upload | Smart PDF",
     description:

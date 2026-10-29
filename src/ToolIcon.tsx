@@ -12,7 +12,12 @@ export function ToolIcon({ tool }: { tool: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {tool === "unlock" ? (
+      {tool === "protect" ? (
+        <>
+          <rect x="10" y="21" width="28" height="22" rx="4" />
+          <path d="M16 21v-8a8 8 0 0 1 16 0v8M24 29v6" />
+        </>
+      ) : tool === "unlock" ? (
         <>
           <rect x="10" y="21" width="28" height="22" rx="4" />
           <path d="M17 21v-8a9 9 0 0 1 17-4M24 29v6" />

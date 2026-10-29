@@ -85,6 +85,13 @@ export const toolCatalog = {
     summary: "Remove a known password on your device.",
     group: "PDF security",
   },
+  protect: {
+    path: "/protect-pdf/",
+    title: "Protect PDF",
+    label: "Protect PDF",
+    summary: "Add an opening password on your device.",
+    group: "PDF security",
+  },
 } as const;
 
 export type PublicTool = keyof typeof toolCatalog;

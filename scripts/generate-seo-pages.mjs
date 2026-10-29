@@ -3,6 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
 const pages = {
+  "protect-pdf": {
+    title: "Protect PDF Free Online – AES-256, No Upload | Smart PDF",
+    description:
+      "Add an opening password to a PDF for free on your device. Verified AES-256 protection without uploading your PDF or password.",
+    keywords:
+      "free protect pdf, password protect pdf, encrypt pdf, aes-256 pdf, private pdf protection",
+    heading: "Protect PDF without uploading your document or password",
+  },
   "unlock-pdf": {
     title: "Unlock PDF Free Online – Remove Password, No Upload | Smart PDF",
     description:

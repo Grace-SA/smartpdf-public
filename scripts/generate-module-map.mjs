@@ -5,6 +5,7 @@ const manifest = JSON.parse(await readFile("dist/.vite/manifest.json", "utf8"));
 const entry = Object.values(manifest).find((item) => item.isEntry);
 if (!entry) throw new Error("Missing main build entry");
 const sources = {
+  protect: "src/protect/ProtectPanel.tsx",
   unlock: "src/unlock/UnlockPanel.tsx",
   numbers: "src/numbers/NumberPanel.tsx",
   watermark: "src/watermark/WatermarkPanel.tsx",
