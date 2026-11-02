@@ -12,7 +12,11 @@ export function ToolIcon({ tool }: { tool: string }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {tool === "numbers" ? (
+      {tool === "word" ? (
+        <>
+          <path d="M10 5h20l8 8v30H10zM30 5v9h8M15 21l3 13 5-10 5 10 3-13" />
+        </>
+      ) : tool === "numbers" ? (
         <>
           <rect x="9" y="5" width="30" height="38" rx="3" />
           <path d="M16 14h16M16 20h16M16 26h10M21 33l3-2v8m-3 0h6" />

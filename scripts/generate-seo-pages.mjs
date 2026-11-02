@@ -3,6 +3,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
 const pages = {
+  "word-to-pdf": {
+    title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
+    description:
+      "Convert a DOCX using self-hosted cloud conversion. Upload only when you start, check your PDF and delete temporary files. Fonts and pagination may change.",
+    keywords: "word to pdf, docx to pdf, cloud document conversion",
+    heading: "Convert a Word document to PDF",
+  },
   "add-page-numbers": {
     title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
     description:
@@ -36,12 +43,12 @@ const pages = {
     heading: "Rotate PDF pages privately in your browser",
   },
   "": {
-    title: "Free Private PDF Tools – No Uploads | Smart PDF",
+    title: "Free PDF Tools and Word to PDF Conversion | Smart PDF",
     description:
-      "Use free PDF tools to merge, split, organize, convert, sign and compress files in your browser. Files and filenames stay on your device.",
+      "Use free PDF tools to merge, split, organize, sign and compress locally in your browser. Word to PDF uses clearly marked cloud conversion and uploads only when you start.",
     keywords:
       "free pdf tools, free pdf merger, free pdf splitter, free pdf organizer, free images to pdf, free pdf signature, free pdf compressor, private pdf tools",
-    heading: "Private PDF tools. No uploads.",
+    heading: "PDF tools with clearly marked cloud Word conversion",
   },
   "merge-pdf": {
     title: "Merge PDF Online Free & Privately | Smart PDF",
@@ -114,11 +121,24 @@ for (const [slug, page] of Object.entries(pages)) {
     url: canonical,
     description: page.description,
     offers: { "@type": "Offer", price: "0", priceCurrency: "AUD" },
-    featureList: [
-      "Local browser PDF processing",
-      "No document upload",
-      page.heading,
-    ],
+    featureList:
+      slug === "word-to-pdf"
+        ? [
+            "Self-hosted cloud DOCX conversion",
+            "Upload only when you start",
+            page.heading,
+          ]
+        : slug === ""
+          ? [
+              "Local browser PDF tools",
+              "Clearly marked cloud Word conversion",
+              page.heading,
+            ]
+          : [
+              "Local browser PDF processing",
+              "No document upload",
+              page.heading,
+            ],
   }).replaceAll("<", "\\u003c");
   let html = base;
   html = replaceTag(
@@ -182,7 +202,7 @@ for (const [slug, page] of Object.entries(pages)) {
     )
     .replace(
       '<div id="root"></div>',
-      `<div id="root"></div><noscript><main><h1>${page.heading}</h1><p>${page.description}</p><p>Smart PDF requires JavaScript to process files locally in your browser.</p><nav>${publicTools.map((id) => `<a href="${toolCatalog[id].path}">${toolCatalog[id].title}</a>`).join(" · ")}</nav></main></noscript>`,
+      `<div id="root"></div><noscript><main><h1>${page.heading}</h1><p>${page.description}</p><p>Smart PDF requires JavaScript. Word conversion uses a self-hosted server; other PDF tools run locally.</p><nav>${publicTools.map((id) => `<a href="${toolCatalog[id].path}">${toolCatalog[id].title}</a>`).join(" · ")}</nav></main></noscript>`,
     );
 
   const requiredOutput = [

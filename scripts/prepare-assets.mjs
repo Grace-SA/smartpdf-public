@@ -173,6 +173,10 @@ await copyFile(
   "public/number-fonts/MODIFICATIONS.txt",
   "public/notices/number-font-modifications.txt",
 );
+await copyFile(
+  "vendor-licenses/stirling-integration.txt",
+  "public/notices/stirling-integration.txt",
+);
 const links = (await readdir("public/notices"))
   .map((file) => `<li><a href="./${file}">${file}</a></li>`)
   .join("");

@@ -156,7 +156,7 @@ test("mobile selection grid, draft undo, guarded navigation and no overflow", as
     .click();
   await expect(
     page.getByRole("heading", {
-      name: "Free and private PDF tools. No uploads.",
+      name: "Simple PDF tools. Clear choices for your files.",
     }),
   ).toBeVisible();
   expect(

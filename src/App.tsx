@@ -117,6 +117,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  word: "Convert a DOCX using cloud processing.",
   numbers: "Add page numbers without uploading your PDF.",
   watermark: "Add text or image watermarks without uploading your PDF.",
   raster: "Turn PDF pages into images without uploading your file.",
@@ -292,6 +293,10 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
+      if (next === "word") {
+        window.location.assign(toolPaths.word);
+        return;
+      }
       if (!reuse) resetTask();
       completed.current = false;
       setTaskKey((key) => key + 1);
@@ -1286,16 +1291,16 @@ export function App() {
           disabled={!!busy || photoBusy || packing}
           choose={chooseTool}
         />
-        <span className="version">Local &amp; private</span>
+        <span className="version">Local tools · Cloud Word conversion</span>
       </header>
       <main>
         {screen === "home" && (
           <section className="tool-home">
             <span className="hero-eyebrow">PRIVATE PDF TOOLS</span>
-            <h1>Free and private PDF tools. No uploads.</h1>
+            <h1>Simple PDF tools. Clear choices for your files.</h1>
             <p className="hero-lede">
-              Merge, split, organize, convert, sign and compress files directly
-              in your browser.
+              Merge, split, organize, sign and compress in your browser. Word to
+              PDF uses cloud conversion and uploads only when you start.
             </p>
             <div className="tool-cards">
               {publicTools.map((t) => (
@@ -1533,6 +1538,7 @@ export function App() {
               <Completion
                 title={
                   {
+                    word: "Your PDF is ready",
                     numbers: "Your numbered PDF is ready",
                     watermark: "Your watermarked PDF is ready",
                     raster: "Your images are ready",
@@ -1861,8 +1867,8 @@ export function App() {
               </span>
             </a>
             <p>
-              Private PDF tools that process files on your device. More useful
-              PDF tools are on the way.
+              PDF tools on your device, plus clearly marked cloud Word
+              conversion.
             </p>
             <span className="australia-badge">Proudly built in Australia</span>
           </div>

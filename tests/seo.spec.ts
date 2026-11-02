@@ -39,7 +39,7 @@ test("homepage exposes every crawlable tool and the wordmark", async ({
     "https://smartpdf.com.au/",
   );
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Free and private PDF tools",
+    "Simple PDF tools",
   );
 });
 

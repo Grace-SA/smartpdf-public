@@ -6,14 +6,14 @@ test("homepage makes local processing and product identity clear", async ({
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Free and private PDF tools. No uploads.",
+      name: "Simple PDF tools. Clear choices for your files.",
     }),
   ).toBeVisible();
   const trust = page.getByRole("region", {
     name: "Your privacy with Smart PDF",
   });
-  await expect(trust.getByText("Processed on your device")).toBeVisible();
-  await expect(trust.getByText("No file upload")).toBeVisible();
+  await expect(trust.getByText("Local PDF tools")).toBeVisible();
+  await expect(trust.getByText("Clearly marked cloud conversion")).toBeVisible();
   await expect(trust.getByText("Originals stay untouched")).toBeVisible();
   await expect(page.getByText("Proudly built in Australia")).toBeVisible();
   await expect(

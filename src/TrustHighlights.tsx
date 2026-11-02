@@ -61,17 +61,33 @@ export function TrustHighlights({ variant }: { variant: Variant }) {
       aria-label="Your privacy with Smart PDF"
     >
       <div className="trust-items">
-        {visible.map((item) => (
-          <article key={item.title}>
-            <span className="trust-icon">
-              <TrustIcon name={item.icon} />
-            </span>
-            <div>
-              <h3>{item.title}</h3>
-              <p>{item.text}</p>
-            </div>
-          </article>
-        ))}
+        {visible.map((original) => {
+          const item =
+            variant === "home" && original.icon === "device"
+              ? {
+                  ...original,
+                  title: "Local PDF tools",
+                  text: "PDF editing runs in your browser.",
+                }
+              : variant === "home" && original.icon === "cloud"
+                ? {
+                    ...original,
+                    title: "Clearly marked cloud conversion",
+                    text: "Word documents upload only when you start.",
+                  }
+                : original;
+          return (
+            <article key={item.title}>
+              <span className="trust-icon">
+                <TrustIcon name={item.icon} />
+              </span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </div>
+            </article>
+          );
+        })}
       </div>
       {variant === "result" && (
         <p className="trust-footnote">Created locally. Nothing was uploaded.</p>

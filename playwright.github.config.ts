@@ -4,6 +4,7 @@ import base from "./playwright.m10-full.config";
 export default defineConfig({
   ...base,
   testMatch: [
+    "word.spec.ts",
     ...(base.testMatch as string[]),
     "grouped-navigation.spec.ts",
     "raster-return-paths.spec.ts",

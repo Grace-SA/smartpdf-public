@@ -1,0 +1,14 @@
+Smart PDF Word to PDF uses a self-hosted Stirling PDF service, communicating over HTTP.
+No Stirling frontend or Java source is copied into the Smart PDF frontend.
+
+Pinned upstream distribution: Stirling PDF 3.2.2
+https://github.com/Stirling-Tools/Stirling-PDF
+https://github.com/Stirling-Tools/Stirling-PDF/blob/v3.2.2/LICENSE
+
+The upstream root license is MIT with explicitly listed directory exceptions.
+The official container contains additional software and fonts under their own licenses.
+Operators must preserve and review the licenses supplied with their pinned image.
+Smart PDF does not represent the entire upstream distribution as unconditionally MIT.
+
+LibreOffice: https://www.libreoffice.org/about-us/licenses/
+This integration does not include or install Microsoft fonts from a user's device.

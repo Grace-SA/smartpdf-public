@@ -15,7 +15,7 @@ test("homepage does not load PDF engines or signature fonts", async ({
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Free and private PDF tools. No uploads.",
+      name: "Simple PDF tools. Clear choices for your files.",
     }),
   ).toBeVisible();
   await page.waitForTimeout(1_200);

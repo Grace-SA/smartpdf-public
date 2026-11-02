@@ -16,6 +16,8 @@ A push runs tests; it never deploys production automatically. See [the delivery 
 
 Requires Node 24.15+ and pnpm 11.25.0.
 
+Word to PDF additionally uses a self-hosted Stirling service. It uploads only after the user starts conversion; other tools continue processing locally. See [the Word service setup and validation](docs/m13-stirling-implementation.md) for its pinned image, Python/Docker requirements, same-origin proxy and local run instructions. Static frontend hosting alone does not provide Word conversion.
+
 ```powershell
 pnpm install --frozen-lockfile
 git config core.hooksPath .githooks

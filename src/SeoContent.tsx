@@ -18,6 +18,29 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  word: {
+    title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
+    description:
+      "Convert a DOCX document to PDF using self-hosted cloud conversion. Upload only when you start, preview the layout and download your PDF. Temporary files expire within one hour.",
+    keywords: "word to pdf, docx to pdf, cloud document conversion",
+    heading: "Word to PDF",
+    intro: "Convert a DOCX, then check your PDF.",
+    steps: [
+      "Choose a DOCX.",
+      "Upload and convert.",
+      "Check the preview and download your PDF.",
+    ],
+    faq: [
+      [
+        "Is my document uploaded?",
+        "Yes. Word to PDF uploads your DOCX to our self-hosted conversion server only when you start. The page identifies the processing location. Temporary files expire within one hour; you can delete them sooner.",
+      ],
+      [
+        "Will the layout match Word exactly?",
+        "Fonts, pagination, tables and picture wrapping can change. Check the resulting PDF before sharing. Use Word's own export when exact pagination is required.",
+      ],
+    ],
+  },
   numbers: {
     title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
     description:
@@ -266,9 +289,9 @@ export const seoPages: Record<PublicTool, SeoPage> = {
 };
 
 export const homeSeo = {
-  title: "Free Private PDF Tools – No Uploads | Smart PDF",
+  title: "Free PDF Tools and Word to PDF Conversion | Smart PDF",
   description:
-    "Use free PDF tools to merge, split, organize, convert, sign and compress files in your browser. Files and filenames stay on your device.",
+    "Use free PDF tools to merge, split, organize, sign and compress locally in your browser. Word to PDF uses clearly marked cloud conversion and uploads only when you start.",
   keywords:
     "free pdf tools, free pdf merger, free pdf splitter, free pdf organizer, free images to pdf, free pdf signature, free pdf compressor, private pdf tools",
 };

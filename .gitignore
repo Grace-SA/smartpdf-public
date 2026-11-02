@@ -63,6 +63,7 @@ private-samples/
 !/docs/repository-workflow.md
 !/docs/m9-report.md
 !/docs/m13-report.md
+!/docs/m13-stirling-implementation.md
 !/docs/ux/
 /docs/ux/*
 !/docs/ux/m9-page-numbers-design.md
@@ -71,6 +72,10 @@ private-samples/
 !/docs/ux/m13-gotenberg-poc-results.md
 !/docs/ux/m13-word-reference-results.md
 !/docs/ux/m13-cloud-product-technical-plan.md
+!/docs/ux/m13-business-coverage-results.md
+!/docs/ux/m13-adobe-free-tier-poc.md
+!/docs/ux/m13-adobe-poc-results.md
+!/docs/ux/m13-stirling-pdfcraft-comparison.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
@@ -106,3 +111,9 @@ private-samples/
 /tests/fixtures/m5/100mb.pdf
 
 # Commit/push hooks check all binary files against reviewed hashes and provenance.
+/.word-tasks/
+!/server/
+/server/*
+!/server/word/
+/server/word/__pycache__/
+!/playwright.word.config.ts
