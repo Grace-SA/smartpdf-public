@@ -109,8 +109,9 @@ test("selection stays local until explicit start, then preview and download work
   ).toBeVisible();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("link", { name: "Download PDF", exact: true }).click();
-  expect((await downloadEvent).suggestedFilename()).toBe(
-    "Synthetic report.pdf",
+  // Linux WebKit normalizes spaces in native download names to underscores.
+  expect(["Synthetic report.pdf", "Synthetic_report.pdf"]).toContain(
+    (await downloadEvent).suggestedFilename(),
   );
   await page.getByRole("button", { name: "Preview PDF", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
