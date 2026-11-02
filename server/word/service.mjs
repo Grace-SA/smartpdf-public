@@ -147,6 +147,8 @@ export async function createWordService(options = {}) {
   const secure = origin.startsWith("https://");
   if (!secure && !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin))
     throw new Error("HTTPS required");
+  if (new URL(origin).origin !== origin)
+    throw new Error("Configure an exact public origin without a path.");
   await mkdir(root, { recursive: true, mode: 0o700 });
   // Dedicated storage contains only disposable anonymous tasks. A restart invalidates cookies.
   for (const entry of await readdir(root)) {
@@ -291,6 +293,10 @@ export async function createWordService(options = {}) {
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, origin);
+      if (url.pathname === "/api/word/health" && req.method === "GET")
+        return json(res, unhealthy || stopped ? 503 : 200, {
+          available: !unhealthy && !stopped,
+        });
       const mutation = !["GET", "HEAD"].includes(req.method);
       if (
         (mutation && req.headers.origin !== origin) ||

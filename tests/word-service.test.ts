@@ -81,6 +81,11 @@ async function setup(
   return { root, service, base, cookie, session, api, job, wait };
 }
 describe("Word cloud task isolation and lifecycle", () => {
+  it("rejects an origin path before starting or cleaning task storage", async () => {
+    await expect(
+      createWordService({ origin: "https://example.invalid/" }),
+    ).rejects.toThrow("exact public origin");
+  });
   it("releases slots held by clients that never start uploading", async () => {
     let time = Date.now();
     const t = await setup(undefined, () => time);
@@ -231,9 +236,16 @@ describe("Word cloud task isolation and lifecycle", () => {
     const unsafe = await setup(async () => {
       throw Object.assign(new Error("cleanup"), { unsafe: true });
     });
+    const ready = await fetch(unsafe.base + "/health");
+    expect(ready.status).toBe(200);
+    expect(ready.headers.get("set-cookie")).toBeNull();
+    expect(await ready.json()).toEqual({ available: true });
     const other = await unsafe.job();
     await unsafe.api(unsafe.cookie, `/jobs/${other}/input`, "PUT", "synthetic");
     await unsafe.wait(other, "failed");
     expect((await unsafe.api(unsafe.cookie, "/jobs", "POST")).status).toBe(503);
+    const unhealthy = await fetch(unsafe.base + "/health");
+    expect(unhealthy.status).toBe(503);
+    expect(await unhealthy.json()).toEqual({ available: false });
   });
 });

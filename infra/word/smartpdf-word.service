@@ -8,14 +8,16 @@ Type=simple
 User=smartpdf
 Group=smartpdf
 SupplementaryGroups=docker
-WorkingDirectory=/opt/smartpdf
+WorkingDirectory=/opt/smartpdf/current
+EnvironmentFile=/etc/smartpdf-word.env
 Environment=WORD_PORT=4268
 Environment=WORD_DATA_DIR=/var/lib/smartpdf-word/tasks
-# Set WORD_PUBLIC_ORIGIN and WORD_PROCESSING_LABEL in an operator-owned drop-in.
-ExecStart=/usr/bin/node server/word/service.mjs
+# Preflight never creates resources. The lock is outside the disposable task folder.
+ExecStartPre=/usr/bin/python3 server/word/doctor.py --production
+ExecStart=/usr/bin/flock --no-fork --nonblock /var/lib/smartpdf-word/service.lock /usr/local/bin/node server/word/service.mjs
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=45
+TimeoutStopSec=90
 KillMode=mixed
 NoNewPrivileges=true
 PrivateTmp=true

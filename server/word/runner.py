@@ -16,6 +16,15 @@ IMAGE = 'docker.stirlingpdf.com/stirlingtools/stirling-pdf@sha256:c6872dd056b004
 def emit(**value):
     print(json.dumps(value), flush=True)
 
+def remove_verified(name, by_id=False):
+    """An unavailable daemon is not evidence that a container is absent."""
+    subprocess.run(['docker', 'rm', '-f', name], capture_output=True, timeout=20)
+    remaining = subprocess.run(
+        ['docker', 'ps', '-aq', '--filter', f'id={name}' if by_id else f'name=^/{name}$'],
+        check=True, capture_output=True, timeout=20)
+    if remaining.stdout.strip():
+        raise RuntimeError('Container cleanup could not be verified')
+
 def run(directory):
     directory = Path(directory).resolve()
     cancel = directory / 'cancel'
@@ -109,10 +118,8 @@ def run(directory):
         watcher.join(timeout=25)
         try:
             if created:
-                # Monitor may already have removed the container on cancellation.
-                probe = subprocess.run(['docker', 'inspect', name], capture_output=True, timeout=20)
-                if probe.returncode == 0:
-                    docker('rm', '-f', name)
+                # Monitor may already have removed it; confirm absence with a healthy daemon.
+                remove_verified(name)
         except Exception:
             # Report cleanup failure: the API must not claim success or start another task.
             emit(cleanupFailed=True)
@@ -123,6 +130,6 @@ if __name__ == '__main__':
         # Dedicated single-instance service: remove only our explicitly labelled orphans.
         result = subprocess.run(['docker', 'ps', '-aq', '--filter', 'label=smartpdf.word-service=word-v1'], check=True, capture_output=True, timeout=20)
         for container in result.stdout.decode().split():
-            subprocess.run(['docker', 'rm', '-f', container], check=True, capture_output=True, timeout=30)
+            remove_verified(container, by_id=True)
     else:
         sys.exit(run(sys.argv[1]))
