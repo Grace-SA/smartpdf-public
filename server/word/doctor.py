@@ -46,7 +46,7 @@ def inspect_host(production=False):
     try:
         info = json.loads(command('docker', 'info', '--format', '{{json .}}'))
         record('docker-linux', info.get('OSType') == 'linux', 'Linux Docker engine required')
-        record('docker-memory', info.get('MemTotal', 0) >= 6 * 1024**3, 'At least 6 GiB Docker-host memory; 8 GiB dedicated host recommended')
+        record('docker-memory', info.get('MemTotal', 0) >= 3.5 * 1024**3, 'At least 3.5 GiB Docker-host memory; dedicated 4 GiB host with one conversion at a time')
         record('docker-cpu', info.get('NCPU', 0) >= 2, 'At least two CPUs required')
         image = json.loads(command('docker', 'image', 'inspect', IMAGE))[0]
         record('fixed-image', IMAGE in image.get('RepoDigests', []), 'Pinned reviewed image must already be available')

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { prepareWordRuntime } from "./word-release-manifest.mjs";
 
 const run = (exe, args, options = {}) =>
   execFileSync(exe, args, {
@@ -95,6 +96,7 @@ const walk = (dir) => {
   }
 };
 walk(path.join(source, "dist"));
+const word = prepareWordRuntime(source, folder);
 fs.writeFileSync(
   path.join(folder, "release.json"),
   JSON.stringify(
@@ -105,6 +107,7 @@ fs.writeFileSync(
       builtAt: new Date().toISOString(),
       deployed: false,
       files,
+      word,
     },
     null,
     2,

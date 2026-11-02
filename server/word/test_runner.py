@@ -34,7 +34,7 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0][-1], 'id=' + 'a' * 64)
 
 class HostChecks(unittest.TestCase):
-    def checks(self, production=False, memory=8 * 1024**3, internal=True, image=True, origin='https://example.invalid', uid=1000, kernel='6.8.0'):
+    def checks(self, production=False, memory=4 * 1024**3, internal=True, image=True, origin='https://example.invalid', uid=1000, kernel='6.8.0'):
         with tempfile.TemporaryDirectory() as directory:
             os.chmod(directory, 0o700)
             replies = ['v24.15.0', json.dumps({'OSType':'linux','MemTotal':memory,'NCPU':2}),

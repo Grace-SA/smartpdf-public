@@ -12,6 +12,7 @@ import uuid
 from preflight import inspect_docx, Rejected
 
 IMAGE = 'docker.stirlingpdf.com/stirlingtools/stirling-pdf@sha256:c6872dd056b0046a14c5de1e9970283e7f1e1ff685bb08090c6b37a231127d31'
+MEMORY_MIB = 2560
 
 def emit(**value):
     print(json.dumps(value), flush=True)
@@ -65,7 +66,7 @@ def run(directory):
             raise RuntimeError('network')
         emit(state='starting')
         phase = 'starting'
-        docker('create', '--name', name, '--network', network, '--memory', '4g', '--cpus', '2',
+        docker('create', '--name', name, '--network', network, '--memory', f'{MEMORY_MIB}m', '--memory-swap', f'{MEMORY_MIB}m', '--cpus', '2',
                '--label', 'smartpdf.word-service=word-v1',
                '--pids-limit', '512', '--security-opt', 'no-new-privileges',
                '--cap-drop', 'NET_RAW', '--tmpfs', '/tmp:rw,nosuid,nodev,size=384m',

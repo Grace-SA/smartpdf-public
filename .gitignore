@@ -102,6 +102,8 @@ private-samples/
 !/scripts/check-repository.mjs
 !/scripts/test-repository-guard.mjs
 !/scripts/prepare-release.mjs
+!/scripts/word-release-manifest.mjs
+!/scripts/word-release-manifest.d.mts
 
 /tests/review-color.spec.ts
 /tests/ux-performance.spec.ts
