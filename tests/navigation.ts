@@ -23,8 +23,7 @@ export async function selectTool(page: Page, label: string) {
 export async function selectToolPath(page: Page, path: string) {
   await openTools(page);
   await page.locator(`.tool-nav a[href="/${path}/"]`).click();
-  // Wait for React to commit the selection before the next menu interaction.
-  // A completed click alone can still expose the previous expanded state.
-  await expect(page).toHaveURL((url) => url.pathname === `/${path}/`);
+  // Wait for the menu's close commit before another menu interaction.
+  // Navigation itself may legitimately await a leave-task confirmation.
   await expect(page.locator(".tool-nav")).toBeHidden();
 }
