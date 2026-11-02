@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 export async function openTools(page: Page) {
   const toggle = page.locator(".tools-toggle");
@@ -23,4 +23,8 @@ export async function selectTool(page: Page, label: string) {
 export async function selectToolPath(page: Page, path: string) {
   await openTools(page);
   await page.locator(`.tool-nav a[href="/${path}/"]`).click();
+  // Wait for React to commit the selection before the next menu interaction.
+  // A completed click alone can still expose the previous expanded state.
+  await expect(page).toHaveURL((url) => url.pathname === `/${path}/`);
+  await expect(page.locator(".tool-nav")).toBeHidden();
 }
