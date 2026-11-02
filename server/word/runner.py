@@ -13,6 +13,9 @@ from preflight import inspect_docx, Rejected
 
 IMAGE = 'docker.stirlingpdf.com/stirlingtools/stirling-pdf@sha256:c6872dd056b0046a14c5de1e9970283e7f1e1ff685bb08090c6b37a231127d31'
 MEMORY_MIB = 2560
+# The platform is disposable after one conversion: avoid expensive top-tier JIT warmup.
+# Leave memory for LibreOffice and metaspace within the container's fixed ceiling.
+JAVA_OPTIONS = '-Xms256m -Xmx1280m -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=2'
 
 def emit(**value):
     print(json.dumps(value), flush=True)
@@ -71,7 +74,7 @@ def run(directory):
                '--pids-limit', '512', '--security-opt', 'no-new-privileges',
                '--cap-drop', 'NET_RAW', '--tmpfs', '/tmp:rw,nosuid,nodev,size=384m',
                '-e', 'SECURITY_ENABLELOGIN=false', '-e', 'SYSTEM_DEFAULTLOCALE=en-US',
-               '-e', 'TZ=UTC', IMAGE)
+               '-e', 'TZ=UTC', '-e', 'JAVA_CUSTOM_OPTS=' + JAVA_OPTIONS, IMAGE)
         created = True
         if cancel.exists():
             return

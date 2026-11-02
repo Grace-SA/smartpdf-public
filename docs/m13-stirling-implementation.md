@@ -101,3 +101,5 @@ systemd 模板使用 `/opt/smartpdf/current`、`/etc/smartpdf-word.env` 和 `/us
 发布包包含后端源码/锁文件、工作区配置和 PDF 库补丁、固定转换镜像摘要、字体清单、systemd/Nginx 配置和前端文件清单。`release:prepare` 现在另生成 `word-runtime.tar`，记录各文件与整个包的 SHA-256，并拒绝缺文件、非固定镜像或覆盖已有制品；该包必须在目标 Linux 上以 `pnpm install --prod --frozen-lockfile --ignore-scripts` 安装验收，不能省略工作区补丁或改锁文件。回滚应同时恢复前端与后端版本，停止新任务并完成清理后切换，不保留用户文档作回滚材料。专用任务目录不得进入快照、备份或源码包。
 
 成本方案修订：用户随后选择 4GB/80GB、US$24/月的悉尼专用主机，替代最初的 8GB/160GB、US$44/月验收机。先在真实 4GB 主机验证降低后的内存预算，成功后移除原 8GB 机，避免长期双份计费；新方案验收完成前不宣称降配已安全完成。原共享 2GB 生产机始终不在迁移或删除范围。
+
+4GB 首轮真实测试遇到一次 `ENGINE_STARTUP_FAILED`，保留为失败记录。诊断时系统仍有约 2.9GiB 可用内存，未见内核 OOM；AWS CPU 突发余量读数约 0.0057%，不能仅由此断言内存不足。固定镜像启动脚本确认支持 `JAVA_CUSTOM_OPTS`，先用合成脚注样本独立试验 `-Xms256m -Xmx1280m -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=2`：33.3 秒进入转换，41.7 秒产生候选 PDF，容器已回收。该组参数针对每任务一次转换的短生命周期减少 JVM 预热；尚需完整接口、固定样本和近输入上限的容量探针复验。保持原 120 秒启动、90 秒转换和 240 秒执行预算，不通过放宽超时掩盖问题。
