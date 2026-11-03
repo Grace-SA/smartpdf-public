@@ -85,6 +85,80 @@ async function select(
     buffer,
   });
 }
+
+for (const width of [320, 390, 1280]) {
+  test(`${width}: selection is the first primary action, conversion appears after local selection`, async ({
+    page,
+  }, info) => {
+    const calls = await mockService(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/word-to-pdf/");
+    const picker = page.locator('.word-dropzone label[for="word-file"]');
+    await expect(picker).toBeVisible();
+    expect((await picker.boundingBox())!.height).toBeGreaterThanOrEqual(60);
+    await expect(
+      page.getByRole("button", { name: "Upload and convert", exact: true }),
+    ).toHaveCount(0);
+    const chooser = page.waitForEvent("filechooser", { timeout: 5000 });
+    await page.locator("#word-file").click();
+    await (await chooser).setFiles([]);
+    await page.screenshot({ path: info.outputPath(`word-empty-${width}.png`) });
+    await select(page);
+    await expect(page.locator(".word-dropzone")).toHaveCount(0);
+    await expect(page.locator(".word-selected")).toContainText(
+      "not uploaded yet",
+    );
+    await expect(
+      page.getByRole("button", { name: "Upload and convert", exact: true }),
+    ).toBeEnabled();
+    await expect(page.locator('label[for="word-file"]')).toHaveText(
+      "Change document",
+    );
+    expect(
+      calls.some((call) => call.startsWith("POST") || call.startsWith("PUT")),
+    ).toBe(false);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: info.outputPath(`word-selected-${width}.png`),
+    });
+  });
+}
+
+test("dropping a document selects locally and changing it does not start an upload", async ({
+  page,
+}) => {
+  const calls = await mockService(page);
+  await page.goto("/word-to-pdf/");
+  const transfer = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(
+      new File(["synthetic"], "Dropped.docx", {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+    );
+    return data;
+  });
+  await page
+    .locator(".word-card")
+    .dispatchEvent("dragover", { dataTransfer: transfer });
+  await expect(page.locator(".word-card")).toHaveClass(/is-dragging/);
+  await page
+    .locator(".word-card")
+    .dispatchEvent("drop", { dataTransfer: transfer });
+  await expect(page.locator(".word-selected")).toContainText("Dropped.docx");
+  await expect(page.locator(".word-card")).not.toHaveClass(/is-dragging/);
+  await select(page, "Replacement.docx");
+  await expect(page.locator(".word-selected")).toContainText(
+    "Replacement.docx",
+  );
+  expect(
+    calls.some((call) => call.startsWith("POST") || call.startsWith("PUT")),
+  ).toBe(false);
+});
 test("selection stays local until explicit start, then preview and download work", async ({
   page,
 }) => {
