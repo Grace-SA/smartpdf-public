@@ -47,12 +47,15 @@ export function WordPage() {
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<Engine>();
   const [opening, setOpening] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [connecting, setConnecting] = useState(true);
   const [destination, setDestination] = useState("");
   const leaving = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const currentJob = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
   async function connect() {
+    setConnecting(true);
     try {
       const value = await request<Service>("/api/word/session");
       if (mounted.current) {
@@ -63,6 +66,8 @@ export function WordPage() {
       setError(
         "Cloud conversion is unavailable. Retry connecting; your document has not been uploaded.",
       );
+    } finally {
+      if (mounted.current) setConnecting(false);
     }
   }
   useEffect(() => {
@@ -93,6 +98,9 @@ export function WordPage() {
           setError(
             "Cloud conversion is unavailable. Retry connecting; your document has not been uploaded.",
           );
+      })
+      .finally(() => {
+        if (mounted.current) setConnecting(false);
       });
     return () => {
       mounted.current = false;
@@ -383,52 +391,103 @@ export function WordPage() {
           </div>
         </div>
         <section
-          className="word-card"
+          className={`word-card${dragging ? " is-dragging" : ""}`}
           aria-label="Word to PDF conversion"
           onDragOver={(event) => {
-            if (!busy) event.preventDefault();
+            event.preventDefault();
+            event.dataTransfer.dropEffect = busy || result ? "none" : "copy";
+            if (!busy && !result) setDragging(true);
+          }}
+          onDragLeave={(event) => {
+            if (
+              !event.currentTarget.contains(event.relatedTarget as Node | null)
+            )
+              setDragging(false);
           }}
           onDrop={(event) => {
             event.preventDefault();
+            setDragging(false);
             if (!busy && !result) choose(Array.from(event.dataTransfer.files));
           }}
         >
+          {!result && (
+            <div className={file ? "word-selected" : "word-dropzone"}>
+              <svg
+                className="word-document-icon"
+                viewBox="0 0 48 56"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M9 2h21l15 15v34a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Z"
+                  fill="currentColor"
+                  fillOpacity=".08"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M30 2v15h15M15 28l3 12 4-9 4 9 3-12M33 29h5M33 35h5M15 46h23"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div className="word-selection-copy">
+                {file ? (
+                  <>
+                    <p className="word-filename">
+                      {file.name} · {(file.size / 1024).toFixed(1)} KiB
+                    </p>
+                    <p className="word-local-status">
+                      {busy || job?.id
+                        ? "Your original stays on this device"
+                        : "Selected on this device · not uploaded yet"}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2>
+                      {dragging
+                        ? "Drop your document to select it"
+                        : "Drop your Word document here"}
+                    </h2>
+                    <p>or choose a file from your device</p>
+                  </>
+                )}
+              </div>
+              <FilePicker
+                id="word-file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                disabled={busy}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files || []);
+                  event.target.value = "";
+                  if (files.length) choose(files);
+                }}
+              >
+                {file ? "Change document" : "Choose a Word document"}
+              </FilePicker>
+              {!file && (
+                <p className="limits">
+                  One DOCX · up to 30 MiB · up to 200 output pages
+                </p>
+              )}
+            </div>
+          )}
           <div className="word-cloud-note" role="note">
             <strong>Cloud conversion</strong>
             <p>
               Your document is uploaded only when you choose Upload and convert.
-              Processing: {service?.region || "checking server availability…"}.
-              Temporary files are kept for at most one hour. You can delete them
-              sooner.
+              Processing:{" "}
+              {service?.region ||
+                (connecting
+                  ? "checking server availability…"
+                  : "connection unavailable")}
+              . Temporary files are kept for at most one hour. You can delete
+              them sooner.
             </p>
           </div>
-          <p>
-            Fonts, table breaks and picture wrapping may change. Check the
-            preview before sharing. Page numbers and contents may be
-            recalculated.
-          </p>
-          {!result && (
-            <FilePicker
-              id="word-file"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              disabled={busy}
-              onChange={(event) => {
-                const files = Array.from(event.target.files || []);
-                event.target.value = "";
-                if (files.length) choose(files);
-              }}
-            >
-              Choose a Word document
-            </FilePicker>
-          )}
-          <p className="limits">
-            One DOCX · up to 30 MiB · up to 200 output pages
-          </p>
-          {file && (
-            <p className="word-filename">
-              {file.name} · {(file.size / 1024).toFixed(1)} KiB
-            </p>
-          )}
           {busy && (
             <div role="status" aria-live="polite">
               <p>
@@ -486,8 +545,9 @@ export function WordPage() {
             </div>
           )}
           <div className="word-actions">
-            {!result && !busy && (
+            {file && !result && !busy && (
               <button
+                className="word-convert"
                 onClick={() => void start()}
                 disabled={!file || !service?.available}
               >
@@ -504,12 +564,17 @@ export function WordPage() {
                 Delete temporary files
               </button>
             )}
-            {!busy && !service && (
+            {!busy && !service && !connecting && (
               <button className="secondary" onClick={() => void connect()}>
                 Retry connection
               </button>
             )}
           </div>
+          <p className="word-layout-hint">
+            Fonts, table breaks and picture wrapping may change. Check the
+            preview before sharing. Page numbers and contents may be
+            recalculated.
+          </p>
           <details className="input-support">
             <summary>Supported documents</summary>
             <p>

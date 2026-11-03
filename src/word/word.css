@@ -26,16 +26,19 @@
   line-height: 1.65;
 }
 .word-cloud-note {
-  border-left: 4px solid #3072c4;
-  padding: 12px 16px;
-  background: #eff6ff;
+  border: 1px solid #e1e5ec;
+  padding: 14px 16px;
+  background: #fafbfc;
   border-radius: 8px;
 }
 .word-cloud-note strong {
-  color: #154f91;
+  color: #374151;
+  font-size: 13px;
 }
 .word-cloud-note p {
   margin-top: 6px;
+  color: #515866;
+  font-size: 13px;
 }
 .word-actions {
   display: flex;
@@ -64,7 +67,143 @@
 .word-card progress {
   max-width: 100%;
 }
+.word-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 28px 20px;
+  gap: 18px;
+  text-align: center;
+  border: 2px dashed #d9b9b7;
+  border-radius: 14px;
+  background: #fff8f7;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.word-document-icon {
+  width: 44px;
+  height: 52px;
+  flex-shrink: 0;
+  color: #3273b8;
+}
+.word-selection-copy {
+  min-width: 0;
+}
+.word-selection-copy h2 {
+  margin: 0 0 8px;
+  font-size: clamp(20px, 3vw, 25px);
+  letter-spacing: -0.4px;
+}
+.word-dropzone .word-selection-copy > p {
+  color: #64616a;
+  font-size: 15px;
+}
+.word-card .word-dropzone .file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 18px 32px;
+  max-width: 100%;
+  margin: 0;
+  border-radius: 10px;
+  background: #d92d28;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 700;
+  box-shadow: 0 4px 10px #c0272218;
+  cursor: pointer;
+}
+.word-card .word-dropzone .file-label:hover {
+  background: #bf211d;
+}
+.word-card.is-dragging .word-dropzone,
+.word-card.is-dragging .word-selected {
+  border-color: #d92d28;
+  background: #ffefed;
+}
+.word-dropzone .limits {
+  color: #6c6265;
+  font-size: 12px;
+  max-width: 360px;
+}
+.word-selected {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid #dbe3ec;
+  border-radius: 12px;
+  padding: 20px;
+  background: #f8fafc;
+}
+.word-selected .word-document-icon {
+  width: 32px;
+  height: 40px;
+}
+.word-selected .word-local-status {
+  color: #626a76;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.word-card .word-selected .file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 14px;
+  margin: 0;
+  border: 1px solid #cbd2dc;
+  border-radius: 8px;
+  color: #444b57;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.word-card .word-convert {
+  min-height: 54px;
+  padding: 14px 26px;
+  font-size: 17px;
+  background: #d92d28;
+}
+.word-card .word-layout-hint {
+  color: #62626e;
+  font-size: 12px;
+}
+.word-card .input-support {
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 13px;
+}
+.word-card .input-support summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 28px;
+}
 @media (max-width: 600px) {
+  .word-dropzone {
+    padding: 24px 14px;
+    min-height: 280px;
+  }
+  .word-card .word-dropzone .file-label {
+    width: 100%;
+    padding: 17px 12px;
+    font-size: 17px;
+  }
+  .word-selected {
+    grid-template-columns: 32px minmax(0, 1fr);
+    padding: 16px;
+    gap: 12px;
+  }
+  .word-selected .file-label {
+    grid-column: 2;
+    justify-self: start;
+  }
   .word-actions > * {
     width: 100%;
     text-align: center;
