@@ -16,6 +16,16 @@ export function ToolIcon({ tool }: { tool: string }) {
         <>
           <path d="M10 5h20l8 8v30H10zM30 5v9h8M15 21l3 13 5-10 5 10 3-13" />
         </>
+      ) : tool === "protect" ? (
+        <>
+          <rect x="10" y="21" width="28" height="22" rx="4" />
+          <path d="M16 21v-8a8 8 0 0 1 16 0v8M24 29v6" />
+        </>
+      ) : tool === "unlock" ? (
+        <>
+          <rect x="10" y="21" width="28" height="22" rx="4" />
+          <path d="M17 21v-8a9 9 0 0 1 17-4M24 29v6" />
+        </>
       ) : tool === "numbers" ? (
         <>
           <rect x="9" y="5" width="30" height="38" rx="3" />

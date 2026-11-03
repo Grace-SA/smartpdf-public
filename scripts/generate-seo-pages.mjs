@@ -1,7 +1,9 @@
-import { publicTools, toolCatalog } from "../src/routes.ts";
+import { enabledTools, toolCatalog } from "../src/routes.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
+const reviewProtect = process.env.VITE_ENABLE_PROTECT === "true";
+const publicTools = enabledTools(reviewProtect);
 const pages = {
   "word-to-pdf": {
     title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
@@ -9,6 +11,22 @@ const pages = {
       "Convert a DOCX using self-hosted cloud conversion. Upload only when you start, check your PDF and delete temporary files. Fonts and pagination may change.",
     keywords: "word to pdf, docx to pdf, cloud document conversion",
     heading: "Convert a Word document to PDF",
+  },
+  "protect-pdf": {
+    title: "Protect PDF Free Online – AES-256, No Upload | Smart PDF",
+    description:
+      "Add an opening password to a PDF for free on your device. Verified AES-256 protection without uploading your PDF or password.",
+    keywords:
+      "free protect pdf, password protect pdf, encrypt pdf, aes-256 pdf, private pdf protection",
+    heading: "Protect PDF without uploading your document or password",
+  },
+  "unlock-pdf": {
+    title: "Unlock PDF Free Online – Remove Password, No Upload | Smart PDF",
+    description:
+      "Remove a known PDF password for free on your device. Download an unlocked copy without uploading your document or password.",
+    keywords:
+      "free unlock pdf, remove pdf password, decrypt pdf, private pdf unlock",
+    heading: "Unlock PDF without uploading your document or password",
   },
   "add-page-numbers": {
     title: "Add Page Numbers to PDF Free Online – No Upload | Smart PDF",
@@ -43,12 +61,12 @@ const pages = {
     heading: "Rotate PDF pages privately in your browser",
   },
   "": {
-    title: "Free PDF Tools and Word to PDF Conversion | Smart PDF",
+    title: "Free Private PDF Tools – No Uploads | Smart PDF",
     description:
-      "Use free PDF tools to merge, split, organize, sign and compress locally in your browser. Word to PDF uses clearly marked cloud conversion and uploads only when you start.",
+      "Use free PDF tools to merge, split, organize, convert, sign and compress files in your browser. Files and filenames stay on your device.",
     keywords:
       "free pdf tools, free pdf merger, free pdf splitter, free pdf organizer, free images to pdf, free pdf signature, free pdf compressor, private pdf tools",
-    heading: "PDF tools with clearly marked cloud Word conversion",
+    heading: "Private PDF tools. No uploads.",
   },
   "merge-pdf": {
     title: "Merge PDF Online Free & Privately | Smart PDF",
@@ -100,6 +118,8 @@ const pages = {
   },
 };
 
+if (!reviewProtect) delete pages["protect-pdf"];
+
 const base = await readFile("dist/index.html", "utf8");
 
 const replaceTag = (html, pattern, replacement, label) => {
@@ -121,24 +141,11 @@ for (const [slug, page] of Object.entries(pages)) {
     url: canonical,
     description: page.description,
     offers: { "@type": "Offer", price: "0", priceCurrency: "AUD" },
-    featureList:
-      slug === "word-to-pdf"
-        ? [
-            "Self-hosted cloud DOCX conversion",
-            "Upload only when you start",
-            page.heading,
-          ]
-        : slug === ""
-          ? [
-              "Local browser PDF tools",
-              "Clearly marked cloud Word conversion",
-              page.heading,
-            ]
-          : [
-              "Local browser PDF processing",
-              "No document upload",
-              page.heading,
-            ],
+    featureList: [
+      "Local browser PDF processing",
+      "No document upload",
+      page.heading,
+    ],
   }).replaceAll("<", "\\u003c");
   let html = base;
   html = replaceTag(
@@ -202,7 +209,7 @@ for (const [slug, page] of Object.entries(pages)) {
     )
     .replace(
       '<div id="root"></div>',
-      `<div id="root"></div><noscript><main><h1>${page.heading}</h1><p>${page.description}</p><p>Smart PDF requires JavaScript. Word conversion uses a self-hosted server; other PDF tools run locally.</p><nav>${publicTools.map((id) => `<a href="${toolCatalog[id].path}">${toolCatalog[id].title}</a>`).join(" · ")}</nav></main></noscript>`,
+      `<div id="root"></div><noscript><main><h1>${page.heading}</h1><p>${page.description}</p><p>Smart PDF requires JavaScript to process files locally in your browser.</p><nav>${publicTools.map((id) => `<a href="${toolCatalog[id].path}">${toolCatalog[id].title}</a>`).join(" · ")}</nav></main></noscript>`,
     );
 
   const requiredOutput = [

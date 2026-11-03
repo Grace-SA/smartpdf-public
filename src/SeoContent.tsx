@@ -4,7 +4,7 @@ import {
   publicTools,
   toolCatalog,
   type PublicTool,
-} from "./routes";
+} from "./published-routes";
 import { ToolIcon } from "./ToolIcon";
 
 type SeoPage = {
@@ -38,6 +38,66 @@ export const seoPages: Record<PublicTool, SeoPage> = {
       [
         "Will the layout match Word exactly?",
         "Fonts, pagination, tables and picture wrapping can change. Check the resulting PDF before sharing. Use Word's own export when exact pagination is required.",
+      ],
+    ],
+  },
+  protect: {
+    title: "Protect PDF Free Online – AES-256, No Upload | Smart PDF",
+    description:
+      "Add an opening password to a PDF for free on your device. Verified AES-256 protection without uploading your PDF or password.",
+    keywords:
+      "free protect pdf, password protect pdf, encrypt pdf, aes-256 pdf, private pdf protection",
+    heading: "Protect PDF",
+    intro: "Set an opening password, privately.",
+    steps: [
+      "Choose an ordinary PDF.",
+      "Enter and confirm your password.",
+      "Protect and download your PDF.",
+    ],
+    faq: [
+      [
+        "Are my PDF and password uploaded?",
+        "No. Encryption and verification happen in your browser. Your original stays unchanged.",
+      ],
+      [
+        "What protection is added?",
+        "AES-256 opening protection. Anyone who knows the password can read, copy or print the content. No printing or copying restrictions are promised.",
+      ],
+      [
+        "Can you recover a forgotten password?",
+        "No. Keep your password safe and share it with your recipient separately.",
+      ],
+      [
+        "Which PDFs are supported?",
+        "One ordinary, unencrypted PDF up to 30 MiB and 200 pages, within the resource limits. Existing encryption, digital signatures, Content Credentials, conformance declarations and unsupported structures are refused.",
+      ],
+    ],
+  },
+  unlock: {
+    title: "Unlock PDF Free Online – Remove Password, No Upload | Smart PDF",
+    description:
+      "Remove a known PDF password for free on your device. Download an unlocked copy without uploading your document or password.",
+    keywords:
+      "free unlock pdf, remove pdf password, decrypt pdf, private pdf unlock",
+    heading: "Unlock PDF",
+    intro: "Remove a known password, privately.",
+    steps: [
+      "Choose a protected PDF.",
+      "Enter its password if needed.",
+      "Unlock and download a copy.",
+    ],
+    faq: [
+      [
+        "Are my PDF and password uploaded?",
+        "No. Both stay on this device; unlocking happens in your browser.",
+      ],
+      [
+        "Can this recover a forgotten password?",
+        "No. A valid opening or owner password is needed unless the PDF can already be accessed without one. Only unlock files you own or have permission to change.",
+      ],
+      [
+        "Will the new PDF ask for a password?",
+        "A verified unlocked copy opens without the removed password. Your original stays unchanged. Digital signatures and unsupported protection methods are refused.",
       ],
     ],
   },
@@ -289,9 +349,9 @@ export const seoPages: Record<PublicTool, SeoPage> = {
 };
 
 export const homeSeo = {
-  title: "Free PDF Tools and Word to PDF Conversion | Smart PDF",
+  title: "Free Private PDF Tools – No Uploads | Smart PDF",
   description:
-    "Use free PDF tools to merge, split, organize, sign and compress locally in your browser. Word to PDF uses clearly marked cloud conversion and uploads only when you start.",
+    "Use free PDF tools to merge, split, organize, convert, sign and compress files in your browser. Files and filenames stay on your device.",
   keywords:
     "free pdf tools, free pdf merger, free pdf splitter, free pdf organizer, free images to pdf, free pdf signature, free pdf compressor, private pdf tools",
 };

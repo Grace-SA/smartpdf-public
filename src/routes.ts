@@ -3,6 +3,7 @@ export const toolGroups = [
   "Convert PDF",
   "Optimize PDF",
   "Sign & mark",
+  "PDF security",
 ] as const;
 
 // All public tool discovery surfaces share this catalogue.
@@ -84,17 +85,37 @@ export const toolCatalog = {
     summary: "Number PDF pages, with an optional cover page.",
     group: "Sign & mark",
   },
+  unlock: {
+    path: "/unlock-pdf/",
+    title: "Unlock PDF",
+    label: "Unlock PDF",
+    summary: "Remove a known password on your device.",
+    group: "PDF security",
+  },
+  protect: {
+    path: "/protect-pdf/",
+    title: "Protect PDF",
+    label: "Protect PDF",
+    summary: "Add an opening password on your device.",
+    group: "PDF security",
+  },
 } as const;
 
 export type PublicTool = keyof typeof toolCatalog;
 export const publicTools = Object.keys(toolCatalog) as PublicTool[];
+// Protect source remains reviewable while its separate release acceptance is pending.
+export const enabledTools = (includeProtect = false): PublicTool[] =>
+  publicTools.filter((tool) => includeProtect || tool !== "protect");
 export const shortcutTools: PublicTool[] = ["combine", "split", "compress"];
 export const toolPaths = Object.fromEntries(
   publicTools.map((id) => [id, toolCatalog[id].path]),
 ) as Record<PublicTool, string>;
 
-export function toolFromPath(pathname: string): PublicTool | null {
+export function toolFromPath(
+  pathname: string,
+  tools: readonly PublicTool[] = publicTools,
+): PublicTool | null {
   const normalized = pathname.endsWith("/") ? pathname : pathname + "/";
-  return publicTools.find((id) => toolPaths[id] === normalized) ?? null;
+  return tools.find((id) => toolPaths[id] === normalized) ?? null;
 }
 export const absoluteUrl = (path = "/") => `https://smartpdf.com.au${path}`;

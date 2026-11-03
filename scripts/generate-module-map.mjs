@@ -6,6 +6,10 @@ const entry = Object.values(manifest).find((item) => item.isEntry);
 if (!entry) throw new Error("Missing main build entry");
 const sources = {
   word: "src/word/WordPage.tsx",
+  ...(process.env.VITE_ENABLE_PROTECT === "true"
+    ? { protect: "src/protect/ProtectPanel.tsx" }
+    : {}),
+  unlock: "src/unlock/UnlockPanel.tsx",
   numbers: "src/numbers/NumberPanel.tsx",
   watermark: "src/watermark/WatermarkPanel.tsx",
   raster: "src/raster/RasterPanel.tsx",

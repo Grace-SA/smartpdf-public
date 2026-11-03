@@ -6,7 +6,7 @@ import {
   shortcutTools,
   toolGroups,
   type PublicTool,
-} from "./routes";
+} from "./published-routes";
 import { ToolIcon } from "./ToolIcon";
 
 export function ToolNavigation({

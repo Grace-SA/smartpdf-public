@@ -9,6 +9,7 @@ const events = new Set([
   "download_failure",
 ]);
 const tools = new Set([
+  "word",
   "combine",
   "split",
   "organize",
@@ -19,6 +20,8 @@ const tools = new Set([
   "raster",
   "watermark",
   "numbers",
+  "unlock",
+  "protect",
 ]);
 const reasons = new Set([
   "cancelled",

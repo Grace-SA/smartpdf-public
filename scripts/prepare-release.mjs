@@ -77,7 +77,11 @@ run(process.execPath, [pnpmCli, "install", "--frozen-lockfile"], {
   cwd: source,
   stdio: "inherit",
 });
-run(process.execPath, [pnpmCli, "build"], { cwd: source, stdio: "inherit" });
+run(process.execPath, [pnpmCli, "build"], {
+  cwd: source,
+  stdio: "inherit",
+  env: { ...process.env, VITE_ENABLE_PROTECT: "false" },
+});
 const files = [];
 const walk = (dir) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -106,6 +110,7 @@ fs.writeFileSync(
       checks: checks[0].html_url,
       builtAt: new Date().toISOString(),
       deployed: false,
+      features: { word: true, unlock: true, protect: false },
       files,
       word,
     },
