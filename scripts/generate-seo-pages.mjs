@@ -1,8 +1,17 @@
-import { publicTools, toolCatalog } from "../src/routes.ts";
+import { enabledTools, toolCatalog } from "../src/routes.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
+const reviewProtect = process.env.VITE_ENABLE_PROTECT === "true";
+const publicTools = enabledTools(reviewProtect);
 const pages = {
+  "word-to-pdf": {
+    title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
+    description:
+      "Convert a DOCX using self-hosted cloud conversion. Upload only when you start, check your PDF and delete temporary files. Fonts and pagination may change.",
+    keywords: "word to pdf, docx to pdf, cloud document conversion",
+    heading: "Convert a Word document to PDF",
+  },
   "protect-pdf": {
     title: "Protect PDF Free Online – AES-256, No Upload | Smart PDF",
     description:
@@ -108,6 +117,8 @@ const pages = {
     heading: "Compress a PDF without uploading it",
   },
 };
+
+if (!reviewProtect) delete pages["protect-pdf"];
 
 const base = await readFile("dist/index.html", "utf8");
 

@@ -1,6 +1,6 @@
 # Smart PDF
 
-Private, on-device PDF tools at https://smartpdf.com.au.
+PDF tools at https://smartpdf.com.au, with local PDF processing and an explicitly started cloud Word conversion.
 
 The recorded production baseline `release-20261028-1` includes eleven tools: Merge, Split, Organize, Images to PDF, Sign, Compress, Rotate, PDF to JPG/PNG, Watermark, Page Numbers and Unlock. Original documents stay on the user's device; results are new downloads. Signing is a visible mark, not a certificate-based digital signature. Compatibility and resource limits still apply.
 
@@ -15,6 +15,10 @@ A push runs tests; it never deploys production automatically. See [the delivery 
 ## Local setup
 
 Requires Node 24.15+ and pnpm 11.25.0.
+
+Word to PDF additionally uses a self-hosted Stirling service. It uploads only after the user starts conversion; other tools continue processing locally. See [the Word service setup and validation](docs/m13-stirling-implementation.md) for its pinned image, Python/Docker requirements, same-origin proxy and local run instructions. Static frontend hosting alone does not provide Word conversion.
+
+Production builds exclude the unaccepted Protect entry points and SEO page. Development keeps Protect available for review; CI builds with `VITE_ENABLE_PROTECT=true` to run its full regression, then rebuilds with the flag false to verify publication boundaries. The formal release preparer always sets it false. Word and the accepted Unlock tool remain published.
 
 ```powershell
 pnpm install --frozen-lockfile

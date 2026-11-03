@@ -6,13 +6,16 @@ const tools = publicTools.map(
   (tool) =>
     [
       toolCatalog[tool].path.replace(/^\//, "").replace(/\/$/, ""),
-      tool === "combine"
-        ? "combine-files"
-        : tool === "photos"
-          ? "photo-files"
-          : "pdf-file",
+      tool === "word"
+        ? "word-file"
+        : tool === "combine"
+          ? "combine-files"
+          : tool === "photos"
+            ? "photo-files"
+            : "pdf-file",
     ] as const,
 );
+const localTools = tools.filter(([path]) => path !== "word-to-pdf");
 
 async function checkPicker(page: Page, id: string) {
   const input = page.locator(`#${id}`);
@@ -39,20 +42,38 @@ for (const width of [390, 1280]) {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
-    for (const [source] of tools) {
+    for (const [source] of localTools) {
       await navigate(page, source);
-      for (const [target, id] of tools) {
+      for (const [target, id] of localTools) {
         await navigate(page, target);
         await expect(page).toHaveURL(new RegExp(`/${target}/$`));
         await checkPicker(page, id);
         await navigate(page, source);
       }
-      await page
-        .getByRole("button", { name: "← All tools", exact: true })
-        .tap();
+      await page.getByText("← All tools", { exact: true }).tap();
       await expect(page.locator(".tool-home")).toBeVisible();
       await expect(page.locator(".tool-home [role=status]")).toHaveCount(0);
     }
+    expect(errors).toEqual([]);
+  });
+
+  test(`${width}: every local tool exchanges a working picker with Word`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/word-to-pdf/");
+    for (const [path, id] of localTools) {
+      await navigate(page, path);
+      await expect(page).toHaveURL(new RegExp(`/${path}/$`));
+      await checkPicker(page, id);
+      await navigate(page, "word-to-pdf");
+      await expect(page).toHaveURL(/\/word-to-pdf\/$/);
+      await checkPicker(page, "word-file");
+    }
+    await page.getByText("← All tools", { exact: true }).tap();
+    await expect(page.locator(".tool-home")).toBeVisible();
     expect(errors).toEqual([]);
   });
 }
@@ -95,16 +116,18 @@ test("rapid navigation while cold resources are delayed leaves only the latest t
 test("browser back and forward restore clean tool pickers without stale overlays", async ({
   page,
 }) => {
+  // These tools share the local document. Word intentionally uses a separate
+  // cloud-conversion document; its cross-document history is tested below.
   await page.goto("/");
   await page.locator("html").evaluate((element) => {
     element.setAttribute("data-audit-document", "history-navigation");
   });
-  for (const [path] of tools) {
+  for (const [path] of localTools) {
     console.log("SYNTHETIC_HISTORY", "select", path);
     await selectToolPath(page, path);
     await expect(page).toHaveURL(new RegExp(`/${path}/$`));
   }
-  for (const [path, id] of tools.slice(0, -1).reverse()) {
+  for (const [path, id] of localTools.slice(0, -1).reverse()) {
     console.log("SYNTHETIC_HISTORY", "back-commit", path);
     // This is same-document SPA history. Assert the route and real picker below
     // instead of waiting for an unrelated document-wide load event in WebKit.
@@ -118,7 +141,7 @@ test("browser back and forward restore clean tool pickers without stale overlays
     await checkPicker(page, id);
     console.log("SYNTHETIC_HISTORY", "back-complete", path);
   }
-  for (const [path, id] of tools.slice(1)) {
+  for (const [path, id] of localTools.slice(1)) {
     console.log("SYNTHETIC_HISTORY", "forward-commit", path);
     await page.goForward({ waitUntil: "commit" });
     console.log("SYNTHETIC_HISTORY", "forward-picker", path);
@@ -130,6 +153,23 @@ test("browser back and forward restore clean tool pickers without stale overlays
     await checkPicker(page, id);
     console.log("SYNTHETIC_HISTORY", "forward-complete", path);
   }
+});
+
+test("Word cloud page and local tools restore working pickers across document history", async ({
+  page,
+}) => {
+  await page.goto("/merge-pdf/");
+  await navigate(page, "word-to-pdf");
+  await expect(page).toHaveURL(/\/word-to-pdf\/$/);
+  await checkPicker(page, "word-file");
+  await navigate(page, "unlock-pdf");
+  await checkPicker(page, "pdf-file");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/word-to-pdf\/$/);
+  await checkPicker(page, "word-file");
+  await page.goForward();
+  await expect(page).toHaveURL(/\/unlock-pdf\/$/);
+  await checkPicker(page, "pdf-file");
 });
 
 test("back from a completed task returns home and forward opens a fresh picker without reloading", async ({

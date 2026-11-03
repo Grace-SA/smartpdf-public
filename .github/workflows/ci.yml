@@ -61,6 +61,8 @@ jobs:
           PYTHONPATH: .local-python
       - name: Build all public pages
         run: pnpm build
+        env:
+          VITE_ENABLE_PROTECT: "true"
       - name: Select Ubuntu primary mirror for browser dependencies
         run: |
           # The runner's Azure mirror can stall while downloading browsers'
@@ -83,6 +85,12 @@ jobs:
           DEBUG: pw:browser
       - name: Browser regression across all tools
         run: pnpm exec playwright test --config playwright.github.config.ts --project ${{ matrix.browser }}
+      - name: Build publication scope
+        run: pnpm build
+        env:
+          VITE_ENABLE_PROTECT: "false"
+      - name: Verify published tool boundaries
+        run: pnpm exec playwright test --config playwright.published.config.ts --project ${{ matrix.browser }}
       - name: Retain synthetic diagnostic text on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -90,6 +98,8 @@ jobs:
           name: synthetic-diagnostics-${{ matrix.browser }}
           path: |
             docs/evidence/github-browser.json
+            docs/evidence/github-published-browser.json
+            test-results-published/**/error-context.md
             test-results-github/**/error-context.md
           retention-days: 3
           if-no-files-found: ignore

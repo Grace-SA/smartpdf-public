@@ -13,9 +13,28 @@ Parameters:
     Type: String
     Default: smartpdf.au
     Description: Secondary brand domain redirected to the canonical domain.
+  WordOriginDomain:
+    Type: String
+    Default: ""
+    Description: Stable AWS DNS hostname of the dedicated conversion host.
+  WordOriginSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    AllowedPattern: "^$|^[a-f0-9]{64}$"
+  WordApiEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Enable only after core host acceptance and trusted origin TLS.
 
 Conditions:
   HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+  HasWordOrigin: !Not [!Equals [!Ref WordOriginDomain, ""]]
+  HasWordApi: !And
+    - !Condition HasWordOrigin
+    - !Equals [!Ref WordApiEnabled, "true"]
+    - !Not [!Equals [!Ref WordOriginSecret, ""]]
 
 Resources:
   SiteBucket:
@@ -172,6 +191,35 @@ Resources:
         QueryStringsConfig:
           QueryStringBehavior: none
 
+  WordOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Condition: HasWordApi
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${AWS::StackName}-word-origin
+        CookiesConfig:
+          CookieBehavior: whitelist
+          Cookies: [word_session]
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [Host, Origin, Content-Type]
+        QueryStringsConfig:
+          QueryStringBehavior: none
+
+  WordAcmeRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Condition: HasWordOrigin
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${AWS::StackName}-word-acme
+        CookiesConfig:
+          CookieBehavior: none
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [Host]
+        QueryStringsConfig:
+          QueryStringBehavior: none
+
   SecurityHeaders:
     Type: AWS::CloudFront::ResponseHeadersPolicy
     Properties:
@@ -233,6 +281,7 @@ Resources:
             "download_failure",
           ]);
           const tools = new Set([
+            "word",
             "combine",
             "split",
             "organize",
@@ -379,6 +428,26 @@ Resources:
             MinimumProtocolVersion: TLSv1.2_2021
           - CloudFrontDefaultCertificate: true
         Origins:
+          - !If
+            - HasWordOrigin
+            - Id: word-acme
+              DomainName: !Ref WordOriginDomain
+              CustomOriginConfig:
+                OriginProtocolPolicy: http-only
+                OriginReadTimeout: 30
+            - !Ref AWS::NoValue
+          - !If
+            - HasWordApi
+            - Id: word
+              DomainName: !Ref WordOriginDomain
+              OriginCustomHeaders:
+                - HeaderName: X-SmartPDF-Origin
+                  HeaderValue: !Ref WordOriginSecret
+              CustomOriginConfig:
+                OriginProtocolPolicy: https-only
+                OriginReadTimeout: 120
+                OriginSSLProtocols: [TLSv1.2]
+            - !Ref AWS::NoValue
           - Id: site
             DomainName: !GetAtt SiteBucket.RegionalDomainName
             OriginAccessControlId: !Ref OriginAccess
@@ -403,6 +472,29 @@ Resources:
             - EventType: viewer-request
               FunctionARN: !GetAtt RouteFunction.FunctionARN
         CacheBehaviors:
+          - !If
+            - HasWordOrigin
+            - PathPattern: .well-known/acme-challenge/*
+              TargetOriginId: word-acme
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachedMethods: [GET, HEAD]
+              Compress: false
+              CachePolicyId: !Ref NoCachePolicy
+              OriginRequestPolicyId: !Ref WordAcmeRequestPolicy
+            - !Ref AWS::NoValue
+          - !If
+            - HasWordApi
+            - PathPattern: api/word/*
+              TargetOriginId: word
+              ViewerProtocolPolicy: https-only
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+              CachedMethods: [GET, HEAD]
+              Compress: false
+              CachePolicyId: !Ref NoCachePolicy
+              OriginRequestPolicyId: !Ref WordOriginRequestPolicy
+              ResponseHeadersPolicyId: !Ref SecurityHeaders
+            - !Ref AWS::NoValue
           - PathPattern: assets/*
             TargetOriginId: site
             ViewerProtocolPolicy: redirect-to-https

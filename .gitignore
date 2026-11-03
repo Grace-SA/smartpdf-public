@@ -62,18 +62,30 @@ private-samples/
 !/docs/dependency-licenses.json
 !/docs/repository-workflow.md
 !/docs/m9-report.md
-!/docs/m12-report.md
 !/docs/m11-report.md
+!/docs/m12-report.md
+!/docs/m13-report.md
+!/docs/m13-stirling-implementation.md
 !/docs/ux/
 /docs/ux/*
 !/docs/ux/m9-page-numbers-design.md
-!/docs/ux/m12-unlock-design.md
 !/docs/ux/m11-protect-design.md
+!/docs/ux/m12-unlock-design.md
+!/docs/ux/m13-word-to-pdf-design.md
+!/docs/ux/m13-cloud-selection-estimate.md
+!/docs/ux/m13-gotenberg-poc-results.md
+!/docs/ux/m13-word-reference-results.md
+!/docs/ux/m13-cloud-product-technical-plan.md
+!/docs/ux/m13-business-coverage-results.md
+!/docs/ux/m13-adobe-free-tier-poc.md
+!/docs/ux/m13-adobe-poc-results.md
+!/docs/ux/m13-stirling-pdfcraft-comparison.md
 !/docs/ux/public-synthetic-only/
 /docs/ux/public-synthetic-only/manifest.json
 
 # Private-corpus research scripts are intentionally local-only.
 /scripts/*
+!/scripts/m13/
 !/scripts/prepare-assets.mjs
 !/scripts/generate-module-map.mjs
 !/scripts/generate-seo-pages.mjs
@@ -98,6 +110,8 @@ private-samples/
 !/scripts/check-repository.mjs
 !/scripts/test-repository-guard.mjs
 !/scripts/prepare-release.mjs
+!/scripts/word-release-manifest.mjs
+!/scripts/word-release-manifest.d.mts
 
 /tests/review-color.spec.ts
 /tests/ux-performance.spec.ts
@@ -108,3 +122,9 @@ private-samples/
 /tests/fixtures/m12/
 
 # Commit/push hooks check all binary files against reviewed hashes and provenance.
+/.word-tasks/
+!/server/
+/server/*
+!/server/word/
+/server/word/__pycache__/
+!/playwright.word.config.ts

@@ -54,13 +54,19 @@ export default ts.config(
     rules: { ...hooks.configs.recommended.rules },
   },
   {
-    files: ["scripts/*.mjs", "infra/**/*.mjs", "*.js"],
+    files: ["scripts/*.mjs", "infra/**/*.mjs", "server/**/*.mjs", "*.js"],
     languageOptions: {
       globals: {
         console: "readonly",
         process: "readonly",
         Buffer: "readonly",
         TextEncoder: "readonly",
+        URL: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        AbortController: "readonly",
       },
     },
   },

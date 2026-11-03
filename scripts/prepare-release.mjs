@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { prepareWordRuntime } from "./word-release-manifest.mjs";
 
 const run = (exe, args, options = {}) =>
   execFileSync(exe, args, {
@@ -76,7 +77,11 @@ run(process.execPath, [pnpmCli, "install", "--frozen-lockfile"], {
   cwd: source,
   stdio: "inherit",
 });
-run(process.execPath, [pnpmCli, "build"], { cwd: source, stdio: "inherit" });
+run(process.execPath, [pnpmCli, "build"], {
+  cwd: source,
+  stdio: "inherit",
+  env: { ...process.env, VITE_ENABLE_PROTECT: "false" },
+});
 const files = [];
 const walk = (dir) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -95,6 +100,7 @@ const walk = (dir) => {
   }
 };
 walk(path.join(source, "dist"));
+const word = prepareWordRuntime(source, folder);
 fs.writeFileSync(
   path.join(folder, "release.json"),
   JSON.stringify(
@@ -104,7 +110,9 @@ fs.writeFileSync(
       checks: checks[0].html_url,
       builtAt: new Date().toISOString(),
       deployed: false,
+      features: { word: true, unlock: true, protect: false },
       files,
+      word,
     },
     null,
     2,

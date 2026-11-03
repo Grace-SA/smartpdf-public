@@ -1,0 +1,26 @@
+# Render the token placeholder on the host; never commit the real origin secret.
+server {
+    listen 80;
+    server_name smartpdf.com.au www.smartpdf.com.au smartpdf.au www.smartpdf.au;
+    access_log off;
+    error_log /dev/null;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/smartpdf-acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 404; }
+}
+
+server {
+    listen 443 ssl;
+    server_name smartpdf.com.au www.smartpdf.com.au smartpdf.au www.smartpdf.au;
+    ssl_certificate /etc/letsencrypt/live/smartpdf-word-origin/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/smartpdf-word-origin/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    access_log off;
+    error_log /dev/null;
+    if ($http_x_smartpdf_origin != "__ORIGIN_TOKEN__") { return 403; }
+    include /opt/smartpdf/current/infra/word/nginx.conf;
+    location / { return 404; }
+}

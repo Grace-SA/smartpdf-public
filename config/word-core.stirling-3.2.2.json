@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "version": "3.2.2",
+  "flavor": "core",
+  "imageId": "sha256:a202357523296211bceac18fccac696470a05b9a1b5fcc98049471abb5123178",
+  "baseImage": "stirlingtools/stirling-pdf-base:1.1.0@sha256:3bcc8e10d5319b7c0550cf41b96f6980e1552c974dc37aba462b74fa17c4b5e4",
+  "jar": {
+    "url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/download/v3.2.2/Stirling-PDF-server.jar",
+    "sha256": "370a4218624fa4b3cf5460c886f03de01bfcfd2d4893009202a81e53b5f3344d"
+  },
+  "scripts": [
+    {
+      "path": "scripts/init.sh",
+      "sha256": "a6b3b78a5199be0c54e49e8baf724f9d6f40b8951be7216e53772baf05dd623b",
+      "exactlyMatchesOfficialSource": true,
+      "url": "https://raw.githubusercontent.com/Stirling-Tools/Stirling-PDF/v3.2.2/scripts/init.sh"
+    },
+    {
+      "path": "scripts/init-without-ocr.sh",
+      "sha256": "3f0877ab5b2afcc93f693f103795ab881a6e65bc0bcbe457156f69a9fa423101",
+      "exactlyMatchesOfficialSource": true,
+      "url": "https://raw.githubusercontent.com/Stirling-Tools/Stirling-PDF/v3.2.2/scripts/init-without-ocr.sh"
+    }
+  ],
+  "license": {
+    "url": "https://raw.githubusercontent.com/Stirling-Tools/Stirling-PDF/v3.2.2/LICENSE",
+    "sha256": "e37c7ec776906aebe25e48288da4305afd45dee92f0231ddec68af59cbd7736b"
+  },
+  "dockerfileSha256": "3a96321a8d3f551c2ce8209f179d3c1942774938cedc84a661e5ece35744db03",
+  "fontProfile": "stirling-3.2.2-builtin-v1",
+  "imageBuildPolicy": "Promote only a separately verified image ID; rebuilds may have different metadata IDs. A build never updates this approved pin automatically."
+}

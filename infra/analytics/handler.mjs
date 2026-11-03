@@ -9,6 +9,7 @@ const events = new Set([
   "download_failure",
 ]);
 const tools = new Set([
+  "word",
   "combine",
   "split",
   "organize",

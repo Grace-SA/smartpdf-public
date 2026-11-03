@@ -4,7 +4,7 @@ import {
   publicTools,
   toolCatalog,
   type PublicTool,
-} from "./routes";
+} from "./published-routes";
 import { ToolIcon } from "./ToolIcon";
 
 type SeoPage = {
@@ -18,6 +18,29 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  word: {
+    title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
+    description:
+      "Convert a DOCX document to PDF using self-hosted cloud conversion. Upload only when you start, preview the layout and download your PDF. Temporary files expire within one hour.",
+    keywords: "word to pdf, docx to pdf, cloud document conversion",
+    heading: "Word to PDF",
+    intro: "Convert a DOCX, then check your PDF.",
+    steps: [
+      "Choose a DOCX.",
+      "Upload and convert.",
+      "Check the preview and download your PDF.",
+    ],
+    faq: [
+      [
+        "Is my document uploaded?",
+        "Yes. Word to PDF uploads your DOCX to our self-hosted conversion server only when you start. The page identifies the processing location. Temporary files expire within one hour; you can delete them sooner.",
+      ],
+      [
+        "Will the layout match Word exactly?",
+        "Fonts, pagination, tables and picture wrapping can change. Check the resulting PDF before sharing. Use Word's own export when exact pagination is required.",
+      ],
+    ],
+  },
   protect: {
     title: "Protect PDF Free Online – AES-256, No Upload | Smart PDF",
     description:
