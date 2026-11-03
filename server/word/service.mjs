@@ -16,6 +16,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 
 const MAX_BYTES = 30 * 1024 ** 2;
+const UPLOAD_TIMEOUT_MS = 120000;
 const terminal = new Set(["succeeded", "failed", "cancelled", "expired"]);
 // Leave a minute for the 30-second cleanup sweep inside the one-hour promise.
 const ttl = 59 * 60 * 1000;
@@ -397,9 +398,10 @@ export async function createWordService(options = {}) {
           return json(res, 413, { error: "Choose a DOCX up to 30 MiB." });
         job.state = "uploading";
         job.uploading = true;
+        job.expiresAt = now() + UPLOAD_TIMEOUT_MS + 10000;
         const controller = new AbortController();
         job.uploadController = controller;
-        const timeout = setTimeout(() => controller.abort(), 30000);
+        const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
         let bytes = 0;
         const limit = new Transform({
           transform(chunk, encoding, callback) {
@@ -421,7 +423,8 @@ export async function createWordService(options = {}) {
           if (!bytes) throw new Error("empty");
           if (job.state === "uploading") {
             job.state = "queued";
-            job.expiresAt = now() + 10 * 60000;
+            // Three bounded slots can each consume the 300-second worker guard.
+            job.expiresAt = now() + 16 * 60000;
             void drain();
           }
         } catch {
@@ -468,7 +471,7 @@ export async function createWordService(options = {}) {
       else res.destroy();
     }
   });
-  server.requestTimeout = 35000;
+  server.requestTimeout = UPLOAD_TIMEOUT_MS + 10000;
   server.headersTimeout = 10000;
   return {
     server,

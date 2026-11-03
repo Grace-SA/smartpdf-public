@@ -173,7 +173,7 @@ export function WordPage() {
           "Content-Type",
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         );
-        xhr.timeout = 35000;
+        xhr.timeout = 135000;
         const cancelUpload = () => xhr.abort();
         abort.signal.addEventListener("abort", cancelUpload, { once: true });
         xhr.upload.onprogress = (event) => {
@@ -200,7 +200,7 @@ export function WordPage() {
         xhr.send(file);
       });
       setProgress(undefined);
-      const deadline = Date.now() + 10 * 60000;
+      const deadline = Date.now() + 16 * 60000;
       while (!abort.signal.aborted) {
         if (Date.now() > deadline)
           throw new Error(
@@ -436,6 +436,7 @@ export function WordPage() {
                   ? "Removing temporary files…"
                   : stages[job?.state || "created"] || "Connecting…"}
               </p>
+              <p>This can take a few minutes. You can cancel at any time.</p>
               {progress !== undefined && (
                 <>
                   <progress

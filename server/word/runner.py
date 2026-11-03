@@ -74,7 +74,8 @@ def run(directory):
                '--pids-limit', '512', '--security-opt', 'no-new-privileges',
                '--cap-drop', 'NET_RAW', '--tmpfs', '/tmp:rw,nosuid,nodev,size=384m',
                '-e', 'SECURITY_ENABLELOGIN=false', '-e', 'SYSTEM_DEFAULTLOCALE=en-US',
-               '-e', 'TZ=UTC', '-e', 'JAVA_CUSTOM_OPTS=' + JAVA_OPTIONS, IMAGE)
+               '-e', 'TZ=UTC', '-e', 'JAVA_CUSTOM_OPTS=' + JAVA_OPTIONS,
+               '-e', 'SPRING_MAIN_LAZY_INITIALIZATION=true', IMAGE)
         created = True
         if cancel.exists():
             return
@@ -83,7 +84,7 @@ def run(directory):
         address = info['NetworkSettings']['Networks'][network]['IPAddress']
         base = 'http://' + address + ':8080'
         ready = False
-        deadline = time.monotonic() + 120
+        deadline = time.monotonic() + 150
         while time.monotonic() < deadline and not cancel.exists() and not expired.is_set():
             try:
                 with urllib.request.urlopen(base + '/api/v1/info/status', timeout=2) as response:

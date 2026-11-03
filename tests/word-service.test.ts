@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
+import { request } from "node:http";
 import { PDFDocument } from "pdf-lib";
 import {
   createWordService,
@@ -70,9 +71,9 @@ async function setup(
   async function job() {
     return (await (await api(cookie, "/jobs", "POST")).json()).id as string;
   }
-  async function wait(id: string, state: string) {
+  async function wait(id: string, state: string, owner = cookie) {
     for (let n = 0; n < 100; n++) {
-      const value = await (await api(cookie, "/jobs/" + id)).json();
+      const value = await (await api(owner, "/jobs/" + id)).json();
       if (value.state === state) return value;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -81,6 +82,76 @@ async function setup(
   return { root, service, base, cookie, session, api, job, wait };
 }
 describe("Word cloud task isolation and lifecycle", () => {
+  it("retains a queued upload within the bounded three-worker budget", async () => {
+    let clock = Date.now();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const t = await setup(
+      async (job, update) => {
+        update({ state: "converting" });
+        await gate;
+        const pdf = await PDFDocument.create();
+        pdf.addPage();
+        await writeFile(
+          path.join(job.directory, "output.pdf"),
+          await pdf.save(),
+        );
+      },
+      () => clock,
+    );
+    const first = await t.job();
+    await t.api(t.cookie, `/jobs/${first}/input`, "PUT", "synthetic");
+    await t.wait(first, "converting");
+    const other = await t.session();
+    const second = (await (await t.api(other, "/jobs", "POST")).json()).id;
+    await t.api(other, `/jobs/${second}/input`, "PUT", "synthetic");
+    try {
+      clock += 11 * 60000;
+      await t.service.sweep();
+      const response = await t.api(other, `/jobs/${second}`);
+      expect(response.status).toBe(200);
+      expect((await response.json()).state).toBe("queued");
+    } finally {
+      release();
+    }
+    await t.wait(second, "succeeded", other);
+  });
+  it("keeps an active upload alive beyond the unused-task expiry", async () => {
+    let clock = Date.now();
+    const t = await setup(undefined, () => clock);
+    const id = await t.job();
+    let upload!: ReturnType<typeof request>;
+    const response = new Promise<number>((resolve, reject) => {
+      upload = request(
+        t.base + `/jobs/${id}/input`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: t.cookie,
+            Origin: origin,
+            "Content-Type": type,
+            "Content-Length": 2,
+          },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode!);
+        },
+      );
+      upload.on("error", reject);
+    });
+    upload.write("p");
+    await t.wait(id, "uploading");
+    clock += 61000;
+    await t.service.sweep();
+    expect((await t.api(t.cookie, `/jobs/${id}`)).status).toBe(200);
+    expect((await t.wait(id, "uploading")).state).toBe("uploading");
+    upload.end("k");
+    expect(await response).toBe(202);
+    await t.wait(id, "succeeded");
+  });
   it("rejects an origin path before starting or cleaning task storage", async () => {
     await expect(
       createWordService({ origin: "https://example.invalid/" }),
