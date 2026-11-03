@@ -603,9 +603,16 @@ for (const width of [1280, 390])
       .getByRole("button", { name: "Add signature", exact: true })
       .click();
     await page.getByRole("tab", { name: "Type", exact: true }).click();
-    await page
-      .getByRole("textbox", { name: "Your name", exact: true })
-      .fill("Reader Test");
+    const name = page.getByRole("textbox", {
+      name: "Your name",
+      exact: true,
+    });
+    // Exercise actual focused typing inside the native modal. A fast WebKit
+    // fill during modal focus changes can finish without entering the value.
+    await name.click();
+    await expect(name).toBeFocused();
+    await name.pressSequentially("Reader Test");
+    await expect(name).toHaveValue("Reader Test");
     await page
       .getByRole("button", { name: "Use signature", exact: true })
       .click();
@@ -699,6 +706,48 @@ for (const width of [1280, 390])
     });
     expect(stamped).toEqual([2, 6]);
   });
+
+test("typed signature name survives a late style preview", async ({ page }) => {
+  let releaseFont!: () => void;
+  const fontGate = new Promise<void>((resolve) => {
+    releaseFont = resolve;
+  });
+  await page.route("**/sign-fonts/Kalam-Regular.ttf", async (route) => {
+    await fontGate;
+    await route.continue();
+  });
+  try {
+    await start(page, "100-pages.pdf");
+    await page
+      .getByRole("button", { name: "Add signature", exact: true })
+      .click();
+    await page.getByRole("tab", { name: "Type", exact: true }).click();
+    const name = page.getByRole("textbox", { name: "Your name", exact: true });
+    await name.click();
+    await expect(name).toBeFocused();
+    await name.pressSequentially("Reader Test");
+    await expect(name).toHaveValue("Reader Test");
+    await expect(
+      page.getByRole("button", { name: "Use signature", exact: true }),
+    ).toBeDisabled();
+    releaseFont();
+    await expect(page.locator(".sign-font-sample text").first()).toHaveText(
+      "Reader Test",
+    );
+    await expect(name).toHaveValue("Reader Test");
+    await expect(
+      page.getByRole("button", { name: "Use signature", exact: true }),
+    ).toBeEnabled();
+    await page
+      .getByRole("button", { name: "Use signature", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Create signature" }),
+    ).not.toBeVisible();
+  } finally {
+    releaseFont();
+  }
+});
 
 test("sign preview stays stable with classic scrollbars", async ({ page }) => {
   await start(page);
