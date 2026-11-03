@@ -38,7 +38,7 @@ class HostChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             os.chmod(directory, 0o700)
             replies = ['v24.15.0', json.dumps({'OSType':'linux','MemTotal':memory,'NCPU':2}),
-                       json.dumps([{'RepoDigests':[IMAGE] if image else []}]),
+                       json.dumps([{'Id':IMAGE if image else 'sha256:'+'0'*64}]),
                        json.dumps([{'Internal':internal}])]
             with patch.dict(os.environ, {'WORD_PUBLIC_ORIGIN':origin,'WORD_DATA_DIR':directory,'WORD_PROCESSING_LABEL':'Sydney, Australia'}), \
                  patch('doctor.command', side_effect=replies), patch('doctor.platform.release', return_value=kernel), \

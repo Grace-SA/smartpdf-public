@@ -49,7 +49,7 @@ def inspect_host(production=False):
         record('docker-memory', info.get('MemTotal', 0) >= 3.5 * 1024**3, 'At least 3.5 GiB Docker-host memory; dedicated 4 GiB host with one conversion at a time')
         record('docker-cpu', info.get('NCPU', 0) >= 2, 'At least two CPUs required')
         image = json.loads(command('docker', 'image', 'inspect', IMAGE))[0]
-        record('fixed-image', IMAGE in image.get('RepoDigests', []), 'Pinned reviewed image must already be available')
+        record('fixed-image', image.get('Id') == IMAGE, 'Approved core image content ID must already be available')
         network = json.loads(command('docker', 'network', 'inspect', os.environ.get('WORD_DOCKER_NETWORK', 'smartpdf-word')))[0]
         record('internal-network', network.get('Internal') is True, 'Conversion network must prohibit external egress')
     except Exception:

@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 from preflight import inspect_docx, Rejected
 
-IMAGE = 'docker.stirlingpdf.com/stirlingtools/stirling-pdf@sha256:c6872dd056b0046a14c5de1e9970283e7f1e1ff685bb08090c6b37a231127d31'
+IMAGE = 'sha256:a202357523296211bceac18fccac696470a05b9a1b5fcc98049471abb5123178'
 MEMORY_MIB = 2560
 # The platform is disposable after one conversion: avoid expensive top-tier JIT warmup.
 # Leave memory for LibreOffice and metaspace within the container's fixed ceiling.
