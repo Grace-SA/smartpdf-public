@@ -6,12 +6,15 @@ export type WordCheck = {
   issues: InputIssue[];
   warnings: string[];
   revisions: boolean;
+  originalViewUnsupported: boolean;
   comments: boolean;
   fonts: string[];
   complexLayout: boolean;
 };
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const messages: Record<string, string> = {
+  STRUCTURAL_REVISIONS:
+    "Resolve table row, cell or paragraph structure revisions in Word before converting.",
   INVALID_DOCX: "Choose a valid, unencrypted DOCX document.",
   UNSAFE_PACKAGE: "Protected or unsafe document package.",
   PACKAGE_LIMIT: "Document expands beyond the processing limit.",
@@ -258,6 +261,7 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
   const codes = new Set<string>(),
     warnings = new Set<string>(),
     fonts = new Set<string>();
+  let originalViewUnsupported = false;
   let complexLayout = false,
     nodes = 0,
     main = false,
@@ -299,15 +303,14 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
       }).parse(text) as Ordered[];
       const stack: {
         items: Ordered[];
+        parent?: string;
         ns: Record<string, string>;
         depth: number;
-      }[] = [...tree]
-        .reverse()
-        .map((item) => ({
-          items: [item],
-          ns: { xml: "http://www.w3.org/XML/1998/namespace" },
-          depth: 0,
-        }));
+      }[] = [...tree].reverse().map((item) => ({
+        items: [item],
+        ns: { xml: "http://www.w3.org/XML/1998/namespace" },
+        depth: 0,
+      }));
       let fields = "";
       while (stack.length) {
         const frame = stack.pop()!;
@@ -356,7 +359,31 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
           )
             types = true;
           if (uri === W) {
-            if (revisions.has(local)) add("TRACKED_CHANGES");
+            if (revisions.has(local)) {
+              add("TRACKED_CHANGES");
+              if (
+                ["cellIns", "cellDel", "cellMerge"].includes(local) ||
+                (["ins", "del"].includes(local) &&
+                  [W + "trPr", W + "tcPr", W + "rPr"].includes(
+                    frame.parent || "",
+                  ))
+              )
+                add("STRUCTURAL_REVISIONS");
+              if (
+                ![
+                  "ins",
+                  "del",
+                  "delText",
+                  "moveFrom",
+                  "moveTo",
+                  "moveFromRangeStart",
+                  "moveFromRangeEnd",
+                  "moveToRangeStart",
+                  "moveToRangeEnd",
+                ].includes(local)
+              )
+                originalViewUnsupported = true;
+            }
             if (
               [
                 "comment",
@@ -409,7 +436,12 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
           )
             complexLayout = true;
           for (let i = children.length - 1; i >= 0; i--)
-            stack.push({ items: [children[i]!], ns, depth: frame.depth + 1 });
+            stack.push({
+              items: [children[i]!],
+              ns,
+              parent: uri + local,
+              depth: frame.depth + 1,
+            });
         }
       }
       if (
@@ -440,6 +472,7 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
     })),
     warnings: [...warnings],
     revisions: codes.has("TRACKED_CHANGES"),
+    originalViewUnsupported,
     comments: codes.has("COMMENTS"),
     fonts: [...fonts],
     complexLayout,

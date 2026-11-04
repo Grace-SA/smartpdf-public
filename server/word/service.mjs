@@ -21,6 +21,38 @@ const terminal = new Set(["succeeded", "failed", "cancelled", "expired"]);
 // Leave a minute for the 30-second cleanup sweep inside the one-hour promise.
 const ttl = 59 * 60 * 1000;
 const runner = fileURLToPath(new URL("./runner.py", import.meta.url));
+async function outputOptions(req) {
+  const chunks = [];
+  let size = 0;
+  const timeout = setTimeout(() => req.destroy(), 5000);
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 2048) throw Error("options");
+      chunks.push(chunk);
+    }
+    const value = size
+      ? JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      : {};
+    const view =
+      value?.revisionView === undefined ? "unchanged" : value.revisionView;
+    const omit = value?.omitComments === undefined ? false : value.omitComments;
+    if (
+      !value ||
+      Array.isArray(value) ||
+      typeof value !== "object" ||
+      Object.keys(value).some(
+        (k) => !["revisionView", "omitComments"].includes(k),
+      ) ||
+      !["unchanged", "final", "original"].includes(view) ||
+      typeof omit !== "boolean"
+    )
+      throw Error("options");
+    return { revisionView: view, omitComments: omit };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export function checkPdf(file) {
   return new Promise((resolve, reject) => {
@@ -119,7 +151,7 @@ export function runStirling(job, update) {
         reject(
           Object.assign(
             new Error("Conversion cleanup requires operator attention."),
-            { unsafe: true },
+            { unsafe: true, code: "CLEANUP_FAILED" },
           ),
         );
       else if (error || code)
@@ -197,6 +229,7 @@ export async function createWordService(options = {}) {
     cleanupPending:
       (job.state === "cancelled" || job.state === "expired") &&
       !!(job.running || job.uploading),
+    options: job.options,
   });
   async function erase(job) {
     if (job.running || job.uploading) return;
@@ -212,18 +245,31 @@ export async function createWordService(options = {}) {
       await execute(job, (value) => {
         if (terminal.has(job.state)) return;
         if (
-          ["checking", "starting", "converting", "checking-result"].includes(
-            value.state,
-          )
+          [
+            "checking",
+            "starting",
+            "preparing",
+            "converting",
+            "checking-result",
+          ].includes(value.state)
         )
           job.state = value.state;
         if (Array.isArray(value.warnings)) job.warnings = value.warnings;
       });
       if (!terminal.has(job.state)) {
         job.state = "checking-result";
-        const result = await validate(path.join(job.directory, "output.pdf"));
+        let result;
+        try {
+          result = await validate(path.join(job.directory, "output.pdf"));
+        } catch {
+          throw Object.assign(new Error("Invalid PDF output"), {
+            code: "OUTPUT_INVALID",
+          });
+        }
         // Do not announce success while the uploaded source still exists.
         await rm(path.join(job.directory, "input.docx"), { force: true });
+        await rm(path.join(job.directory, "prepared.docx"), { force: true });
+        await rm(path.join(job.directory, "options.json"), { force: true });
         if (!terminal.has(job.state)) {
           job.pages = result.pages;
           job.state = "succeeded";
@@ -251,6 +297,7 @@ export async function createWordService(options = {}) {
         unhealthy = true;
         job.state = "failed";
         job.error = "Temporary-file cleanup requires operator attention.";
+        job.failureCode = "CLEANUP_FAILED";
       }
       void drain();
     }
@@ -332,12 +379,24 @@ export async function createWordService(options = {}) {
           maxBytes: MAX_BYTES,
           retentionMinutes: 60,
           available: !unhealthy && !stopped,
+          capabilities: {
+            revisionViews: ["final", "original"],
+            omitComments: true,
+          },
         });
       if (!owner)
         return json(res, 401, {
           error: "Reopen this tool to start a new session.",
         });
       if (url.pathname === "/api/word/jobs" && req.method === "POST") {
+        let settings;
+        try {
+          settings = await outputOptions(req);
+        } catch {
+          return json(res, 400, {
+            error: "Choose valid document output options.",
+          });
+        }
         await sweep();
         if (unhealthy || stopped)
           return json(res, 503, {
@@ -361,9 +420,15 @@ export async function createWordService(options = {}) {
           directory: path.join(root, id),
           state: "created",
           warnings: [],
+          options: settings,
           expiresAt: now() + 60000,
         };
         await mkdir(job.directory, { mode: 0o700 });
+        await writeFile(
+          path.join(job.directory, "options.json"),
+          JSON.stringify(settings),
+          { mode: 0o600, flag: "wx" },
+        );
         jobs.set(id, job);
         return json(res, 201, view(job));
       }

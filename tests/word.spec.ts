@@ -9,6 +9,7 @@ async function mockService(page: Page, mode = "success") {
   const calls: string[] = [];
   let uploaded = false;
   let cancelled = false;
+  let options: unknown;
   await page.route("**/api/word/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -27,8 +28,13 @@ async function mockService(page: Page, mode = "success") {
             region: "Local acceptance server",
             available: true,
             retentionMinutes: 60,
+            capabilities: {
+              revisionViews: ["final", "original"],
+              omitComments: true,
+            },
           });
     if (method === "DELETE") {
+      if (mode === "cleanup-fails") return send(503, {});
       cancelled = true;
       return send(200, {
         id: "synthetic-task",
@@ -37,13 +43,22 @@ async function mockService(page: Page, mode = "success") {
         warnings: [],
       });
     }
-    if (url.pathname.endsWith("/jobs"))
+    if (url.pathname.endsWith("/jobs")) {
+      options = req.postDataJSON();
+      if (mode === "proxy-html")
+        return route.fulfill({
+          status: 503,
+          contentType: "text/html",
+          body: "<h1>Unavailable</h1>",
+        });
       return mode === "full"
         ? send(429, {
             error: "The conversion queue is full. Try again shortly.",
           })
         : send(201, { id: "synthetic-task", state: "created", warnings: [] });
+    }
     if (url.pathname.endsWith("/input")) {
+      if (mode === "upload-type") return send(415, {});
       uploaded = true;
       return send(202, { state: "queued" });
     }
@@ -51,21 +66,26 @@ async function mockService(page: Page, mode = "success") {
       return route.fulfill({
         status: 200,
         contentType: "application/pdf",
-        body: bytes,
+        body: mode === "invalid-pdf" ? Buffer.from("not pdf") : bytes,
       });
     return send(200, {
       id: "synthetic-task",
       state: cancelled
         ? "cancelled"
-        : mode === "reject"
+        : ["reject", "cleanup-fails", "engine-start"].includes(mode)
           ? "failed"
           : mode === "slow" || !uploaded
             ? "starting"
             : "succeeded",
+      options,
       pages: 1,
       warnings: ["Fonts may be substituted. Check pagination before sharing."],
-      ...(mode === "reject"
+      ...(["reject", "cleanup-fails", "engine-start"].includes(mode)
         ? {
+            failureCode:
+              mode === "engine-start"
+                ? "ENGINE_STARTUP_FAILED"
+                : "INPUT_REJECTED",
             error:
               "Accept or reject tracked changes in Word before converting.",
           }
@@ -233,7 +253,7 @@ test("local file errors do not upload; rejected documents offer a clear next ste
   );
   await expect(
     page.getByRole("button", { name: "Upload and convert" }),
-  ).toBeEnabled();
+  ).toBeDisabled();
 });
 test("local preflight refuses invalid or unresolved documents before any upload", async ({
   page,
@@ -269,6 +289,68 @@ test("local preflight refuses invalid or unresolved documents before any upload"
   expect(calls.some((c) => c.startsWith("POST") || c.startsWith("PUT"))).toBe(
     false,
   );
+});
+
+test("revision and comment choices are explicit, local, and reset for a new file", async ({
+  page,
+}) => {
+  const calls = await mockService(page);
+  await page.goto("/word-to-pdf/");
+  const fixture = docxFixture(
+    "<w:p><w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins><w:commentRangeStart/></w:p>",
+  );
+  await select(page, "Review.docx", fixture);
+  const convert = page.getByRole("button", {
+    name: "Upload and convert",
+    exact: true,
+  });
+  await expect(
+    page.getByLabel("Tracked changes", { exact: true }),
+  ).toBeVisible();
+  await expect(convert).toBeDisabled();
+  await page
+    .getByLabel("Tracked changes", { exact: true })
+    .selectOption("original");
+  await expect(convert).toBeDisabled();
+  await page
+    .getByRole("checkbox", { name: "Create the PDF without comments" })
+    .check();
+  await expect(convert).toBeEnabled();
+  expect(calls.some((x) => x.startsWith("POST") || x.startsWith("PUT"))).toBe(
+    false,
+  );
+  await select(page, "Other.docx", fixture);
+  await expect(page.getByLabel("Tracked changes", { exact: true })).toHaveValue(
+    "unchanged",
+  );
+  await expect(
+    page.getByRole("checkbox", { name: "Create the PDF without comments" }),
+  ).not.toBeChecked();
+  await expect(convert).toBeDisabled();
+});
+test("original formatting history is not offered as a misleading original view", async ({
+  page,
+}) => {
+  await mockService(page);
+  await page.goto("/word-to-pdf/");
+  await select(
+    page,
+    "Format changes.docx",
+    docxFixture(
+      "<w:p><w:pPr><w:pPrChange><w:pPr/></w:pPrChange></w:pPr><w:r><w:t>Text</w:t></w:r></w:p>",
+    ),
+  );
+  await expect(
+    page.getByText(
+      "To restore this document’s original formatting or structure, export from Word. Current content is available here.",
+    ),
+  ).toBeVisible();
+  await page
+    .getByLabel("Tracked changes", { exact: true })
+    .selectOption("final");
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toBeEnabled();
 });
 
 test("queue full and disconnected service remain recoverable", async ({
@@ -351,5 +433,80 @@ test("leaving a selected Word task offers keep or discard", async ({
       name: "Simple PDF tools. Clear choices for your files.",
       exact: true,
     }),
+  ).toBeVisible();
+});
+
+for (const [mode, message] of [
+  ["proxy-html", "temporarily unavailable"],
+  ["upload-type", "Choose a DOCX"],
+  ["invalid-pdf", "failed its checks"],
+  ["engine-start", "could not start"],
+]) {
+  test(`specific recoverable failure: ${mode}`, async ({ page }) => {
+    await mockService(page, mode);
+    await page.goto("/word-to-pdf/");
+    await select(page);
+    await page
+      .getByRole("button", { name: "Upload and convert", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toContainText(message!);
+    await expect(
+      page.getByRole("button", { name: "Upload and convert", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("link", { name: "Download PDF", exact: true }),
+    ).toHaveCount(0);
+  });
+}
+test("uncertain cleanup blocks another upload until deletion succeeds", async ({
+  page,
+}) => {
+  const calls = await mockService(page, "cleanup-fails");
+  await page.goto("/word-to-pdf/");
+  await select(page);
+  await page
+    .getByRole("button", { name: "Upload and convert", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "cleanup could not be confirmed",
+  );
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toBeDisabled();
+  expect(calls.filter((x) => x.startsWith("POST"))).toHaveLength(1);
+  await page.unrouteAll();
+  await mockService(page);
+  await page
+    .getByRole("button", { name: "Delete temporary files", exact: true })
+    .click();
+  await expect(
+    page.getByText("Temporary files deleted. Your original is unchanged."),
+  ).toBeVisible();
+});
+test("chosen content reaches only the explicitly started task", async ({
+  page,
+}) => {
+  await mockService(page);
+  await page.goto("/word-to-pdf/");
+  await select(
+    page,
+    "Tracked.docx",
+    docxFixture("<w:p><w:ins><w:r><w:t>New</w:t></w:r></w:ins></w:p>"),
+  );
+  await page
+    .getByLabel("Tracked changes", { exact: true })
+    .selectOption("original");
+  const created = page.waitForRequest(
+    (req) => req.method() === "POST" && req.url().endsWith("/api/word/jobs"),
+  );
+  await page
+    .getByRole("button", { name: "Upload and convert", exact: true })
+    .click();
+  expect((await created).postDataJSON()).toEqual({
+    revisionView: "original",
+    omitComments: false,
+  });
+  await expect(
+    page.getByText("PDF content: original content (tracked changes rejected)."),
   ).toBeVisible();
 });

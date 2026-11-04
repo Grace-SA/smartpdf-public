@@ -191,6 +191,39 @@
   padding-left: 20px;
   margin-bottom: 0;
 }
+.word-view-options {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+}
+.word-view-options legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.word-view-options label {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+.word-view-options select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid #bdc8d5;
+  border-radius: 6px;
+  font: inherit;
+}
+.word-view-options .word-option-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.word-view-options p {
+  font-size: 13px;
+  margin: 10px 0 0;
+}
 .word-card .input-support {
   padding-top: 12px;
   border-top: 1px solid #e5e7eb;

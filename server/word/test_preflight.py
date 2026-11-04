@@ -2,7 +2,8 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from preflight import inspect_docx, Rejected
+from preflight import inspect_docx, conversion_options, Rejected
+from prepare_uno import omit_comments
 
 class PreflightTests(unittest.TestCase):
     def package(self, body='<w:p><w:r><w:t>合成 Synthetic</w:t></w:r></w:p>', extra=None):
@@ -16,6 +17,48 @@ class PreflightTests(unittest.TestCase):
         return path
     def test_regular(self):
         self.assertTrue(inspect_docx(self.package()))
+    def test_comment_copy_preserves_original_and_custom_namespace_content(self):
+        relationship = 'http://schemas.openxmlformats.org/package/2006/relationships'
+        source = self.package('<w:p><w:commentRangeStart/><w:r><w:t>Visible</w:t></w:r><w:commentRangeEnd/><w:commentReference/></w:p>', {
+            'word/comments.xml':'<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment><w:p><w:r><w:t>ANNOTATION_SENTINEL</w:t></w:r></w:p></w:comment></w:comments>',
+            'word/_rels/document.xml.rels':f'<Relationships xmlns="{relationship}"><Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/></Relationships>',
+            'customXml/item1.xml':'<x:record xmlns:x="urn:synthetic"><x:Relationship Type="urn:synthetic/comments">CUSTOM_SENTINEL</x:Relationship><x:comment>Not an annotation</x:comment></x:record>',
+        })
+        before=source.read_bytes();output=source.with_name('output.docx')
+        omit_comments(source, output)
+        self.assertEqual(source.read_bytes(),before)
+        self.assertTrue(inspect_docx(output))
+        with zipfile.ZipFile(output) as package:
+            self.assertNotIn('word/comments.xml',package.namelist())
+            self.assertIn(b'CUSTOM_SENTINEL',package.read('customXml/item1.xml'))
+            self.assertIn(b'Not an annotation',package.read('customXml/item1.xml'))
+            self.assertNotIn(b'commentRange',package.read('word/document.xml'))
+    def test_revision_view_and_comment_omission_require_explicit_choices(self):
+        source=self.package('<w:p><w:ins><w:r><w:t>New</w:t></w:r></w:ins><w:commentRangeStart/></w:p>')
+        with self.assertRaises(Rejected):inspect_docx(source)
+        for view in ['final','original']:
+            details={};warnings=inspect_docx(source,{'revisionView':view,'omitComments':True},details=details)
+            self.assertEqual(details,{'revisions':True,'comments':True,'originalViewUnsupported':False})
+            self.assertTrue(any('PDF view:' in s for s in warnings))
+        with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':'final'})
+        self.assertEqual(caught.exception.code,'COMMENTS')
+    def test_document_choices_never_bypass_active_content(self):
+        source=self.package(extra={'word/vbaProject.bin':'synthetic'})
+        with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':'final','omitComments':True})
+        self.assertEqual(caught.exception.code,'MACROS')
+    def test_invalid_output_options(self):
+        for value in [[],{'revisionView':[]},{'revisionView':'unknown'},{'omitComments':'true'},{'omitComments':1},{'path':'private'}]:
+            with self.subTest(value=value),self.assertRaises(Rejected):conversion_options(value)
+    def test_original_view_does_not_silently_drop_formatting_history(self):
+        source=self.package('<w:p><w:pPr><w:pPrChange><w:pPr/></w:pPrChange></w:pPr><w:r><w:t>Text</w:t></w:r></w:p>')
+        self.assertTrue(inspect_docx(source,{'revisionView':'final'}))
+        with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':'original'})
+        self.assertEqual(caught.exception.code,'ORIGINAL_VIEW_UNSUPPORTED')
+    def test_structural_revision_choices_remain_rejected(self):
+        source=self.package('<w:tbl><w:tr><w:trPr><w:ins/></w:trPr><w:tc><w:p><w:r><w:t>Row</w:t></w:r></w:p></w:tc></w:tr></w:tbl>')
+        for view in ['final','original']:
+            with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':view})
+            self.assertEqual(caught.exception.code,'STRUCTURAL_REVISIONS')
     def test_empty(self):
         with self.assertRaises(Rejected): inspect_docx(self.package(''))
     def test_malformed_xml_has_a_specific_non_content_error(self):

@@ -6,6 +6,8 @@ from xml.etree import ElementTree as ET
 
 WORD = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 REASONS = {
+    'STRUCTURAL_REVISIONS': 'Resolve table row, cell or paragraph structure revisions in Word before converting.',
+    'ORIGINAL_VIEW_UNSUPPORTED': 'Use Word to restore this document\'s original formatting or structure. Choose current content or resolve revisions in Word.',
     'TRACKED_CHANGES': 'Accept or reject tracked changes in Word before converting.',
     'COMMENTS': 'Remove document comments in Word before converting.',
     'HIDDEN_TEXT': 'Show or remove hidden text in Word before converting.',
@@ -33,9 +35,21 @@ class Rejected(ValueError):
 def reject(message, code):
     raise Rejected(message, code)
 
-def inspect_docx(path):
+def conversion_options(value=None):
+    if value is None:
+        return {'revisionView': 'unchanged', 'omitComments': False}
+    if (not isinstance(value, dict) or set(value) - {'revisionView', 'omitComments'}
+            or not isinstance(value.get('revisionView', 'unchanged'), str)
+            or value.get('revisionView', 'unchanged') not in {'unchanged', 'final', 'original'}
+            or not isinstance(value.get('omitComments', False), bool)):
+        reject('Choose valid document output options.', 'INVALID_OPTIONS')
+    return {'revisionView': value.get('revisionView', 'unchanged'), 'omitComments': value.get('omitComments', False)}
+
+def inspect_docx(path, options=None, *, details=None):
+    options = conversion_options(options)
     warnings = {'Fonts may be substituted. Check pagination before sharing.'}
     blocked = set()
+    original_unsupported = False
     try:
         with zipfile.ZipFile(path) as package:
             entries = package.infolist()
@@ -75,16 +89,20 @@ def inspect_docx(path):
                                      for e in tree.iter() if e.tag.rsplit('}', 1)[-1] in {'instrText', 'fldSimple'})
                 if re.search(r'\b(DDEAUTO|DDE|INCLUDETEXT|INCLUDEPICTURE|DATABASE|LINK)\b', field_text, re.I):
                     blocked.add('EXTERNAL_DATA_FIELDS')
-                stack = [(tree, 1)]
-                for element, depth in stack:
+                stack = [(tree, 1, None)]
+                for element, depth, parent in stack:
                     nodes += 1
                     if nodes > 200000 or depth > 64:
                         reject('Document structure exceeds the processing limit.', 'STRUCTURE_LIMIT')
-                    stack.extend((child, depth + 1) for child in element)
+                    stack.extend((child, depth + 1, element.tag) for child in element)
                     tag = element.tag.rsplit('}', 1)[-1]
                     if element.tag.startswith(WORD):
                         if tag in REVISION_TAGS:
                             blocked.add('TRACKED_CHANGES')
+                            if tag in {'cellIns','cellDel','cellMerge'} or (tag in {'ins','del'} and parent in {WORD+'trPr',WORD+'tcPr',WORD+'rPr'}):
+                                blocked.add('STRUCTURAL_REVISIONS')
+                            if tag not in {'ins', 'del', 'delText', 'moveFrom', 'moveTo', 'moveFromRangeStart', 'moveFromRangeEnd', 'moveToRangeStart', 'moveToRangeEnd'}:
+                                original_unsupported = True
                         if tag in {'comment', 'commentRangeStart', 'commentRangeEnd', 'commentReference'}:
                             blocked.add('COMMENTS')
                         # webHidden affects web view, not normal paginated/PDF view.
@@ -126,6 +144,16 @@ def inspect_docx(path):
         raise Rejected('The document contains malformed XML. Open it in Word and save a new DOCX copy.', 'MALFORMED_XML') from None
     except (zipfile.BadZipFile, RuntimeError, OSError, NotImplementedError):
         raise Rejected('Choose a valid, unencrypted DOCX document.') from None
+    if details is not None:
+        details.update(revisions='TRACKED_CHANGES' in blocked, comments='COMMENTS' in blocked, originalViewUnsupported=original_unsupported)
+    if original_unsupported and options['revisionView'] == 'original':
+        blocked.add('ORIGINAL_VIEW_UNSUPPORTED')
+    if 'TRACKED_CHANGES' in blocked and options['revisionView'] != 'unchanged':
+        blocked.remove('TRACKED_CHANGES')
+        warnings.add('PDF view: ' + ('current content, with tracked changes accepted in the temporary copy.' if options['revisionView'] == 'final' else 'original content, with tracked changes rejected in the temporary copy.'))
+    if 'COMMENTS' in blocked and options['omitComments']:
+        blocked.remove('COMMENTS')
+        warnings.add('Comments are omitted from the PDF copy. Your original document is unchanged.')
     if blocked:
         reasons = [{'code': code, 'message': message} for code, message in REASONS.items() if code in blocked]
         raise Rejected(' '.join(r['message'] for r in reasons), reasons[0]['code'], reasons)

@@ -12,6 +12,7 @@ export const wordRuntimePaths = [
   "server/word/pdf-check.mjs",
   "server/word/runner.py",
   "server/word/preflight.py",
+  "server/word/prepare_uno.py",
   "server/word/doctor.py",
   "server/word/core_build.py",
   "server/word/font_inventory.py",
@@ -20,6 +21,7 @@ export const wordRuntimePaths = [
   "infra/word/core.Dockerfile",
   "infra/word/smartpdf-word.service",
   "config/word-fonts.stirling-3.2.2.json",
+  "config/word-font-families.stirling-3.2.2.json",
   "config/word-core.stirling-3.2.2.json",
   "vendor-licenses/stirling-integration.txt",
 ];

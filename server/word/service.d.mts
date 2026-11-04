@@ -6,6 +6,10 @@ export type Task = {
   owner: string;
   expiresAt: number;
   error?: string;
+  options?: {
+    revisionView: "unchanged" | "final" | "original";
+    omitComments: boolean;
+  };
 };
 export function checkPdf(file: string): Promise<{ pages: number }>;
 export function createWordService(options?: {
