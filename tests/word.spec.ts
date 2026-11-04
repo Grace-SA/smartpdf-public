@@ -66,7 +66,7 @@ async function mockService(page: Page, mode = "success") {
       ...(mode === "reject"
         ? {
             error:
-              "Resolve revisions, comments, hidden content or embedded objects in Word first.",
+              "Accept or reject tracked changes in Word before converting.",
           }
         : {}),
     });
@@ -227,7 +227,9 @@ test("local file errors do not upload; rejected documents offer a clear next ste
   expect(calls.some((call) => call.startsWith("PUT"))).toBe(false);
   await select(page);
   await page.getByRole("button", { name: "Upload and convert" }).click();
-  await expect(page.getByRole("alert")).toContainText("Resolve revisions");
+  await expect(page.getByRole("alert")).toContainText(
+    "Accept or reject tracked changes",
+  );
   await expect(
     page.getByRole("button", { name: "Upload and convert" }),
   ).toBeEnabled();

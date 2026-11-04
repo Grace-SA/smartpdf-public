@@ -580,10 +580,10 @@ export function WordPage() {
             <p>
               Ordinary Chinese and English DOCX documents, tables, embedded
               pictures, headers, footnotes and contents. Complex layouts may
-              change. Resolve tracked changes, comments and hidden content in
-              Word first. Password-protected files, macros, embedded files,
-              embedded fonts and externally linked content are not supported in
-              this first version.
+              change. Accept or reject tracked changes, remove comments, and
+              show or remove hidden text in Word first. Password-protected
+              files, macros, embedded files, embedded fonts and externally
+              linked content are not supported in this first version.
             </p>
           </details>
         </section>
