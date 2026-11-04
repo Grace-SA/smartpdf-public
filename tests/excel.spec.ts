@@ -151,6 +151,16 @@ for (const width of [320, 390, 1280]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    if (width < 900) {
+      const primary = page.getByRole("button", {
+        name: "Upload and generate PDF",
+        exact: true,
+      });
+      await expect(primary).toHaveCSS("position", "fixed");
+      const box = (await primary.boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(800);
+      expect(box.y + box.height).toBeLessThanOrEqual(900);
+    }
     await page.screenshot({
       path: info.outputPath(`excel-selected-${width}.png`),
       fullPage: true,
@@ -173,6 +183,24 @@ for (const width of [320, 390, 1280]) {
     await expect(
       page.getByRole("link", { name: "Download PDF", exact: true }),
     ).toBeVisible();
+    if (width < 900) {
+      await expect(
+        page.getByRole("link", { name: "Download PDF", exact: true }),
+      ).toHaveCSS("position", "fixed");
+      await page
+        .getByRole("button", { name: "Adjust pagination", exact: true })
+        .click();
+      await page.getByText("More page settings", { exact: true }).click();
+      await page
+        .getByLabel("Paper size", { exact: true })
+        .selectOption("Letter");
+      await expect(
+        page.getByRole("link", { name: "Download PDF", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Update PDF", exact: true }),
+      ).toHaveCSS("position", "fixed");
+    }
   });
 }
 test("empty selection blocks upload, and unsupported file / corrupt workbook can be replaced", async ({

@@ -616,6 +616,46 @@ export function ExcelPage() {
                   Settings have changed. Update the PDF before downloading.
                 </p>
               )}
+              <div className="word-actions">
+                <button
+                  className="secondary"
+                  onClick={() => void showPreview()}
+                  disabled={opening || dirty || !!preview}
+                >
+                  {opening ? "Opening preview…" : "Preview PDF"}
+                </button>
+                {!dirty && (
+                  <a
+                    className="word-download"
+                    href={url}
+                    download={result.name}
+                  >
+                    Download PDF
+                  </a>
+                )}
+                {!adjusting && (
+                  <button
+                    className="secondary"
+                    onClick={() => setAdjusting(true)}
+                  >
+                    Adjust pagination
+                  </button>
+                )}
+                {adjusting && (
+                  <button
+                    className="word-convert"
+                    disabled={
+                      busy ||
+                      !dirty ||
+                      !options.sheets.length ||
+                      !service?.available
+                    }
+                    onClick={() => void start()}
+                  >
+                    Update PDF
+                  </button>
+                )}
+              </div>
               <div
                 className={`excel-result-grid${adjusting ? " is-adjusting" : ""}`}
               >
@@ -657,46 +697,6 @@ export function ExcelPage() {
                       }}
                     />
                   </aside>
-                )}
-              </div>
-              <div className="word-actions">
-                <button
-                  className="secondary"
-                  onClick={() => void showPreview()}
-                  disabled={opening || dirty || !!preview}
-                >
-                  {opening ? "Opening preview…" : "Preview PDF"}
-                </button>
-                {!dirty && (
-                  <a
-                    className="word-download"
-                    href={url}
-                    download={result.name}
-                  >
-                    Download PDF
-                  </a>
-                )}
-                {!adjusting && (
-                  <button
-                    className="secondary"
-                    onClick={() => setAdjusting(true)}
-                  >
-                    Adjust pagination
-                  </button>
-                )}
-                {adjusting && (
-                  <button
-                    className="word-convert"
-                    disabled={
-                      busy ||
-                      !dirty ||
-                      !options.sheets.length ||
-                      !service?.available
-                    }
-                    onClick={() => void start()}
-                  >
-                    Update PDF
-                  </button>
                 )}
               </div>
             </div>

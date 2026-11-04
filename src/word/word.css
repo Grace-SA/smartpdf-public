@@ -279,6 +279,7 @@
   padding: 12px;
 }
 .excel-preview-scroll {
+  height: min(640px, 70vh);
   max-height: 640px;
   overflow: auto;
   background: #e8ecf1;
@@ -290,6 +291,29 @@
   min-height: 44px;
 }
 @media (max-width: 900px) {
+  .excel-result-grid.is-adjusting > aside:last-child {
+    grid-row: 2;
+  }
+  .excel-result-grid.is-adjusting > div {
+    grid-row: 3;
+  }
+  .excel-app:has(.word-download, .word-convert:not(:disabled)) {
+    padding-bottom: 84px;
+  }
+  .excel-app :is(button, input, select, a) {
+    scroll-margin-bottom: 96px;
+  }
+  .excel-app .word-download,
+  .excel-app .word-convert:not(:disabled) {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 20;
+    min-height: 48px;
+    text-align: center;
+    box-shadow: 0 3px 16px #17203333;
+  }
   .excel-result-grid,
   .excel-result-grid.is-adjusting {
     grid-template-columns: minmax(0, 1fr);
