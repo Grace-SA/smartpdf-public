@@ -1,10 +1,16 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 
-const manifest = JSON.parse(await readFile("dist/.vite/manifest.json", "utf8"));
+const outputDirectory = process.argv[2] || "dist";
+const manifest = JSON.parse(
+  await readFile(`${outputDirectory}/.vite/manifest.json`, "utf8"),
+);
 const entry = Object.values(manifest).find((item) => item.isEntry);
 if (!entry) throw new Error("Missing main build entry");
 const sources = {
+  ...(process.env.VITE_ENABLE_EXCEL === "true"
+    ? { excel: "src/excel/ExcelPage.tsx" }
+    : {}),
   word: "src/word/WordPage.tsx",
   ...(process.env.VITE_ENABLE_PROTECT === "true"
     ? { protect: "src/protect/ProtectPanel.tsx" }
@@ -49,7 +55,7 @@ const map = Object.fromEntries(
   }),
 );
 await writeFile(
-  `dist/module-map-${basename(entry.file, ".js")}.json`,
+  `${outputDirectory}/module-map-${basename(entry.file, ".js")}.json`,
   JSON.stringify(map),
 );
 console.log("Generated version-specific module retry map");

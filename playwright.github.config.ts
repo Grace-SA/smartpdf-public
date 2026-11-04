@@ -4,6 +4,7 @@ import base from "./playwright.m10-full.config";
 export default defineConfig({
   ...base,
   testMatch: [
+    "excel.spec.ts",
     "word.spec.ts",
     ...(base.testMatch as string[]),
     "grouped-navigation.spec.ts",

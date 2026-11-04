@@ -15,6 +15,8 @@ export const wordRuntimePaths = [
   "server/word/doctor.py",
   "server/word/core_build.py",
   "server/word/font_inventory.py",
+  "server/excel/preflight.py",
+  "config/excel-core.stirling-3.2.2.json",
   "infra/word/nginx.conf",
   "infra/word/origin.conf.template",
   "infra/word/core.Dockerfile",

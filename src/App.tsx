@@ -150,6 +150,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  excel: "Choose worksheets and convert an XLSX using cloud processing.",
   word: "Convert a DOCX using cloud processing.",
   protect: "Add an opening password. Keep your PDF on your device.",
   unlock: "Remove a known password. Keep your PDF on your device.",
@@ -344,8 +345,8 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
-      if (next === "word") {
-        window.location.assign(toolPaths.word);
+      if (next === "word" || next === "excel") {
+        window.location.assign(toolPaths[next]);
         return;
       }
       if (!reuse) resetTask();
@@ -1626,6 +1627,7 @@ export function App() {
                 title={
                   {
                     word: "Your PDF is ready",
+                    excel: "Your PDF is ready",
                     unlock: "Your unlocked PDF is ready",
                     protect: "Your protected PDF is ready",
                     numbers: "Your numbered PDF is ready",

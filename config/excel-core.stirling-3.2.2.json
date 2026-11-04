@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "stage": "local-acceptance-candidate",
+  "version": "3.2.2",
+  "flavor": "core",
+  "imageId": "sha256:a6bdc6c64f0f0287043f073cca79bcafd515cc9c5a6786c76a6c4deb2af9e6ee",
+  "baseImage": "stirlingtools/stirling-pdf-base:1.1.0@sha256:3bcc8e10d5319b7c0550cf41b96f6980e1552c974dc37aba462b74fa17c4b5e4",
+  "jar": {
+    "url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/download/v3.2.2/Stirling-PDF-server.jar",
+    "sha256": "370a4218624fa4b3cf5460c886f03de01bfcfd2d4893009202a81e53b5f3344d"
+  },
+  "isolation": "One disposable container per task, internal network, no public ports or host document mounts; shared bounded Office queue.",
+  "promotionPolicy": "Excel is disabled by default in the API and production frontend. Verify fonts, licenses, exact image and outputs on the target host before enabling. Never replace the approved Word image pin."
+}

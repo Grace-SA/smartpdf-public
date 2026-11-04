@@ -2,9 +2,22 @@ import { enabledTools, toolCatalog } from "../src/routes.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const origin = "https://smartpdf.com.au";
+const outputDirectory = process.argv[2] || "dist";
 const reviewProtect = process.env.VITE_ENABLE_PROTECT === "true";
-const publicTools = enabledTools(reviewProtect);
+const reviewExcel = process.env.VITE_ENABLE_EXCEL === "true";
+const publicTools = enabledTools(reviewProtect, reviewExcel);
 const pages = {
+  ...(reviewExcel
+    ? {
+        "excel-to-pdf": {
+          title: "Excel to PDF – XLSX Worksheets | Smart PDF",
+          description:
+            "Convert selected visible worksheets with cloud processing. Keep print areas and check your PDF before sharing.",
+          keywords: "excel to pdf, xlsx to pdf",
+          heading: "Convert Excel worksheets to PDF",
+        },
+      }
+    : {}),
   "word-to-pdf": {
     title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
     description:
@@ -120,7 +133,7 @@ const pages = {
 
 if (!reviewProtect) delete pages["protect-pdf"];
 
-const base = await readFile("dist/index.html", "utf8");
+const base = await readFile(`${outputDirectory}/index.html`, "utf8");
 
 const replaceTag = (html, pattern, replacement, label) => {
   if (!pattern.test(html)) {
@@ -230,7 +243,7 @@ for (const [slug, page] of Object.entries(pages)) {
       throw new Error(`SEO validation failed for ${path}: ${expected}`);
     }
   }
-  const folder = slug ? `dist/${slug}` : "dist";
+  const folder = slug ? `${outputDirectory}/${slug}` : outputDirectory;
   await mkdir(folder, { recursive: true });
   await writeFile(`${folder}/index.html`, html);
 }
@@ -246,7 +259,7 @@ const sitemapPages = [
   { path: "/privacy/", frequency: "yearly", priority: "0.3" },
 ];
 await writeFile(
-  "dist/sitemap.xml",
+  `${outputDirectory}/sitemap.xml`,
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapPages
     .map(
       (page) =>

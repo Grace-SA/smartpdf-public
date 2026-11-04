@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 export type Task = {
   id: string;
+  kind?: "word" | "excel";
   directory: string;
   state: string;
   owner: string;
@@ -10,6 +11,7 @@ export type Task = {
 export function checkPdf(file: string): Promise<{ pages: number }>;
 export function createWordService(options?: {
   root?: string;
+  enableExcel?: boolean;
   origin?: string;
   now?: () => number;
   execute?: (

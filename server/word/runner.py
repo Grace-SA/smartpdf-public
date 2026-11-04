@@ -29,7 +29,7 @@ def remove_verified(name, by_id=False):
     if remaining.stdout.strip():
         raise RuntimeError('Container cleanup could not be verified')
 
-def run(directory):
+def run(directory, kind='word'):
     directory = Path(directory).resolve()
     cancel = directory / 'cancel'
     name = 'smartpdf-word-' + uuid.uuid4().hex
@@ -59,7 +59,24 @@ def run(directory):
     watcher.start()
     try:
         emit(state='checking')
-        warnings = inspect_docx(directory / 'input.docx')
+        filename = 'input.docx'
+        mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        image = IMAGE
+        if kind == 'excel':
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('excel_preflight', Path(__file__).resolve().parents[1] / 'excel/preflight.py')
+            excel = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(excel)
+            try:
+                warnings = excel.prepare(directory / 'input.xlsx', directory / 'prepared.xlsx', json.loads((directory / 'options.json').read_text()))
+            except excel.Rejected as error:
+                raise Rejected(str(error)) from None
+            filename = 'prepared.xlsx'
+            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            # Separate reviewed local candidate; never change Word's runtime pin.
+            image = json.loads((Path(__file__).resolve().parents[2] / 'config/excel-core.stirling-3.2.2.json').read_text())['imageId']
+        else:
+            warnings = inspect_docx(directory / filename)
         emit(warnings=warnings)
         if cancel.exists():
             return
@@ -75,7 +92,7 @@ def run(directory):
                '--cap-drop', 'NET_RAW', '--tmpfs', '/tmp:rw,nosuid,nodev,size=384m',
                '-e', 'SECURITY_ENABLELOGIN=false', '-e', 'SYSTEM_DEFAULTLOCALE=en-US',
                '-e', 'TZ=UTC', '-e', 'JAVA_CUSTOM_OPTS=' + JAVA_OPTIONS,
-               '-e', 'SPRING_MAIN_LAZY_INITIALIZATION=true', IMAGE)
+               '-e', 'SPRING_MAIN_LAZY_INITIALIZATION=true', image)
         created = True
         if cancel.exists():
             return
@@ -98,9 +115,9 @@ def run(directory):
         emit(state='converting')
         phase = 'converting'
         boundary = uuid.uuid4().hex
-        data = (directory / 'input.docx').read_bytes()
-        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="document.docx"\r\n'
-                'Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + data + f'\r\n--{boundary}--\r\n'.encode()
+        data = (directory / filename).read_bytes()
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="{filename}"\r\n'
+                f'Content-Type: {mime}\r\n\r\n').encode() + data + f'\r\n--{boundary}--\r\n'.encode()
         request = urllib.request.Request(base + '/api/v1/convert/file/pdf', data=body,
             headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}, method='POST')
         with urllib.request.urlopen(request, timeout=90) as response:
@@ -137,4 +154,4 @@ if __name__ == '__main__':
         for container in result.stdout.decode().split():
             remove_verified(container, by_id=True)
     else:
-        sys.exit(run(sys.argv[1]))
+        sys.exit(run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else 'word'))

@@ -24,7 +24,7 @@ describe("public tool routes and search metadata", () => {
       expect(page.faq).toHaveLength(
         tool === "protect"
           ? 4
-          : tool === "numbers" || tool === "unlock"
+          : tool === "numbers" || tool === "unlock" || tool === "excel"
             ? 3
             : 2,
       );

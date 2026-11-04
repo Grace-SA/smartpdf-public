@@ -8,6 +8,13 @@ export const toolGroups = [
 
 // All public tool discovery surfaces share this catalogue.
 export const toolCatalog = {
+  excel: {
+    path: "/excel-to-pdf/",
+    title: "Excel to PDF",
+    label: "Excel to PDF",
+    summary: "Choose worksheets and convert an XLSX with cloud processing.",
+    group: "Convert PDF",
+  },
   word: {
     path: "/word-to-pdf/",
     title: "Word to PDF",
@@ -104,8 +111,15 @@ export const toolCatalog = {
 export type PublicTool = keyof typeof toolCatalog;
 export const publicTools = Object.keys(toolCatalog) as PublicTool[];
 // Protect source remains reviewable while its separate release acceptance is pending.
-export const enabledTools = (includeProtect = false): PublicTool[] =>
-  publicTools.filter((tool) => includeProtect || tool !== "protect");
+export const enabledTools = (
+  includeProtect = false,
+  includeExcel = false,
+): PublicTool[] =>
+  publicTools.filter(
+    (tool) =>
+      (includeProtect || tool !== "protect") &&
+      (includeExcel || tool !== "excel"),
+  );
 export const shortcutTools: PublicTool[] = ["combine", "split", "compress"];
 export const toolPaths = Object.fromEntries(
   publicTools.map((id) => [id, toolCatalog[id].path]),

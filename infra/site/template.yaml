@@ -281,7 +281,7 @@ Resources:
             "download_failure",
           ]);
           const tools = new Set([
-            "word",
+            "word", "excel",
             "combine",
             "split",
             "organize",
