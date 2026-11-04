@@ -175,6 +175,22 @@
   color: #62626e;
   font-size: 12px;
 }
+.word-local-check {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #dbe3ec;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow-wrap: anywhere;
+}
+.word-local-check p {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.word-local-check ul {
+  padding-left: 20px;
+  margin-bottom: 0;
+}
 .word-card .input-support {
   padding-top: 12px;
   border-top: 1px solid #e5e7eb;

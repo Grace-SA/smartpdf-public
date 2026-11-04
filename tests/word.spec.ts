@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
+import { docxFixture } from "./docx-fixture";
 
 async function mockService(page: Page, mode = "success") {
   const pdf = await PDFDocument.create();
@@ -76,7 +77,7 @@ async function mockService(page: Page, mode = "success") {
 async function select(
   page: Page,
   name = "Synthetic report.docx",
-  buffer = Buffer.from("synthetic test input"),
+  buffer = docxFixture(),
 ) {
   await page.locator("#word-file").setInputFiles({
     name,
@@ -133,15 +134,15 @@ test("dropping a document selects locally and changing it does not start an uplo
 }) => {
   const calls = await mockService(page);
   await page.goto("/word-to-pdf/");
-  const transfer = await page.evaluateHandle(() => {
+  const transfer = await page.evaluateHandle((bytes) => {
     const data = new DataTransfer();
     data.items.add(
-      new File(["synthetic"], "Dropped.docx", {
+      new File([new Uint8Array(bytes)], "Dropped.docx", {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       }),
     );
     return data;
-  });
+  }, Array.from(docxFixture()));
   await page
     .locator(".word-card")
     .dispatchEvent("dragover", { dataTransfer: transfer });
@@ -234,6 +235,42 @@ test("local file errors do not upload; rejected documents offer a clear next ste
     page.getByRole("button", { name: "Upload and convert" }),
   ).toBeEnabled();
 });
+test("local preflight refuses invalid or unresolved documents before any upload", async ({
+  page,
+}) => {
+  const calls = await mockService(page);
+  await page.goto("/word-to-pdf/");
+  await select(page, "Broken.docx", Buffer.from("not a package"));
+  await expect(page.getByRole("alert")).toContainText(
+    "valid, unencrypted DOCX",
+  );
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toBeDisabled();
+  await select(
+    page,
+    "Revisions.docx",
+    docxFixture("<w:p><w:ins><w:r><w:t>Inserted</w:t></w:r></w:ins></w:p>"),
+  );
+  await expect(page.getByRole("alert")).toContainText("tracked changes");
+  expect(calls.some((c) => c.startsWith("POST") || c.startsWith("PUT"))).toBe(
+    false,
+  );
+  await select(
+    page,
+    "Visible.docx",
+    docxFixture(
+      '<w:p><w:r><w:rPr><w:webHidden/><w:vanish w:val="false"/></w:rPr><w:t>Visible</w:t></w:r></w:p>',
+    ),
+  );
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toBeEnabled();
+  expect(calls.some((c) => c.startsWith("POST") || c.startsWith("PUT"))).toBe(
+    false,
+  );
+});
+
 test("queue full and disconnected service remain recoverable", async ({
   page,
 }) => {

@@ -7,6 +7,8 @@ import { ToolNavigation } from "../ToolNavigation";
 import { toolPaths } from "../routes";
 import { LeaveTaskDialog } from "../LeaveTaskDialog";
 import "./word.css";
+import { checkWordLocally } from "./preflight-service";
+import type { WordCheck } from "./preflight-core";
 
 type Job = {
   id: string;
@@ -49,6 +51,9 @@ export function WordPage() {
   const [opening, setOpening] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [connecting, setConnecting] = useState(true);
+  const [localCheck, setLocalCheck] = useState<WordCheck>();
+  const [checkingLocal, setCheckingLocal] = useState(false);
+  const checkController = useRef<AbortController | null>(null);
   const [destination, setDestination] = useState("");
   const leaving = useRef(false);
   const controller = useRef<AbortController | null>(null);
@@ -74,6 +79,7 @@ export function WordPage() {
     applySeo("word");
     mounted.current = true;
     const discard = () => {
+      checkController.current?.abort();
       controller.current?.abort();
       if (currentJob.current)
         void fetch(`/api/word/jobs/${currentJob.current}`, {
@@ -138,6 +144,9 @@ export function WordPage() {
     location.assign(destination);
   }
   function choose(files: File[]) {
+    checkController.current?.abort();
+    setLocalCheck(undefined);
+    setCheckingLocal(false);
     setError("");
     setFile(undefined);
     if (files.length !== 1 || !/\.docx$/i.test(files[0]?.name || "")) {
@@ -154,9 +163,34 @@ export function WordPage() {
     setJob(undefined);
     setResult(undefined);
     setUrl("");
+    const check = new AbortController();
+    checkController.current = check;
+    setCheckingLocal(true);
+    void checkWordLocally(files[0]!, check.signal)
+      .then((value) => {
+        if (mounted.current && !check.signal.aborted) setLocalCheck(value);
+      })
+      .catch((cause) => {
+        if (mounted.current && !check.signal.aborted)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Local checking failed. Choose the document again.",
+          );
+      })
+      .finally(() => {
+        if (mounted.current && !check.signal.aborted) setCheckingLocal(false);
+      });
   }
   async function start() {
-    if (!file || busy) return;
+    if (
+      !file ||
+      busy ||
+      checkingLocal ||
+      !localCheck ||
+      localCheck.issues.length
+    )
+      return;
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
@@ -305,6 +339,7 @@ export function WordPage() {
       }
       currentJob.current = undefined;
       setFile(undefined);
+      setLocalCheck(undefined);
       setJob({ id: "", state: "deleted", warnings: [] });
     } catch {
       setError(
@@ -475,6 +510,37 @@ export function WordPage() {
               )}
             </div>
           )}
+          {file && !result && !busy && (
+            <div className="word-local-check" aria-live="polite">
+              {checkingLocal ? (
+                <p role="status">
+                  Checking this document on your device… Nothing is being
+                  uploaded.
+                </p>
+              ) : localCheck ? (
+                <>
+                  <strong>
+                    {localCheck.issues.length
+                      ? "This document needs attention"
+                      : "Local checks passed"}
+                  </strong>
+                  {localCheck.issues.length > 0 && (
+                    <ul role="alert">
+                      {localCheck.issues.map((issue) => (
+                        <li key={issue.code}>{issue.message}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {!localCheck.issues.length && (
+                    <p>
+                      Your document is still on this device. The server will
+                      verify it again after you choose Upload and convert.
+                    </p>
+                  )}
+                </>
+              ) : null}
+            </div>
+          )}
           <div className="word-cloud-note" role="note">
             <strong>Cloud conversion</strong>
             <p>
@@ -549,7 +615,13 @@ export function WordPage() {
               <button
                 className="word-convert"
                 onClick={() => void start()}
-                disabled={!file || !service?.available}
+                disabled={
+                  !file ||
+                  !service?.available ||
+                  checkingLocal ||
+                  !localCheck ||
+                  localCheck.issues.length > 0
+                }
               >
                 Upload and convert
               </button>

@@ -210,7 +210,7 @@ test("Unlock processing and retry keep passwords out of requests, logs and stora
   const siteOrigin = new URL(page.url()).origin;
   expect(
     outbound.some((request) => {
-      const url = new URL(request.split(" ")[0]);
+      const url = new URL(request.split(" ")[0]!);
       return (
         ["http:", "https:"].includes(url.protocol) && url.origin !== siteOrigin
       );
