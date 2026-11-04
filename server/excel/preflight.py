@@ -4,14 +4,48 @@ import io
 import posixpath
 import re
 import stat
+import struct
 import time
 import zipfile
+from table_styles import materialize
 from xml.etree import ElementTree as ET
 
 S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 P = 'http://schemas.openxmlformats.org/package/2006/relationships'
 T = 'http://schemas.openxmlformats.org/package/2006/content-types'
+C = 'http://schemas.openxmlformats.org/drawingml/2006/chart'
+CHARTS = {'barChart', 'lineChart', 'areaChart', 'pieChart', 'doughnutChart', 'scatterChart',
+          'bar3DChart', 'line3DChart', 'area3DChart', 'pie3DChart', 'radarChart', 'bubbleChart', 'stockChart', 'surfaceChart', 'surface3DChart', 'ofPieChart'}
+
+def image_pixels(data, suffix):
+    """Bound embedded raster decoding before handing bytes to the isolated renderer."""
+    width = height = 0
+    if suffix == 'png' and data.startswith(b'\x89PNG\r\n\x1a\n') and len(data) >= 33 and data[12:16] == b'IHDR':
+        if data[8:12] != b'\x00\x00\x00\r' or data[-8:] != b'IEND\xaeB`\x82':
+            reject('This workbook contains a damaged PNG image.')
+        width, height = struct.unpack('>II', data[16:24])
+    elif suffix in {'jpg', 'jpeg'} and data.startswith(b'\xff\xd8') and data.endswith(b'\xff\xd9'):
+        offset = 2
+        while offset < len(data):
+            if data[offset] != 255: break
+            while offset < len(data) and data[offset] == 255: offset += 1
+            if offset >= len(data): break
+            marker = data[offset]; offset += 1
+            if marker in {0xD9, 0xDA}: break
+            if marker in {0x01, *range(0xD0, 0xD9)}: continue
+            if offset + 2 > len(data): break
+            length = int.from_bytes(data[offset:offset + 2], 'big')
+            if length < 2 or offset + length > len(data): break
+            if marker in {0xC0, 0xC1, 0xC2} and length >= 8:
+                height, width = struct.unpack('>HH', data[offset + 3:offset + 7])
+                break
+            offset += length
+    if not width or not height:
+        reject('This workbook contains a damaged or unsupported picture. Use PNG or JPEG images.')
+    if width > 20000 or height > 20000 or width * height > 20000000:
+        reject('A workbook picture exceeds the 20 megapixel processing limit.')
+    return width * height
 
 class Rejected(ValueError):
     pass
@@ -27,6 +61,8 @@ def known_extension(element):
         '{05A4C25C-085E-4340-85A3-A5531E510DB2}': {'themeFamily'},
         '{EB79DEF2-80B8-43E5-95BD-54CBDDF9020C}': {'slicerStyles'},
         '{9260A510-F301-46A8-8635-F512D64BE5F5}': {'timelineStyles'},
+        '{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}': {'creationId'},
+        '{C3380CC4-5D6E-409C-BE32-E72D297353CC}': {'uniqueId'},
     }
     namespaces = {
         'workbookPr': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main',
@@ -36,6 +72,8 @@ def known_extension(element):
         'themeFamily': 'http://schemas.microsoft.com/office/thememl/2012/main',
         'slicerStyles': 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main',
         'timelineStyles': 'http://schemas.microsoft.com/office/spreadsheetml/2010/11/main',
+        'creationId': 'http://schemas.microsoft.com/office/drawing/2014/main',
+        'uniqueId': 'http://schemas.microsoft.com/office/drawing/2014/chart',
     }
     if not len(element): return False
     for child in element:
@@ -88,7 +126,7 @@ def prepare(source, output, options):
                 reject('Unsupported workbook package.')
             trees = {}
             contents = {}
-            total = nodes = cells = 0
+            total = nodes = cells = pixels = pictures = charts = 0
             for entry in entries:
                 name = entry.filename
                 if time.monotonic() - start > 5:
@@ -111,7 +149,15 @@ def prepare(source, output, options):
                     if re.fullmatch(r'xl/printerSettings/printerSettings\d+\.bin', name) and len(data) <= 1024**2:
                         warnings.add('Printer-specific device settings are omitted. Check paper size and pagination.')
                         continue
-                    reject('Embedded pictures and binary workbook content are not supported yet. Export from Excel instead.')
+                    image = re.fullmatch(r'xl/media/[^/]+\.(png|jpg|jpeg)', name, re.I)
+                    if image:
+                        pixels += image_pixels(data, image.group(1).lower())
+                        pictures += 1
+                        if pictures > 200 or pixels > 80000000:
+                            reject('Workbook pictures exceed the image processing limit.')
+                        warnings.add('Check picture placement and appearance in the PDF preview.')
+                        continue
+                    reject('This workbook contains unsupported binary content. Embedded pictures must use PNG or JPEG.')
                 if len(data) > 20 * 1024**2 or re.search(br'<!\s*(DOCTYPE|ENTITY)', data.replace(b'\x00', b''), re.I):
                     reject('Unsupported workbook XML.')
                 tree = ET.fromstring(data)
@@ -132,14 +178,25 @@ def prepare(source, output, options):
                         reject('Workbook revision content is not supported.')
                     if tag == 'AlternateContent':
                         leaves = [n for n in element.iter() if n is not element]
-                        if not leaves or any(n.tag.rsplit('}', 1)[-1] not in {'Choice', 'absPath'} for n in leaves):
+                        wrappers = {'{http://schemas.openxmlformats.org/markup-compatibility/2006}Choice', '{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback'}
+                        chart_styles = {f'{{{C}}}style', '{http://schemas.microsoft.com/office/drawing/2007/8/2/chart}style'}
+                        if not leaves or any(n.tag not in wrappers and n.tag != '{http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac}absPath' and not (tree.tag == f'{{{C}}}chartSpace' and n.tag in chart_styles and not len(n) and re.fullmatch(r'\d{1,4}', n.get('val', ''))) for n in leaves):
                             reject('Alternative workbook content is not supported.')
                     if tag in {'oleObject', 'control', 'webPublishItems', 'externalReference', 'sheetProtection', 'workbookProtection'}:
                         reject('This workbook uses protected or unsupported features. Export it from Excel instead.')
-                    if tag == 'definedName' and element.get('name') not in {'_xlnm.Print_Area', '_xlnm.Print_Titles'}:
+                    if tag == 'definedName' and element.get('name') not in {'_xlnm.Print_Area', '_xlnm.Print_Titles', '_xlnm._FilterDatabase'}:
                         reject('Custom named ranges and formulas are not supported yet. Export from Excel instead.')
-                    if tag in {'chart', 'conditionalFormatting', 'drawing', 'autoFilter', 'tableParts'}:
-                        reject('Charts, pictures, conditional formatting and filtered tables are not supported yet. Export from Excel instead.')
+                    if element.tag == f'{{{C}}}chart' and tree.tag == f'{{{C}}}chartSpace':
+                        charts += 1
+                        if charts > 100: reject('Choose a workbook with at most 100 charts.')
+                        plot = element.find(f'{{{C}}}plotArea')
+                        if plot is None or not any(n.tag == f'{{{C}}}{kind}' for n in plot for kind in CHARTS):
+                            reject('This chart type is not supported yet. Use a standard Excel chart.')
+                        warnings.add('Check chart labels, values and layout in the PDF preview.')
+                    if tag == 'conditionalFormatting':
+                        warnings.add('Conditional formatting may look different. Check colours, data bars and icons in the PDF preview.')
+                    if tag in {'autoFilter', 'tableParts'}:
+                        warnings.add('Saved filter and hidden-row settings are retained. Check the visible rows in the PDF preview.')
                     if tag == 'Relationship':
                         target = element.get('Target', '')
                         kind = element.get('Type', '').rsplit('/', 1)[-1]
@@ -153,7 +210,7 @@ def prepare(source, output, options):
                         cells += 1
                         if cells > 200000:
                             reject('Choose a workbook with at most 200,000 cells.')
-                    if tag == 'f':
+                    if tag in {'f', 'formula', 'calculatedColumnFormula', 'totalsRowFormula'}:
                         formula = element.text or ''
                         if element.attrib or not formula or re.search(r'[\[\]|]|://|\b(?:DDE|DDEAUTO|EXEC|REGISTER|CALL)\b|\bfile:|\b(?:NOW|TODAY|RAND|RANDBETWEEN|INDIRECT|OFFSET|WEBSERVICE|HYPERLINK)\s*\(', formula, re.I):
                             reject('This workbook has unsupported or volatile formulas. Save a values-only copy in Excel first.')
@@ -178,6 +235,18 @@ def prepare(source, output, options):
                 reject('Only standard XLSX workbooks are supported.')
             if any(re.search(r'macroenabled|vbaproject|activex|externalLink', e.get('ContentType', ''), re.I) for e in types):
                 reject('Active workbook content is not supported.')
+            # Verify every embedded picture/chart/table dependency, not just sheet links.
+            # Missing targets otherwise can silently disappear during Office import.
+            for name, tree in trees.items():
+                if not name.endswith('.rels'): continue
+                parent = posixpath.dirname(posixpath.dirname(name)) if name != '_rels/.rels' else ''
+                for rel in tree:
+                    if rel.get('TargetMode', '').lower() == 'external': continue
+                    target = rel.get('Target', '')
+                    if target.startswith('#') and rel.get('Type', '').endswith('/hyperlink'): continue
+                    resolved = posixpath.normpath(target.lstrip('/') if target.startswith('/') else posixpath.join(parent, target))
+                    if resolved not in names or resolved.startswith('../'):
+                        reject('This workbook has a missing or invalid embedded content relationship.')
             roots = [e for e in root_rels if e.get('Type', '').endswith('/officeDocument')]
             if len(roots) != 1 or roots[0].get('Target', '').lstrip('/') != 'xl/workbook.xml':
                 reject('Invalid workbook relationship.')
@@ -224,6 +293,22 @@ def prepare(source, output, options):
                 tree = trees.get(target)
                 if tree is None or tree.tag != f'{{{S}}}worksheet':
                     reject('Invalid worksheet.')
+                table_parts = tree.find(f'{{{S}}}tableParts')
+                if index in selected and table_parts is not None:
+                    sheet_rels = trees.get(posixpath.join(posixpath.dirname(target), '_rels', posixpath.basename(target) + '.rels'))
+                    table_targets = {r.get('Id'): posixpath.normpath(posixpath.join(posixpath.dirname(target), r.get('Target', ''))) for r in sheet_rels or [] if r.get('Type', '').endswith('/table')}
+                    tables = []
+                    for part in table_parts:
+                        table = trees.get(table_targets.get(part.get(f'{{{R}}}id'), ''))
+                        if table is None or table.tag != f'{{{S}}}table': reject('Invalid table relationship.')
+                        tables.append(table)
+                    style_tree = trees.get('xl/styles.xml')
+                    if style_tree is None: reject('Workbook table styles are missing.')
+                    try:
+                        materialize(style_tree, tree, tables)
+                    except ValueError as error:
+                        reject(str(error))
+                    changed.update({target, 'xl/styles.xml'})
                 if printer_parts:
                     for page in tree.findall(f'{{{S}}}pageSetup'):
                         page.attrib.pop(f'{{{R}}}id', None)

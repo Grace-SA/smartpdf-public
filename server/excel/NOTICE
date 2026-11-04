@@ -1,0 +1,7 @@
+table-styles.xml contains the 60 TableStyle definitions (not PivotStyle definitions)
+from Apache POI's presetTableStyles.xml, with whitespace normalized.
+Source revision: 338882ac8898df5c13a7d15f533204c5dd8607d6
+https://github.com/apache/poi/blob/338882ac8898df5c13a7d15f533204c5dd8607d6/poi-ooxml/src/main/resources/org/apache/poi/xssf/usermodel/presetTableStyles.xml
+Copyright The Apache Software Foundation. Licensed under the Apache License 2.0;
+see LICENSE-APACHE-2.0.txt. Apache POI is a project of the Apache Software Foundation.
+The rendering adapter is Smart PDF code, not an Apache POI implementation.

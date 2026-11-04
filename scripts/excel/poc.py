@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'server/excel'))
 from preflight import prepare, Rejected
 
-IMAGE = 'sha256:a6bdc6c64f0f0287043f073cca79bcafd515cc9c5a6786c76a6c4deb2af9e6ee'
+IMAGE = json.loads((ROOT / 'config/excel-core.stirling-3.2.2.json').read_text())['imageId']
 
 def main(root, only=None):
     root = Path(root)
@@ -51,7 +51,7 @@ def main(root, only=None):
                 continue
             if case.get('expectedReject'): raise RuntimeError('Expected refusal did not happen')
             boundary = uuid.uuid4().hex
-            body = (f'--{boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="document.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n').encode() + prepared.read_bytes() + f'\r\n--{boundary}--\r\n'.encode()
+            body = (f'--{boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="document.xlsx"\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n').encode() + prepared.read_bytes() + (f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="useStirlingOfficeConvert"\r\n\r\nfalse\r\n--{boundary}--\r\n').encode()
             request = urllib.request.Request(base + '/api/v1/convert/file/pdf', body, {'Content-Type': 'multipart/form-data; boundary=' + boundary}, method='POST')
             start = time.monotonic()
             with urllib.request.urlopen(request, timeout=90) as response:

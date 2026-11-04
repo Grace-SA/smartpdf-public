@@ -741,11 +741,12 @@ export function ExcelPage() {
             <p>
               Ordinary XLSX workbooks with up to 50 worksheets and 200,000
               cells. Only selected visible sheets are exported. Existing print
-              areas are kept. Common cached formulas may be recalculated.
-              Charts, pictures, conditional formatting, filtered tables, named
-              ranges, macros, external data, protected files and advanced
-              formulas are not supported yet. Export these workbooks from Excel
-              instead.
+              areas are kept. Common cached formulas may be recalculated. Common
+              charts, embedded PNG/JPEG pictures, common conditional formatting
+              and filtered tables are supported. Check their layout, colours and
+              visible rows in the PDF preview. Named ranges, macros, external
+              data, protected files, newer chart types and advanced formulas may
+              require exporting from Excel instead.
             </p>
           </details>
         </section>

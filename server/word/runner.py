@@ -17,6 +17,15 @@ MEMORY_MIB = 2560
 # Leave memory for LibreOffice and metaspace within the container's fixed ceiling.
 JAVA_OPTIONS = '-Xms256m -Xmx1280m -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=2'
 
+def load_excel_preflight():
+    import importlib.util
+    excel_directory = Path(__file__).resolve().parents[1] / 'excel'
+    sys.path.insert(0, str(excel_directory))
+    spec = importlib.util.spec_from_file_location('excel_preflight', excel_directory / 'preflight.py')
+    excel = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(excel)
+    return excel
+
 def emit(**value):
     print(json.dumps(value), flush=True)
 
@@ -63,10 +72,7 @@ def run(directory, kind='word'):
         mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         image = IMAGE
         if kind == 'excel':
-            import importlib.util
-            spec = importlib.util.spec_from_file_location('excel_preflight', Path(__file__).resolve().parents[1] / 'excel/preflight.py')
-            excel = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(excel)
+            excel = load_excel_preflight()
             try:
                 warnings = excel.prepare(directory / 'input.xlsx', directory / 'prepared.xlsx', json.loads((directory / 'options.json').read_text()))
             except excel.Rejected as error:
@@ -117,7 +123,12 @@ def run(directory, kind='word'):
         boundary = uuid.uuid4().hex
         data = (directory / filename).read_bytes()
         body = (f'--{boundary}\r\nContent-Disposition: form-data; name="fileInput"; filename="{filename}"\r\n'
-                f'Content-Type: {mime}\r\n\r\n').encode() + data + f'\r\n--{boundary}--\r\n'.encode()
+                f'Content-Type: {mime}\r\n\r\n').encode() + data
+        if kind == 'excel':
+            # 3.2.2 otherwise may choose the in-process converter, which drops charts.
+            # Pin the Excel rendering path explicitly; leave Word's approved path alone.
+            body += (f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="useStirlingOfficeConvert"\r\n\r\nfalse').encode()
+        body += f'\r\n--{boundary}--\r\n'.encode()
         request = urllib.request.Request(base + '/api/v1/convert/file/pdf', data=body,
             headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}, method='POST')
         with urllib.request.urlopen(request, timeout=90) as response:
