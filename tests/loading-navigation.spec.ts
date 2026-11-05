@@ -24,6 +24,51 @@ const localTools = tools.filter(
   ([path]) => !cloudTools.some(([cloud]) => path === cloud),
 );
 
+test("cloud navigation stops pending local workers before document exit", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    const live = new Set<Worker>();
+    window.Worker = class extends NativeWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        live.add(this);
+        // Hold the real worker's ready packet to exercise an in-flight boot.
+        this.addEventListener(
+          "message",
+          (event) => {
+            if (event.data?.ready === true) event.stopImmediatePropagation();
+          },
+          { capture: true },
+        );
+        document.documentElement.setAttribute("data-audit-worker", "pending");
+      }
+      terminate() {
+        live.delete(this);
+        super.terminate();
+      }
+    };
+    window.addEventListener("pagehide", () =>
+      sessionStorage.setItem("synthetic-worker-exit", String(live.size)),
+    );
+  });
+  await page.goto("/merge-pdf/");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-audit-worker",
+    "pending",
+  );
+  await expect(page.locator("#combine-files")).toBeEnabled();
+  await selectToolPath(page, "powerpoint-to-pdf");
+  await expect(page.locator("#ppt-file")).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("synthetic-worker-exit")),
+  ).toBe("0");
+  expect(errors).toEqual([]);
+});
+
 async function checkPicker(page: Page, id: string) {
   const input = page.locator(`#${id}`);
   await expect(input).toBeVisible();
@@ -69,13 +114,18 @@ for (const width of [390, 1280]) {
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    let phase = "opening cloud page";
+    page.on("pageerror", (error) =>
+      errors.push(`${phase}: ${error.stack || error.message}`),
+    );
     for (const [cloudPath, cloudPicker] of cloudTools) {
       await page.goto(`/${cloudPath}/`);
       for (const [path, id] of localTools) {
+        phase = `${cloudPath} -> ${path}`;
         await navigate(page, path);
         await expect(page).toHaveURL(new RegExp(`/${path}/$`));
         await checkPicker(page, id);
+        phase = `${path} -> ${cloudPath}`;
         await navigate(page, cloudPath);
         await expect(page).toHaveURL(new RegExp(`/${cloudPath}/$`));
         await checkPicker(page, cloudPicker);

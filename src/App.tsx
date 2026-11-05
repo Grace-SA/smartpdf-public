@@ -217,6 +217,7 @@ export function App() {
   const [downloadNotice, setDownloadNotice] = useState<DownloadNotice>(null);
   const engine = useRef<Engine | null>(null);
   const enginePreparation = useRef<Promise<void>>(Promise.resolve());
+  const resourceController = useRef<AbortController | null>(null);
   const processingReady = useRef(!initialTool);
   const queuedInput = useRef<File | null>(null);
   const [waitingForResources, setWaitingForResources] = useState(false);
@@ -346,6 +347,9 @@ export function App() {
     if (job.current || photoBusy || packing) return;
     guard(() => {
       if (next === "word" || next === "ppt") {
+        // React cleanup does not run when replacing this document. Stop pending
+        // blob workers while their document and error handlers still exist.
+        resourceController.current?.abort();
         window.location.assign(toolPaths[next]);
         return;
       }
@@ -581,7 +585,13 @@ export function App() {
   useEffect(() => {
     if (tool === "read") return;
     const controller = new AbortController();
+    resourceController.current = controller;
     let mounted = true;
+    const leavingDocument = () => {
+      mounted = false;
+      controller.abort();
+    };
+    window.addEventListener("pagehide", leavingDocument);
     let disposeCompression = () => {};
     let timeout = 0;
     const timedOut = new Promise<never>((_, reject) => {
@@ -782,8 +792,10 @@ export function App() {
     };
     void initialize();
     return () => {
-      mounted = false;
-      controller.abort();
+      leavingDocument();
+      window.removeEventListener("pagehide", leavingDocument);
+      if (resourceController.current === controller)
+        resourceController.current = null;
       window.clearTimeout(timeout);
       if (!engineReady.current) {
         engine.current?.dispose();
@@ -794,15 +806,20 @@ export function App() {
   }, [tool, retry]);
 
   const engineReady = useRef(false);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const restore = (event: PageTransitionEvent) => {
+      // Cancelled workers cannot be reused after a cross-document BFCache restore.
+      if (event.persisted) location.reload();
+    };
+    window.addEventListener("pageshow", restore);
+    return () => {
+      window.removeEventListener("pageshow", restore);
       job.current?.abort();
       void active.current?.dispose();
       engine.current?.dispose();
       engineReady.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   function clearCanvas() {
     const canvas = host.current?.querySelector("canvas");
