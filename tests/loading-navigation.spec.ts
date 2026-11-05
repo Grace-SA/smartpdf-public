@@ -8,14 +8,21 @@ const tools = publicTools.map(
       toolCatalog[tool].path.replace(/^\//, "").replace(/\/$/, ""),
       tool === "word"
         ? "word-file"
-        : tool === "combine"
-          ? "combine-files"
-          : tool === "photos"
-            ? "photo-files"
-            : "pdf-file",
+        : tool === "ppt"
+          ? "ppt-file"
+          : tool === "combine"
+            ? "combine-files"
+            : tool === "photos"
+              ? "photo-files"
+              : "pdf-file",
     ] as const,
 );
-const localTools = tools.filter(([path]) => path !== "word-to-pdf");
+const cloudTools = tools.filter(([path]) =>
+  ["word-to-pdf", "powerpoint-to-pdf"].includes(path),
+);
+const localTools = tools.filter(
+  ([path]) => !cloudTools.some(([cloud]) => path === cloud),
+);
 
 async function checkPicker(page: Page, id: string) {
   const input = page.locator(`#${id}`);
@@ -57,20 +64,22 @@ for (const width of [390, 1280]) {
     expect(errors).toEqual([]);
   });
 
-  test(`${width}: every local tool exchanges a working picker with Word`, async ({
+  test(`${width}: every local tool exchanges a working picker with cloud converters`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 844 });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto("/word-to-pdf/");
-    for (const [path, id] of localTools) {
-      await navigate(page, path);
-      await expect(page).toHaveURL(new RegExp(`/${path}/$`));
-      await checkPicker(page, id);
-      await navigate(page, "word-to-pdf");
-      await expect(page).toHaveURL(/\/word-to-pdf\/$/);
-      await checkPicker(page, "word-file");
+    for (const [cloudPath, cloudPicker] of cloudTools) {
+      await page.goto(`/${cloudPath}/`);
+      for (const [path, id] of localTools) {
+        await navigate(page, path);
+        await expect(page).toHaveURL(new RegExp(`/${path}/$`));
+        await checkPicker(page, id);
+        await navigate(page, cloudPath);
+        await expect(page).toHaveURL(new RegExp(`/${cloudPath}/$`));
+        await checkPicker(page, cloudPicker);
+      }
     }
     await page.getByText("← All tools", { exact: true }).tap();
     await expect(page.locator(".tool-home")).toBeVisible();
@@ -116,8 +125,8 @@ test("rapid navigation while cold resources are delayed leaves only the latest t
 test("browser back and forward restore clean tool pickers without stale overlays", async ({
   page,
 }) => {
-  // These tools share the local document. Word intentionally uses a separate
-  // cloud-conversion document; its cross-document history is tested below.
+  // Local PDF tools share a document. Word and PowerPoint intentionally use
+  // separate conversion pages; both cross-document histories are tested below.
   await page.goto("/");
   await page.locator("html").evaluate((element) => {
     element.setAttribute("data-audit-document", "history-navigation");
@@ -155,22 +164,24 @@ test("browser back and forward restore clean tool pickers without stale overlays
   }
 });
 
-test("Word cloud page and local tools restore working pickers across document history", async ({
-  page,
-}) => {
-  await page.goto("/merge-pdf/");
-  await navigate(page, "word-to-pdf");
-  await expect(page).toHaveURL(/\/word-to-pdf\/$/);
-  await checkPicker(page, "word-file");
-  await navigate(page, "unlock-pdf");
-  await checkPicker(page, "pdf-file");
-  await page.goBack();
-  await expect(page).toHaveURL(/\/word-to-pdf\/$/);
-  await checkPicker(page, "word-file");
-  await page.goForward();
-  await expect(page).toHaveURL(/\/unlock-pdf\/$/);
-  await checkPicker(page, "pdf-file");
-});
+for (const [cloudPath, cloudPicker] of cloudTools) {
+  test(`${cloudPath}: cloud page and local tools restore working pickers across document history`, async ({
+    page,
+  }) => {
+    await page.goto("/merge-pdf/");
+    await navigate(page, cloudPath);
+    await expect(page).toHaveURL(new RegExp(`/${cloudPath}/$`));
+    await checkPicker(page, cloudPicker);
+    await navigate(page, "unlock-pdf");
+    await checkPicker(page, "pdf-file");
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/${cloudPath}/$`));
+    await checkPicker(page, cloudPicker);
+    await page.goForward();
+    await expect(page).toHaveURL(/\/unlock-pdf\/$/);
+    await checkPicker(page, "pdf-file");
+  });
+}
 
 test("back from a completed task returns home and forward opens a fresh picker without reloading", async ({
   page,
