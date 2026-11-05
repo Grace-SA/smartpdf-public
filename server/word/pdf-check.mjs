@@ -3,13 +3,13 @@ import { readFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
 
 try {
-  const bytes = await readFile(workerData);
+  const bytes = await readFile(workerData.file);
   if (bytes.length > 30 * 1024 ** 2) throw new Error("limit");
   const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
   const pages = pdf.getPages();
   if (
     !pages.length ||
-    pages.length > 200 ||
+    pages.length > workerData.maxPages ||
     pages.some((p) => {
       const { width, height } = p.getSize();
       return (

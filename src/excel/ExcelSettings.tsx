@@ -89,10 +89,19 @@ export function ExcelSettings({
           }
         >
           <option value="keep">Keep original print settings</option>
+          <option value="auto">Automatic layout for unconfigured tables</option>
           <option value="width">Fit all columns to page width</option>
           <option value="page">Fit whole sheet on one page</option>
         </select>
       </label>
+      {value.scale === "auto" && (
+        <p>
+          Keeps saved page settings and print areas. Unconfigured tables use A4
+          with a readable scale; wide tables can span pages horizontally. Simple
+          tables repeat their first row; wide tables with unique row labels also
+          repeat the first column. Cell widths and values stay the same.
+        </p>
+      )}
       {value.scale === "width" && (
         <p>
           Rows can continue onto more pages. Check that the text remains

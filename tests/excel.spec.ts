@@ -31,6 +31,9 @@ test.beforeAll(() => {
 async function mock(page: Page, mode = "success") {
   const pdf = await PDFDocument.create();
   pdf.addPage();
+  if (mode === "large")
+    for (let i = 2; i <= 500; i++)
+      pdf.addPage().drawText(`Synthetic large page ${i}`);
   if (mode === "preview") {
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     for (let i = 0; i < 5; i++) {
@@ -96,7 +99,7 @@ async function mock(page: Page, mode = "success") {
           : mode === "reject"
             ? "failed"
             : "succeeded",
-      pages: mode === "preview" ? 6 : 1,
+      pages: mode === "large" ? 500 : mode === "preview" ? 6 : 1,
       warnings: ["Check totals and print areas."],
       error:
         mode === "reject"
@@ -112,6 +115,57 @@ async function choose(page: Page, file = "selection.xlsx") {
     page.getByRole("group", { name: "Worksheets and page layout" }),
   ).toBeVisible();
 }
+test("500-page Excel output previews and jumps to the last page without widening other tools", async ({
+  page,
+}) => {
+  await mock(page, "large");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/excel-to-pdf/");
+  await choose(page);
+  await page
+    .getByRole("button", { name: "Upload and generate PDF", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Your PDF is ready", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.excel-preview canvas[aria-label="PDF preview, page 1"]'),
+  ).toBeVisible();
+  await page.getByLabel("Page number", { exact: true }).fill("500");
+  await page.getByRole("button", { name: "Go to page", exact: true }).click();
+  const canvas = page.locator(
+    '.excel-preview canvas[aria-label="PDF preview, page 500"]',
+  );
+  await expect(canvas).toBeVisible();
+  await expect(
+    page.getByText("Page 500 of 500", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Next page", exact: true }),
+  ).toBeDisabled();
+  expect(
+    await canvas.evaluate((element) => {
+      const c = element as HTMLCanvasElement;
+      const pixels = c
+        .getContext("2d")!
+        .getImageData(0, 0, c.width, c.height).data;
+      for (let i = 0; i < pixels.length; i += 4)
+        if (
+          pixels[i]! < 180 &&
+          pixels[i + 1]! < 180 &&
+          pixels[i + 2]! < 180 &&
+          pixels[i + 3]! > 0
+        )
+          return true;
+      return false;
+    }),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
 for (const width of [320, 390, 1280]) {
   test(`${width}: local selection, hidden sheets, settings and explicit upload`, async ({
     page,
@@ -146,7 +200,13 @@ for (const width of [320, 390, 1280]) {
     expect(calls.filter((call) => call.method !== "GET")).toEqual([]);
     await page.getByLabel("Other", { exact: true }).uncheck();
     await page.getByText("More page settings", { exact: true }).click();
-    await page.getByLabel("Scaling", { exact: true }).selectOption("width");
+    const scale = width === 1280 ? "auto" : "width";
+    await expect(page.getByLabel("Scaling", { exact: true })).toHaveValue(
+      "keep",
+    );
+    await page.getByLabel("Scaling", { exact: true }).selectOption(scale);
+    if (scale === "auto")
+      await expect(page.getByText(/Unconfigured tables use A4/)).toBeVisible();
     await page
       .getByLabel("Orientation", { exact: true })
       .selectOption("landscape");
@@ -180,7 +240,7 @@ for (const width of [320, 390, 1280]) {
       sheets: [0],
       orientation: "landscape",
       paper: "keep",
-      scale: "width",
+      scale,
     });
     const close = page.getByRole("button", { name: /Close preview/i });
     if (await close.count()) await close.click();

@@ -49,7 +49,7 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
       );
     }, 30000);
     void engine
-      .open(file, abort.signal, setStatus)
+      .open(file, abort.signal, setStatus, "excel")
       .then((value) => {
         clearTimeout(timer);
         if (abort.signal.aborted) {
@@ -153,6 +153,36 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
         <span aria-live="polite">
           Page {page} of {document?.doc.numPages ?? "…"}
         </span>
+        {document && (
+          <form
+            className="excel-page-jump"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const input = event.currentTarget.elements.namedItem(
+                "page",
+              ) as HTMLInputElement;
+              if (input.checkValidity()) setPage(input.valueAsNumber);
+            }}
+          >
+            <label>
+              Page{" "}
+              <input
+                key={page}
+                aria-label="Page number"
+                name="page"
+                type="number"
+                min="1"
+                max={document.doc.numPages}
+                step="1"
+                defaultValue={page}
+                required
+              />
+            </label>
+            <button className="secondary" type="submit">
+              Go to page
+            </button>
+          </form>
+        )}
         <button
           className="secondary"
           disabled={!document || page >= document.doc.numPages}

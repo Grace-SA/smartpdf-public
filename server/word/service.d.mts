@@ -8,7 +8,10 @@ export type Task = {
   expiresAt: number;
   error?: string;
 };
-export function checkPdf(file: string): Promise<{ pages: number }>;
+export function checkPdf(
+  file: string,
+  kind?: "word" | "excel",
+): Promise<{ pages: number }>;
 export function createWordService(options?: {
   root?: string;
   enableExcel?: boolean;
@@ -18,7 +21,10 @@ export function createWordService(options?: {
     job: Task,
     update: (value: { state?: string; warnings?: string[] }) => void,
   ) => Promise<void>;
-  validate?: (file: string) => Promise<{ pages: number }>;
+  validate?: (
+    file: string,
+    kind?: "word" | "excel",
+  ) => Promise<{ pages: number }>;
 }): Promise<{
   server: Server;
   jobs: Map<string, Task>;

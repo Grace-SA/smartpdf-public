@@ -70,6 +70,74 @@ class Inspection(unittest.TestCase):
     def test_page_scale_warns(self):
         self.assertTrue(any('very small' in w for w in self.run_prepare(scale='page')))
 
+    def test_automatic_layout_preserves_saved_page_setup_and_print_area(self):
+        self.run_prepare(scale='auto')
+        with zipfile.ZipFile(self.output) as package:
+            setup = ET.fromstring(package.read('xl/worksheets/sheet1.xml')).find(f'{{{S}}}pageSetup')
+            self.assertEqual(setup.attrib, {'paperSize': '9', 'orientation': 'portrait'})
+        self.parts['xl/worksheets/sheet1.xml'] = self.parts['xl/worksheets/sheet1.xml'].replace('<pageSetup paperSize="9" orientation="portrait"/>', '')
+        self.parts['xl/workbook.xml'] = self.parts['xl/workbook.xml'].replace('</workbook>', '<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">Report!$A$1:$C$5</definedName></definedNames></workbook>')
+        self.rewrite()
+        self.run_prepare(scale='auto')
+        with zipfile.ZipFile(self.output) as package:
+            self.assertIsNone(ET.fromstring(package.read('xl/worksheets/sheet1.xml')).find(f'{{{S}}}pageSetup'))
+            self.assertIn(b'$A$1:$C$5', package.read('xl/workbook.xml'))
+        self.parts['xl/workbook.xml'] = self.parts['xl/workbook.xml'].replace('<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">Report!$A$1:$C$5</definedName></definedNames>', '')
+        self.parts['xl/worksheets/sheet1.xml'] = self.parts['xl/worksheets/sheet1.xml'].replace('<sheetViews>', '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews>')
+        self.rewrite()
+        self.run_prepare(scale='auto')
+        with zipfile.ZipFile(self.output) as package:
+            tree = ET.fromstring(package.read('xl/worksheets/sheet1.xml'))
+            self.assertIsNone(tree.find(f'{{{S}}}pageSetup'))
+            self.assertEqual(tree.find(f'{{{S}}}sheetPr/{{{S}}}pageSetUpPr').get('fitToPage'), '1')
+
+    def test_automatic_long_table_has_readable_scale_and_repeated_header(self):
+        self.parts = fixtures.workbook(self.source, rows=100, cols=14)
+        self.parts['xl/worksheets/sheet1.xml'] = self.parts['xl/worksheets/sheet1.xml'].replace('<pageSetup paperSize="9" orientation="portrait"/>', '')
+        self.rewrite()
+        original = self.source.read_bytes()
+        self.run_prepare(scale='auto')
+        self.assertEqual(self.source.read_bytes(), original)
+        with zipfile.ZipFile(self.output) as package:
+            tree = ET.fromstring(package.read('xl/worksheets/sheet1.xml'))
+            setup = tree.find(f'{{{S}}}pageSetup')
+            self.assertEqual(setup.get('orientation'), 'landscape')
+            self.assertGreaterEqual(int(setup.get('scale')), 85)
+            self.assertEqual(setup.get('fitToHeight'), '0')
+            self.assertEqual(tree.find(f'{{{S}}}sheetPr/{{{S}}}pageSetUpPr').get('fitToPage'), '0')
+            self.assertIn(b"'Report'!$1:$1", package.read('xl/workbook.xml'))
+            self.assertIn(b"'Report'!$A:$A", package.read('xl/workbook.xml'))
+            self.assertEqual(len(tree.findall(f'{{{S}}}sheetData/{{{S}}}row')), 100)
+            self.assertEqual(package.read('xl/worksheets/sheet2.xml'), self.parts['xl/worksheets/sheet2.xml'].encode())
+        self.run_prepare(scale='auto', orientation='portrait', paper='Letter')
+        with zipfile.ZipFile(self.output) as package:
+            setup = ET.fromstring(package.read('xl/worksheets/sheet1.xml')).find(f'{{{S}}}pageSetup')
+            self.assertEqual(setup.get('paperSize'), '1')
+            self.assertEqual(setup.get('orientation'), 'portrait')
+            self.assertGreaterEqual(int(setup.get('scale')), 85)
+
+    def test_automatic_wide_table_does_not_infer_nonunique_row_labels(self):
+        self.parts = fixtures.workbook(self.source, rows=60, cols=14)
+        key = 'xl/worksheets/sheet1.xml'
+        import re
+        self.parts[key] = re.sub(r'Report-R[0-9]+-C1</t>', 'Repeated label</t>', self.parts[key].replace('<pageSetup paperSize="9" orientation="portrait"/>', ''))
+        self.rewrite()
+        self.run_prepare(scale='auto')
+        with zipfile.ZipFile(self.output) as package:
+            self.assertIn(b"'Report'!$1:$1", package.read('xl/workbook.xml'))
+            self.assertNotIn(b'$A:$A', package.read('xl/workbook.xml'))
+
+    def test_automatic_layout_rejects_invalid_width_and_does_not_repeat_merged_title(self):
+        key = 'xl/worksheets/sheet1.xml'
+        self.parts = fixtures.workbook(self.source, rows=60)
+        self.parts[key] = self.parts[key].replace('<pageSetup paperSize="9" orientation="portrait"/>', '').replace('</sheetData>', '</sheetData><mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>')
+        self.rewrite()
+        self.run_prepare(scale='auto')
+        with zipfile.ZipFile(self.output) as package: self.assertNotIn(b'_xlnm.Print_Titles', package.read('xl/workbook.xml'))
+        self.parts[key] = self.parts[key].replace('width="22"', 'width="NaN"')
+        self.rewrite()
+        with self.assertRaises(Rejected): self.run_prepare(scale='auto')
+
     def test_overlapping_columns_refused_without_losing_valid_hidden_columns(self):
         original = self.parts['xl/worksheets/sheet1.xml']
         self.rewrite(**{'xl/worksheets/sheet1.xml': original.replace('<cols>', '<cols><col min="2" max="2" hidden="1"/>')})

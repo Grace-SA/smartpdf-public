@@ -533,7 +533,7 @@ export function ExcelPage() {
               </FilePicker>
               {!file && (
                 <p className="limits">
-                  One XLSX · up to 30 MiB · up to 200 output pages
+                  One XLSX · up to 30 MiB · up to 500 output pages
                 </p>
               )}
             </div>
@@ -758,7 +758,8 @@ export function ExcelPage() {
               Check their layout, colours and visible rows in the PDF preview.
               Ordinary named ranges, cell notes and read-only sheet protection
               are supported. Macros, external data, encrypted files and newer
-              chart types may require exporting from Excel instead.
+              chart types may require exporting from Excel instead. Creates
+              searchable PDFs. Screen-reader table tags are not preserved.
             </p>
           </details>
         </section>

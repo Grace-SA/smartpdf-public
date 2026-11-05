@@ -118,6 +118,65 @@ it("validates a PDF, removes both original and prepared workbook, and confirms d
   expect((await t.api(`/jobs/${id}/result`)).status).toBe(409);
   expect(await readdir(t.root)).toEqual([]);
 });
+it("accepts explicit automatic layout without changing default settings or output limits", async () => {
+  const t = await setup(async (job) => {
+    const options = JSON.parse(
+      await readFile(path.join(job.directory, "options.json"), "utf8"),
+    );
+    expect(options).toEqual({ ...settings, scale: "auto" });
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    await writeFile(path.join(job.directory, "output.pdf"), await pdf.save());
+  });
+  const id = await t.create();
+  expect(
+    (
+      await t.api(`/jobs/${id}/input`, "PUT", "synthetic transport input", {
+        ...settings,
+        scale: "auto",
+      })
+    ).status,
+  ).toBe(202);
+  await t.wait(id, "succeeded");
+});
+it("rejects over 500 pages instead of silently truncating an automatic-layout export", async () => {
+  const t = await setup(async (job) => {
+    const pdf = await PDFDocument.create();
+    for (let i = 0; i < 501; i++) pdf.addPage();
+    await writeFile(path.join(job.directory, "output.pdf"), await pdf.save());
+  });
+  const id = await t.create();
+  expect(
+    (
+      await t.api(`/jobs/${id}/input`, "PUT", "synthetic transport input", {
+        ...settings,
+        scale: "auto",
+      })
+    ).status,
+  ).toBe(202);
+  await t.wait(id, "failed");
+  expect((await t.api(`/jobs/${id}/result`)).status).toBe(409);
+});
+it("delivers all 500 Excel pages after validation", async () => {
+  const t = await setup(async (job) => {
+    const pdf = await PDFDocument.create();
+    for (let i = 0; i < 500; i++)
+      pdf.addPage().drawText(`Synthetic page ${i + 1}`);
+    await writeFile(path.join(job.directory, "output.pdf"), await pdf.save());
+  });
+  const id = await t.create();
+  expect(
+    (await t.api(`/jobs/${id}/input`, "PUT", "synthetic transport input"))
+      .status,
+  ).toBe(202);
+  const job = await t.wait(id, "succeeded");
+  expect(job.pages).toBe(500);
+  const response = await t.api(`/jobs/${id}/result`);
+  expect(response.status).toBe(200);
+  expect(
+    (await PDFDocument.load(await response.arrayBuffer())).getPageCount(),
+  ).toBe(500);
+});
 it("keeps Word and Excel cookies scoped separately and denies cross-tool task IDs", async () => {
   const t = await setup();
   const id = await t.create();

@@ -22,10 +22,10 @@ const terminal = new Set(["succeeded", "failed", "cancelled", "expired"]);
 const ttl = 59 * 60 * 1000;
 const runner = fileURLToPath(new URL("./runner.py", import.meta.url));
 
-export function checkPdf(file) {
+export function checkPdf(file, kind = "word") {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./pdf-check.mjs", import.meta.url), {
-      workerData: file,
+      workerData: { file, maxPages: kind === "excel" ? 500 : 200 },
       resourceLimits: { maxOldGenerationSizeMb: 192 },
     });
     const finish = (error, value) => {
@@ -222,7 +222,10 @@ export async function createWordService(options = {}) {
       });
       if (!terminal.has(job.state)) {
         job.state = "checking-result";
-        const result = await validate(path.join(job.directory, "output.pdf"));
+        const result = await validate(
+          path.join(job.directory, "output.pdf"),
+          job.kind,
+        );
         // Do not announce success while the uploaded source still exists.
         await rm(
           path.join(
@@ -449,7 +452,7 @@ export async function createWordService(options = {}) {
                 settings.orientation,
               ) ||
               !["keep", "A4", "Letter"].includes(settings.paper) ||
-              !["keep", "width", "page"].includes(settings.scale)
+              !["keep", "auto", "width", "page"].includes(settings.scale)
             )
               throw new Error("settings");
           } catch {

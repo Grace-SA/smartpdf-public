@@ -10,5 +10,6 @@ RUN dpkg-deb -x /tmp/excel-colibre.deb /tmp/excel-colibre && cp /tmp/excel-colib
 # preflight blocks OLE, macros, external data and linked images; this image still
 # disables macro execution/OLE automation and retains the network/filesystem sandbox.
 RUN python3 -c 'from pathlib import Path; p=Path("/usr/lib/libreoffice/share/registry/stirling-hardening.xcd"); s=p.read_text(); old="<prop oor:name=\"DisableActiveContent\" oor:finalized=\"true\">\n          <value>true</value>"; assert s.count(old)==1; p.write_text(s.replace(old, old.replace("<value>true</value>", "<value>false</value>")))'
+COPY pdf-export.xcd /usr/lib/libreoffice/share/registry/smartpdf-excel-export.xcd
 USER stirlingpdfuser
 LABEL org.opencontainers.image.title="Smart PDF Excel chart-capable core candidate"

@@ -11,7 +11,7 @@ export type ExcelOptions = {
   sheets: number[];
   orientation: "keep" | "portrait" | "landscape";
   paper: "keep" | "A4" | "Letter";
-  scale: "keep" | "width" | "page";
+  scale: "keep" | "auto" | "width" | "page";
 };
 export const defaultOptions = (): ExcelOptions => ({
   sheets: [],

@@ -22,6 +22,7 @@ export const wordRuntimePaths = [
   "server/excel/NOTICE",
   "server/excel/Dockerfile",
   "server/excel/fonts.conf",
+  "server/excel/pdf-export.xcd",
   "config/excel-core.stirling-3.2.2.json",
   "infra/word/nginx.conf",
   "infra/word/origin.conf.template",

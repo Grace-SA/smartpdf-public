@@ -19,6 +19,106 @@ C = 'http://schemas.openxmlformats.org/drawingml/2006/chart'
 CHARTS = {'barChart', 'lineChart', 'areaChart', 'pieChart', 'doughnutChart', 'scatterChart',
           'bar3DChart', 'line3DChart', 'area3DChart', 'pie3DChart', 'radarChart', 'bubbleChart', 'stockChart', 'surfaceChart', 'surface3DChart', 'ofPieChart'}
 
+def automatic_layout(tree, workbook, sheet, index, styles, options):
+    """Give unconfigured tables readable paper pages, without changing cell geometry."""
+    names = workbook.find(f'{{{S}}}definedNames')
+    saved_fit = tree.find(f'{{{S}}}sheetPr/{{{S}}}pageSetUpPr')
+    if (tree.find(f'{{{S}}}pageSetup') is not None or
+        (saved_fit is not None and saved_fit.get('fitToPage') in {'1', 'true'}) or
+        any(n.get('localSheetId') == str(index) and n.get('name') in {'_xlnm.Print_Area', '_xlnm.Print_Titles'} for n in (names if names is not None else [])) or
+        tree.find(f'{{{S}}}rowBreaks') is not None or tree.find(f'{{{S}}}colBreaks') is not None):
+        return None
+    # Drawings can extend beyond cell anchors. Preserve their original geometry instead
+    # of inferring a print region from cell text and accidentally excluding objects.
+    if tree.find(f'{{{S}}}drawing') is not None:
+        return None
+    cells = list(tree.iter(f'{{{S}}}c'))
+    if not cells: return None
+    def column(ref):
+        if not re.fullmatch(r'[A-Z]{1,3}[1-9][0-9]{0,6}', ref or ''): reject('Invalid worksheet cell reference.')
+        value = 0
+        for char in re.match(r'[A-Z]+', ref)[0]: value = value * 26 + ord(char) - 64
+        if value > 16384: reject('Invalid worksheet cell reference.')
+        return value
+    last = max(column(c.get('r')) for c in cells)
+    for merge in tree.findall(f'{{{S}}}mergeCells/{{{S}}}mergeCell'):
+        last = max(last, column(merge.get('ref').split(':')[-1]))
+    default = tree.find(f'{{{S}}}sheetFormatPr')
+    default_width = float(default.get('defaultColWidth', '8.43')) if default is not None else 8.43
+    widths = [default_width] * last
+    for col in tree.findall(f'{{{S}}}cols/{{{S}}}col'):
+        width = 0 if col.get('hidden') == '1' else float(col.get('width', str(default_width)))
+        for i in range(int(col.get('min')) - 1, min(last, int(col.get('max')))): widths[i] = width
+    if not all(math.isfinite(w) and 0 <= w <= 255 for w in widths): reject('Invalid worksheet column width.')
+    sizes = []; digit_width = 8.1
+    if styles is not None:
+        fonts = styles.find(f'{{{S}}}fonts'); xfs = styles.find(f'{{{S}}}cellXfs')
+        if fonts is not None and xfs is not None:
+            default_size = fonts[0].find(f'{{{S}}}sz') if len(fonts) else None
+            if default_size is not None:
+                value = float(default_size.get('val', '11'))
+                if not math.isfinite(value) or not 0 < value <= 409: reject('Invalid worksheet font size.')
+                digit_width *= max(1, value / 11)
+            for cell in cells:
+                if cell.find(f'{{{S}}}v') is None and cell.find(f'{{{S}}}is') is None: continue
+                style = int(cell.get('s', '0'))
+                if style >= len(xfs): continue
+                font = int(xfs[style].get('fontId', '0'))
+                size = fonts[font].find(f'{{{S}}}sz') if font < len(fonts) else None
+                if size is not None:
+                    value = float(size.get('val', '11'))
+                    if math.isfinite(value) and value > 0: sizes.append(value)
+    body_size = min(sizes) if sizes else 11
+    # OOXML widths use the default font's maximum digit width; the estimate is
+    # conservative and only chooses a fixed percentage, never edits cell widths.
+    total = sum((w * digit_width + 5) * .75 for w in widths if w)
+    margins = tree.find(f'{{{S}}}pageMargins')
+    if margins is None:
+        margins = ET.Element(f'{{{S}}}pageMargins', {'left': '.3', 'right': '.3', 'top': '.4', 'bottom': '.4', 'header': '.2', 'footer': '.2'})
+        tail = {'headerFooter', 'rowBreaks', 'colBreaks', 'customProperties', 'cellWatches', 'ignoredErrors', 'smartTags', 'legacyDrawing', 'legacyDrawingHF', 'picture', 'tableParts', 'extLst'}
+        position = next((i for i, c in enumerate(tree) if c.tag.rsplit('}', 1)[-1] in tail), len(tree))
+        tree.insert(position, margins)
+    horizontal_margin = (float(margins.get('left', '.3')) + float(margins.get('right', '.3'))) * 72
+    if not math.isfinite(horizontal_margin) or not 0 <= horizontal_margin < 500: reject('Invalid worksheet page margins.')
+    paper = 'Letter' if options['paper'] == 'Letter' else 'A4'
+    paper_width, paper_height = (612, 792) if paper == 'Letter' else (595.28, 841.89)
+    portrait = paper_width - horizontal_margin
+    minimum = min(100, max(85, math.ceil(8 / (body_size * .9) * 100)))
+    orientation = options['orientation'] if options['orientation'] != 'keep' else ('portrait' if total * minimum / 100 <= portrait else 'landscape')
+    available = (paper_width if orientation == 'portrait' else paper_height) - horizontal_margin
+    scale = max(minimum, min(100, math.floor(available / max(1, total) * 100)))
+    setup = ET.Element(f'{{{S}}}pageSetup', {'paperSize': '1' if paper == 'Letter' else '9', 'orientation': orientation, 'scale': str(scale), 'fitToWidth': '0', 'fitToHeight': '0', 'pageOrder': 'downThenOver'})
+    tree.insert(list(tree).index(margins) + 1, setup)
+    properties = tree.find(f'{{{S}}}sheetPr')
+    if properties is None:
+        properties = ET.Element(f'{{{S}}}sheetPr'); tree.insert(0, properties)
+    page = properties.find(f'{{{S}}}pageSetUpPr')
+    if page is None: page = ET.SubElement(properties, f'{{{S}}}pageSetUpPr')
+    page.set('fitToPage', '0')
+    # Only infer a header for a simple first row of text, without merged title cells.
+    rows = tree.findall(f'{{{S}}}sheetData/{{{S}}}row')
+    first = rows[0] if rows else None
+    merged_header = any(re.search(r'[A-Z]+1(?::|$)', m.get('ref', '')) for m in tree.findall(f'{{{S}}}mergeCells/{{{S}}}mergeCell'))
+    if len(rows) > 20 and first is not None and first.get('r') == '1' and first.get('hidden') != '1' and len(first) >= 2 and all(c.get('t') in {'s', 'inlineStr', 'str'} for c in first) and not merged_header:
+        if names is None:
+            names = ET.Element(f'{{{S}}}definedNames')
+            position = next((i for i, c in enumerate(workbook) if c.tag.rsplit('}', 1)[-1] in {'calcPr', 'oleSize', 'customWorkbookViews', 'pivotCaches', 'smartTagPr', 'smartTagTypes', 'webPublishing', 'fileRecoveryPr', 'webPublishObjects', 'extLst'}), len(workbook))
+            workbook.insert(position, names)
+        quoted = "'" + sheet.get('name').replace("'", "''") + "'!"
+        titles = quoted + '$1:$1'
+        if total * scale / 100 > available and widths[0] > 0:
+            keys = []
+            for row in rows:
+                cell = next((c for c in row if re.fullmatch(r'A[1-9][0-9]*', c.get('r', ''))), None)
+                if cell is None: break
+                value = cell.find(f'{{{S}}}v')
+                key = ''.join(n.text or '' for n in cell.iter(f'{{{S}}}t')) if cell.get('t') == 'inlineStr' else (value.text if value is not None else '')
+                if not key: break
+                keys.append((cell.get('t', 'n'), key))
+            if len(keys) == len(rows) and len(set(keys)) == len(keys): titles += ',' + quoted + '$A:$A'
+        ET.SubElement(names, f'{{{S}}}definedName', {'name': '_xlnm.Print_Titles', 'localSheetId': str(index)}).text = titles
+    return f'Automatic layout applied to an unconfigured worksheet: {paper} {orientation}, {scale}% scale. Wide tables can span pages horizontally; check page order and readability.'
+
 def image_pixels(data, suffix):
     """Bound embedded raster decoding before handing bytes to the isolated renderer."""
     width = height = 0
@@ -145,7 +245,7 @@ def settings(value):
     selected = value.get('sheets')
     if not isinstance(selected, list) or not 1 <= len(selected) <= 50 or any(type(i) is not int or i < 0 or i >= 50 for i in selected) or len(set(selected)) != len(selected):
         reject('Select at least one visible worksheet.')
-    for key, allowed in [('orientation', {'keep', 'portrait', 'landscape'}), ('paper', {'keep', 'A4', 'Letter'}), ('scale', {'keep', 'width', 'page'})]:
+    for key, allowed in [('orientation', {'keep', 'portrait', 'landscape'}), ('paper', {'keep', 'A4', 'Letter'}), ('scale', {'keep', 'auto', 'width', 'page'})]:
         if value.get(key, 'keep') not in allowed:
             reject('Unsupported page settings.')
     return {**{key: 'keep' for key in ('orientation', 'paper', 'scale')}, **value}
@@ -455,8 +555,13 @@ def prepare(source, output, options):
                 visible_content |= any(c.find(f'{{{S}}}v') is not None or c.find(f'{{{S}}}is') is not None for c in tree.iter(f'{{{S}}}c')) or tree.find(f'{{{S}}}drawing') is not None
                 for view in tree.findall(f'{{{S}}}sheetViews/{{{S}}}sheetView'):
                     view.set('tabSelected', '0')
+                if options['scale'] == 'auto':
+                    layout_warning = automatic_layout(tree, workbook, sheet, index, trees.get('xl/styles.xml'), options)
+                    if layout_warning:
+                        warnings.add(layout_warning); changed.update({target, 'xl/workbook.xml'})
                 setup = tree.find(f'{{{S}}}pageSetup')
-                if setup is None and any(options[k] != 'keep' for k in ('orientation', 'paper', 'scale')):
+                page_override = options['orientation'] != 'keep' or options['paper'] != 'keep' or options['scale'] in {'width', 'page'}
+                if setup is None and page_override:
                     setup = ET.Element(f'{{{S}}}pageSetup')
                     # pageSetup follows margins and precedes header/footer & breaks.
                     tail = {'headerFooter', 'rowBreaks', 'colBreaks', 'customProperties', 'cellWatches', 'ignoredErrors', 'smartTags', 'drawing', 'legacyDrawing', 'legacyDrawingHF', 'picture', 'oleObjects', 'controls', 'webPublishItems', 'tableParts', 'extLst'}
@@ -466,7 +571,7 @@ def prepare(source, output, options):
                     setup.set('orientation', options['orientation'])
                 if options['paper'] != 'keep':
                     setup.set('paperSize', '9' if options['paper'] == 'A4' else '1')
-                if options['scale'] != 'keep':
+                if options['scale'] in {'width', 'page'}:
                     setup.attrib.pop('scale', None)
                     setup.set('fitToWidth', '1')
                     setup.set('fitToHeight', '1' if options['scale'] == 'page' else '0')
@@ -478,7 +583,7 @@ def prepare(source, output, options):
                     if page is None:
                         page = ET.SubElement(properties, f'{{{S}}}pageSetUpPr')
                     page.set('fitToPage', '1')
-                if any(options[k] != 'keep' for k in ('orientation', 'paper', 'scale')):
+                if page_override:
                     changed.add(target)
             if not visible_content:
                 reject('The selected worksheets have no printable content.')

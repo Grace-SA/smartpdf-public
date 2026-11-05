@@ -246,10 +246,13 @@
 .excel-settings > label,
 .excel-settings details label {
   display: grid;
+  min-width: 0;
   gap: 8px;
   margin-top: 14px;
 }
 .excel-settings select {
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   max-width: 100%;
   padding: 8px;
@@ -258,6 +261,9 @@
   background: white;
   color: #172033;
   font: inherit;
+}
+.excel-settings {
+  min-width: 0;
 }
 .excel-app .word-page {
   max-width: 1280px;
@@ -290,6 +296,18 @@
 .excel-preview select {
   padding: 8px;
   min-height: 44px;
+}
+.excel-page-jump,
+.excel-page-jump label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.excel-page-jump input {
+  width: 5em;
+  min-height: 44px;
+  padding: 8px;
 }
 @media (max-width: 900px) {
   .excel-result-grid.is-adjusting > aside:last-child {
