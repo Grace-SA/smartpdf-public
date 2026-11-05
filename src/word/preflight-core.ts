@@ -398,6 +398,15 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
               !["0", "false", "off"].includes(attr("val") || "")
             )
               add("HIDDEN_TEXT");
+            if (
+              [
+                "embedRegular",
+                "embedBold",
+                "embedItalic",
+                "embedBoldItalic",
+              ].includes(local)
+            )
+              add("EMBEDDED_FONTS");
             if (["object", "altChunk"].includes(local)) add("EMBEDDED_OBJECTS");
             if (local === "rFonts")
               for (const key of ["ascii", "hAnsi", "eastAsia", "cs"]) {
@@ -411,6 +420,11 @@ export function inspectWordBytes(bytes: Uint8Array): WordCheck {
                   fonts.add(font);
               }
           }
+          if (
+            local === "Relationship" &&
+            attrs["@_Type"]?.split("/").at(-1) === "font"
+          )
+            add("EMBEDDED_FONTS");
           if (
             local === "Relationship" &&
             attrs["@_TargetMode"]?.toLowerCase() === "external" &&

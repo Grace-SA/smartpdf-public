@@ -7,41 +7,12 @@ import time
 import uuid
 import os
 import signal
-import zipfile
-import posixpath
-from xml.dom import minidom
+
+from sanitize import sanitize_copy
 
 def omit_comments(source, output):
-    """Remove annotation parts/markers from a copy before Office imports it."""
-    word = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-    relationships = 'http://schemas.openxmlformats.org/package/2006/relationships'
-    kinds = {'comments', 'commentsExtended', 'commentsExtensible', 'commentsIds', 'person', 'people'}
-    removed = set()
-    with zipfile.ZipFile(source) as package:
-        entries = package.infolist()
-        for entry in entries:
-            if not entry.filename.endswith('.rels'): continue
-            doc = minidom.parseString(package.read(entry))
-            owner = posixpath.dirname(posixpath.dirname(entry.filename))
-            for relation in doc.getElementsByTagName('*'):
-                if relation.namespaceURI == relationships and relation.localName == 'Relationship' and relation.getAttribute('Type').rsplit('/',1)[-1] in kinds:
-                    target = relation.getAttribute('Target')
-                    removed.add(posixpath.normpath(target.lstrip('/') if target.startswith('/') else posixpath.join(owner,target)))
-            doc.unlink()
-        removed.update(posixpath.join(posixpath.dirname(name),'_rels',posixpath.basename(name)+'.rels') for name in list(removed))
-        with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as result:
-            for entry in entries:
-                if entry.filename in removed: continue
-                data = package.read(entry)
-                if entry.filename.endswith(('.xml','.rels')):
-                    doc = minidom.parseString(data)
-                    for node in list(doc.getElementsByTagName('*')):
-                        remove = (node.namespaceURI == word and node.localName in {'comment','commentRangeStart','commentRangeEnd','commentReference'})
-                        if node.namespaceURI == relationships and node.localName == 'Relationship' and node.getAttribute('Type').rsplit('/',1)[-1] in kinds: remove = True
-                        if entry.filename == '[Content_Types].xml' and node.getAttribute('PartName').lstrip('/') in removed: remove = True
-                        if remove and node.parentNode: node.parentNode.removeChild(node)
-                    data = doc.toxml(encoding='utf-8');doc.unlink()
-                result.writestr(entry.filename,data)
+    sanitize_copy(source, output, comments=True)
+
 
 def prepare(source, output, options):
     import uno

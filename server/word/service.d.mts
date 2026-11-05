@@ -9,6 +9,7 @@ export type Task = {
   options?: {
     revisionView: "unchanged" | "final" | "original";
     omitComments: boolean;
+    useAvailableFonts?: boolean;
   };
 };
 export function checkPdf(file: string): Promise<{ pages: number }>;

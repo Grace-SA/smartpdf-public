@@ -6,7 +6,8 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, realpathSync } from "node:fs";
+import { createStandby } from "./standby.mjs";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { spawn } from "node:child_process";
@@ -14,6 +15,7 @@ import { Worker } from "node:worker_threads";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { performance } from "node:perf_hooks";
 
 const MAX_BYTES = 30 * 1024 ** 2;
 const UPLOAD_TIMEOUT_MS = 120000;
@@ -42,13 +44,22 @@ async function outputOptions(req) {
       Array.isArray(value) ||
       typeof value !== "object" ||
       Object.keys(value).some(
-        (k) => !["revisionView", "omitComments"].includes(k),
+        (k) =>
+          !["revisionView", "omitComments", "useAvailableFonts"].includes(k),
       ) ||
       !["unchanged", "final", "original"].includes(view) ||
-      typeof omit !== "boolean"
+      typeof omit !== "boolean" ||
+      (value.useAvailableFonts !== undefined &&
+        typeof value.useAvailableFonts !== "boolean")
     )
       throw Error("options");
-    return { revisionView: view, omitComments: omit };
+    return {
+      revisionView: view,
+      omitComments: omit,
+      ...(value.useAvailableFonts !== undefined
+        ? { useAvailableFonts: value.useAvailableFonts }
+        : {}),
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -92,6 +103,29 @@ export function runStirling(job, update) {
     const command = windows
       ? process.env.WORD_WSL || "C:/Program Files/WSL/wsl.exe"
       : "python3";
+    const control = job.warmToken || job.discardToken;
+    const script = control
+      ? fileURLToPath(new URL("./warm.py", import.meta.url))
+      : runner;
+    const mapped = (value) =>
+      windows && !value.startsWith("--")
+        ? linuxPath(realpathSync(value))
+        : value;
+    const values = job.discardToken
+      ? ["--discard", job.directory, job.discardToken]
+      : [
+          mapped(job.directory),
+          ...(job.warmToken
+            ? [job.warmToken]
+            : [
+                ...(job.standby
+                  ? ["--standby", job.standby.name, job.standby.token]
+                  : []),
+                ...(job.budgetSeconds
+                  ? ["--budget", String(job.budgetSeconds)]
+                  : []),
+              ]),
+        ];
     const args = windows
       ? [
           "-d",
@@ -100,10 +134,10 @@ export function runStirling(job, update) {
           "root",
           "--",
           "python3",
-          linuxPath(runner),
-          linuxPath(job.directory),
+          linuxPath(realpathSync(script)),
+          ...values,
         ]
-      : [runner, job.directory];
+      : [script, ...values];
     const child = spawn(command, args, {
       windowsHide: true,
       stdio: ["ignore", "pipe", "ignore"],
@@ -124,6 +158,7 @@ export function runStirling(job, update) {
     child.stdout.on("data", (text) => {
       buffer += text;
       if (buffer.length > 32000) {
+        cleanupFailed = true;
         child.kill();
         return;
       }
@@ -137,7 +172,8 @@ export function runStirling(job, update) {
           if (value.cleanupFailed) cleanupFailed = true;
           update(value);
         } catch {
-          /* Only bounded structured messages are consumed. */
+          cleanupFailed = true;
+          child.kill();
         }
       }
     });
@@ -194,7 +230,39 @@ export async function createWordService(options = {}) {
   let active = false;
   let stopped = false;
   let unhealthy = false;
-  const execute = options.execute || runStirling;
+  const pool =
+    !options.execute && process.env.WORD_PREWARM !== "false"
+      ? createStandby({
+          root,
+          run: runStirling,
+          broken: () => {
+            unhealthy = true;
+          },
+        })
+      : undefined;
+  const execute =
+    options.execute ||
+    (async (job, update) => {
+      const started = performance.now();
+      update({ state: "starting" });
+      job.standby = await pool?.take(job);
+      if (terminal.has(job.state)) {
+        await pool?.release(job.standby);
+        return;
+      }
+      job.budgetSeconds = Math.max(
+        1,
+        240 - (performance.now() - started) / 1000,
+      );
+      await runStirling(job, update);
+      const next = [...jobs.values()].find((value) => value.state === "queued");
+      if (
+        !stopped &&
+        !unhealthy &&
+        (!next || next.options?.revisionView === "unchanged")
+      )
+        pool?.ensure();
+    });
   const validate = options.validate || checkPdf;
   const now = options.now || Date.now;
   const signature = (value) =>
@@ -226,6 +294,15 @@ export async function createWordService(options = {}) {
     error: job.error,
     failureCode: job.failureCode,
     expiresAt: job.expiresAt,
+    queueAhead:
+      job.state === "queued"
+        ? Math.max(
+            0,
+            [...jobs.values()]
+              .filter((value) => value.state === "queued")
+              .findIndex((value) => value.id === job.id) + (active ? 1 : 0),
+          )
+        : undefined,
     cleanupPending:
       (job.state === "cancelled" || job.state === "expired") &&
       !!(job.running || job.uploading),
@@ -238,7 +315,10 @@ export async function createWordService(options = {}) {
   async function drain() {
     if (active || unhealthy || stopped) return;
     const job = [...jobs.values()].find((j) => j.state === "queued");
-    if (!job) return;
+    if (!job) {
+      if (!stopped && !unhealthy) pool?.ensure();
+      return;
+    }
     active = true;
     job.running = true;
     try {
@@ -269,6 +349,7 @@ export async function createWordService(options = {}) {
         // Do not announce success while the uploaded source still exists.
         await rm(path.join(job.directory, "input.docx"), { force: true });
         await rm(path.join(job.directory, "prepared.docx"), { force: true });
+        await rm(path.join(job.directory, "sanitized.docx"), { force: true });
         await rm(path.join(job.directory, "options.json"), { force: true });
         if (!terminal.has(job.state)) {
           job.pages = result.pages;
@@ -309,6 +390,7 @@ export async function createWordService(options = {}) {
     job.error = undefined;
     if (job.running)
       await writeFile(path.join(job.directory, "cancel"), "cancel");
+    await pool?.cancel(job);
     job.uploadController?.abort();
     await erase(job);
   }
@@ -378,10 +460,16 @@ export async function createWordService(options = {}) {
             "This self-hosted conversion server",
           maxBytes: MAX_BYTES,
           retentionMinutes: 60,
+          mode:
+            !secure && process.env.WORD_PROCESSING_MODE === "local"
+              ? "local"
+              : "cloud",
+          ready: pool?.ready() ?? true,
           available: !unhealthy && !stopped,
           capabilities: {
             revisionViews: ["final", "original"],
             omitComments: true,
+            availableFonts: true,
           },
         });
       if (!owner)
@@ -538,6 +626,7 @@ export async function createWordService(options = {}) {
   });
   server.requestTimeout = UPLOAD_TIMEOUT_MS + 10000;
   server.headersTimeout = 10000;
+  pool?.ensure();
   return {
     server,
     jobs,
@@ -550,6 +639,7 @@ export async function createWordService(options = {}) {
           .filter((j) => !terminal.has(j.state))
           .map((j) => cancel(j)),
       );
+      await pool?.close();
       await new Promise((resolve) => server.close(resolve));
     },
   };

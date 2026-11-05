@@ -55,6 +55,8 @@ it("rejects invalid output options before allocating a task", async () => {
     { revisionView: "unknown" },
     { revisionView: null },
     { omitComments: "true" },
+    { useAvailableFonts: "true" },
+    { useAvailableFonts: null },
     { extra: "not allowed" },
   ])
     expect(

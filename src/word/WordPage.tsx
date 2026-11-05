@@ -29,14 +29,20 @@ type Job = {
   warnings: string[];
   error?: string;
   cleanupPending?: boolean;
+  queueAhead?: number;
   failureCode?: string;
   options?: WordOptions;
 };
 type Service = {
+  mode?: "local" | "cloud";
   region: string;
   available: boolean;
   retentionMinutes: number;
-  capabilities?: { revisionViews: string[]; omitComments: boolean };
+  capabilities?: {
+    revisionViews: string[];
+    omitComments: boolean;
+    availableFonts?: boolean;
+  };
 };
 const stages: Record<string, string> = {
   created: "Ready to upload",
@@ -50,6 +56,7 @@ const stages: Record<string, string> = {
 };
 export function WordPage() {
   const [service, setService] = useState<Service>();
+  const localMode = service?.mode === "local";
   const [file, setFile] = useState<File>();
   const [job, setJob] = useState<Job>();
   const [busy, setBusy] = useState(false);
@@ -68,7 +75,29 @@ export function WordPage() {
   const [cleanupUnconfirmed, setCleanupUnconfirmed] = useState(false);
   const [serverRejected, setServerRejected] = useState(false);
   const fontRisks = substitutedFontDeclarations(localCheck?.fonts || []);
-  const localIssues = blockingWordIssues(localCheck, outputOptions);
+  const replacingFonts =
+    !!service?.capabilities?.availableFonts &&
+    !!localCheck?.issues.some((issue) => issue.code === "EMBEDDED_FONTS");
+  const localIssues = blockingWordIssues(localCheck, {
+    ...outputOptions,
+    ...(replacingFonts ? { useAvailableFonts: true } : {}),
+  });
+  const needsWordFix = localIssues.some(
+    (issue) =>
+      !["TRACKED_CHANGES", "COMMENTS", "ORIGINAL_VIEW_UNSUPPORTED"].includes(
+        issue.code,
+      ),
+  );
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const clockStarted = Date.now();
+    const timer = setInterval(
+      () => setElapsed(Math.floor((Date.now() - clockStarted) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [busy]);
   const checkController = useRef<AbortController | null>(null);
   const [destination, setDestination] = useState("");
   const leaving = useRef(false);
@@ -212,9 +241,14 @@ export function WordPage() {
       localIssues.length
     )
       return;
+    const conversionOptions: WordOptions = {
+      ...outputOptions,
+      ...(replacingFonts ? { useAvailableFonts: true } : {}),
+    };
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
+    setElapsed(0);
     setError("");
     setProgress(undefined);
     setResult(undefined);
@@ -223,7 +257,7 @@ export function WordPage() {
       const created = await request<Job>("/api/word/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(outputOptions),
+        body: JSON.stringify(conversionOptions),
         signal: abort.signal,
       });
       id = created.id;
@@ -372,6 +406,7 @@ export function WordPage() {
     const id = currentJob.current;
     setBusy(true);
     setCleanupUnconfirmed(true);
+    setElapsed(0);
     setError("");
     setPreview(undefined);
     setResult(undefined);
@@ -470,7 +505,9 @@ export function WordPage() {
           disabled={busy}
           choose={(tool) => navigate(toolPaths[tool])}
         />
-        <span className="version">Cloud conversion</span>
+        <span className="version">
+          {localMode ? "Local conversion" : "Cloud conversion"}
+        </span>
       </header>
       <main className="word-page">
         <div className="task-heading">
@@ -590,18 +627,13 @@ export function WordPage() {
                       ))}
                     </ul>
                   )}
-                  {!localIssues.length && (
-                    <p>
-                      Your document is still on this device. The server will
-                      verify it again after you choose Upload and convert.
-                    </p>
-                  )}
                 </>
               ) : null}
             </div>
           )}
           {file &&
             localCheck &&
+            !needsWordFix &&
             !busy &&
             !result &&
             ((localCheck.revisions &&
@@ -669,34 +701,58 @@ export function WordPage() {
                 )}
               </fieldset>
             )}
-          {file && localCheck && !result && !busy && (
-            <div className="word-layout-check" role="note">
-              {localCheck.warnings.map((warning) => (
-                <p key={warning}>{warning}</p>
-              ))}
-              {fontRisks.length > 0 && (
+          {file &&
+            localCheck &&
+            !result &&
+            !busy &&
+            (replacingFonts ||
+              fontRisks.length > 0 ||
+              localCheck.warnings.length > 0) && (
+              <details className="word-layout-check">
+                <summary>
+                  {replacingFonts
+                    ? "Uses available fonts · layout may change"
+                    : "Layout may change"}
+                </summary>
+                {replacingFonts && (
+                  <p>
+                    Embedded fonts are removed from the conversion copy.
+                    Available fonts are used instead. Your original is
+                    unchanged.
+                  </p>
+                )}
+                {localCheck.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+                {fontRisks.length > 0 && (
+                  <p>
+                    Font declarations: {fontRisks.join(", ")}. Some may be
+                    unused styles.
+                  </p>
+                )}
                 <p>
-                  Declared fonts that may be substituted: {fontRisks.join(", ")}
-                  . Font declarations can include unused styles. Check line
-                  wraps and page breaks.
+                  Check the PDF before sharing. For an exact Word layout, export
+                  from Word.
                 </p>
-              )}
-            </div>
-          )}
+              </details>
+            )}
           {serverRejected && (
             <p>Choose a corrected copy from Word before trying again.</p>
           )}
           <div className="word-cloud-note" role="note">
-            <strong>Cloud conversion</strong>
+            <strong>
+              {localMode ? "Local conversion" : "Cloud conversion"}
+            </strong>
             <p>
-              Your document is uploaded only when you choose Upload and convert.
+              {localMode
+                ? "Files are processed on this computer. "
+                : "Upload starts only when you convert. "}
               Processing:{" "}
               {service?.region ||
                 (connecting
                   ? "checking server availability…"
                   : "connection unavailable")}
-              . Temporary files are kept for at most one hour. You can delete
-              them sooner.
+              . Auto-delete within 1 hour.
             </p>
           </div>
           {busy && (
@@ -706,7 +762,13 @@ export function WordPage() {
                   ? "Removing temporary files…"
                   : stages[job?.state || "created"] || "Connecting…"}
               </p>
-              <p>This can take a few minutes. You can cancel at any time.</p>
+              <p>{elapsed}s elapsed · You can cancel at any time.</p>
+              {job?.state === "queued" && !!job.queueAhead && (
+                <p>
+                  {job.queueAhead} conversion{job.queueAhead === 1 ? "" : "s"}{" "}
+                  ahead.
+                </p>
+              )}
               {progress !== undefined && (
                 <>
                   <progress
@@ -746,11 +808,16 @@ export function WordPage() {
                 {job?.pages} {job?.pages === 1 ? "page" : "pages"} · Check the
                 layout before sharing.
               </p>
-              <ul>
-                {job?.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
+              {!!job?.warnings.length && (
+                <details className="word-layout-check">
+                  <summary>Layout notes</summary>
+                  <ul>
+                    {job?.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               <div className="word-actions">
                 <button
                   className="secondary"
@@ -780,7 +847,7 @@ export function WordPage() {
                   localIssues.length > 0
                 }
               >
-                Upload and convert
+                {localMode ? "Convert to PDF" : "Upload and convert"}
               </button>
             )}
             {busy && job?.state !== "cancelled" && (
@@ -799,11 +866,6 @@ export function WordPage() {
               </button>
             )}
           </div>
-          <p className="word-layout-hint">
-            Fonts, table breaks and picture wrapping may change. Check the
-            preview before sharing. Page numbers and contents may be
-            recalculated.
-          </p>
           <details className="input-support">
             <summary>Supported documents</summary>
             <p>
@@ -811,9 +873,8 @@ export function WordPage() {
               pictures, headers, footnotes and contents. Complex layouts may
               change. For tracked changes or comments, choose the PDF content
               above when available. Hidden text must be shown or removed in Word
-              first. Password-protected files, macros, embedded files, embedded
-              fonts and externally linked content are not supported in this
-              first version.
+              first. Password-protected files, macros, embedded files and
+              externally linked content are not supported in this first version.
             </p>
           </details>
         </section>
@@ -832,7 +893,7 @@ export function WordPage() {
       )}
       {destination && (
         <LeaveTaskDialog
-          description="Leaving will request deletion of temporary server files. Download your PDF first if you want to keep it."
+          description="Leaving will request deletion of temporary conversion files. Download your PDF first if you want to keep it."
           keep={() => setDestination("")}
           leave={leave}
         />

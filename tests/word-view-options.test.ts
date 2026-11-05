@@ -51,16 +51,18 @@ it("never resolves structural revision choices silently", () => {
     ).toContain("STRUCTURAL_REVISIONS");
 });
 
-it("never resolves structural revision choices silently", () => {
+it("allows only embedded-font substitution without bypassing hidden text", () => {
   const check = inspectWordBytes(
     docxFixture(
-      "<w:tbl><w:tr><w:trPr><w:ins/></w:trPr><w:tc><w:p><w:r><w:t>Row</w:t></w:r></w:p></w:tc></w:tr></w:tbl>",
+      "<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>Text</w:t></w:r></w:p>",
+      { "word/fonts/font.odttf": "synthetic" },
     ),
   );
-  for (const revisionView of ["final", "original"] as const)
-    expect(
-      blockingWordIssues(check, { revisionView, omitComments: true }).map(
-        (x) => x.code,
-      ),
-    ).toContain("STRUCTURAL_REVISIONS");
+  expect(
+    blockingWordIssues(check, {
+      revisionView: "unchanged",
+      omitComments: false,
+      useAvailableFonts: true,
+    }).map((x) => x.code),
+  ).toEqual(["HIDDEN_TEXT"]);
 });

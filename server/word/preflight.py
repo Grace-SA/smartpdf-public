@@ -38,12 +38,15 @@ def reject(message, code):
 def conversion_options(value=None):
     if value is None:
         return {'revisionView': 'unchanged', 'omitComments': False}
-    if (not isinstance(value, dict) or set(value) - {'revisionView', 'omitComments'}
+    if (not isinstance(value, dict) or set(value) - {'revisionView', 'omitComments', 'useAvailableFonts'}
             or not isinstance(value.get('revisionView', 'unchanged'), str)
             or value.get('revisionView', 'unchanged') not in {'unchanged', 'final', 'original'}
-            or not isinstance(value.get('omitComments', False), bool)):
+            or not isinstance(value.get('omitComments', False), bool)
+            or not isinstance(value.get('useAvailableFonts', False), bool)):
         reject('Choose valid document output options.', 'INVALID_OPTIONS')
-    return {'revisionView': value.get('revisionView', 'unchanged'), 'omitComments': value.get('omitComments', False)}
+    result = {'revisionView': value.get('revisionView', 'unchanged'), 'omitComments': value.get('omitComments', False)}
+    if 'useAvailableFonts' in value: result['useAvailableFonts'] = value['useAvailableFonts']
+    return result
 
 def inspect_docx(path, options=None, *, details=None):
     options = conversion_options(options)
@@ -110,10 +113,13 @@ def inspect_docx(path, options=None, *, details=None):
                         # declarations in defaults, styles or content still reject.
                         if tag == 'vanish' and element.get(WORD + 'val') not in {'0', 'false', 'off'}:
                             blocked.add('HIDDEN_TEXT')
+                        if tag in {'embedRegular', 'embedBold', 'embedItalic', 'embedBoldItalic'}:
+                            blocked.add('EMBEDDED_FONTS')
                         if tag in {'altChunk', 'object'}:
                             blocked.add('EMBEDDED_OBJECTS')
                     if tag == 'Relationship':
                         attrs = element.attrib
+                        if attrs.get('Type', '').rsplit('/', 1)[-1] == 'font': blocked.add('EMBEDDED_FONTS')
                         if attrs.get('TargetMode', '').lower() == 'external':
                             kind = attrs.get('Type', '').rsplit('/', 1)[-1]
                             target = attrs.get('Target', '')
@@ -145,7 +151,7 @@ def inspect_docx(path, options=None, *, details=None):
     except (zipfile.BadZipFile, RuntimeError, OSError, NotImplementedError):
         raise Rejected('Choose a valid, unencrypted DOCX document.') from None
     if details is not None:
-        details.update(revisions='TRACKED_CHANGES' in blocked, comments='COMMENTS' in blocked, originalViewUnsupported=original_unsupported)
+        details.update(revisions='TRACKED_CHANGES' in blocked, comments='COMMENTS' in blocked, embeddedFonts='EMBEDDED_FONTS' in blocked, originalViewUnsupported=original_unsupported)
     if original_unsupported and options['revisionView'] == 'original':
         blocked.add('ORIGINAL_VIEW_UNSUPPORTED')
     if 'TRACKED_CHANGES' in blocked and options['revisionView'] != 'unchanged':
@@ -154,6 +160,9 @@ def inspect_docx(path, options=None, *, details=None):
     if 'COMMENTS' in blocked and options['omitComments']:
         blocked.remove('COMMENTS')
         warnings.add('Comments are omitted from the PDF copy. Your original document is unchanged.')
+    if 'EMBEDDED_FONTS' in blocked and options.get('useAvailableFonts'):
+        blocked.remove('EMBEDDED_FONTS')
+        warnings.add('Embedded fonts are replaced with available fonts in the conversion copy. Check the layout.')
     if blocked:
         reasons = [{'code': code, 'message': message} for code, message in REASONS.items() if code in blocked]
         raise Rejected(' '.join(r['message'] for r in reasons), reasons[0]['code'], reasons)

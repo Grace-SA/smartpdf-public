@@ -38,13 +38,13 @@ class PreflightTests(unittest.TestCase):
         with self.assertRaises(Rejected):inspect_docx(source)
         for view in ['final','original']:
             details={};warnings=inspect_docx(source,{'revisionView':view,'omitComments':True},details=details)
-            self.assertEqual(details,{'revisions':True,'comments':True,'originalViewUnsupported':False})
+            self.assertEqual(details,{'revisions':True,'comments':True,'embeddedFonts':False,'originalViewUnsupported':False})
             self.assertTrue(any('PDF view:' in s for s in warnings))
         with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':'final'})
         self.assertEqual(caught.exception.code,'COMMENTS')
     def test_document_choices_never_bypass_active_content(self):
         source=self.package(extra={'word/vbaProject.bin':'synthetic'})
-        with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':'final','omitComments':True})
+        with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':'final','omitComments':True,'useAvailableFonts':True})
         self.assertEqual(caught.exception.code,'MACROS')
     def test_invalid_output_options(self):
         for value in [[],{'revisionView':[]},{'revisionView':'unknown'},{'omitComments':'true'},{'omitComments':1},{'path':'private'}]:
@@ -59,6 +59,36 @@ class PreflightTests(unittest.TestCase):
         for view in ['final','original']:
             with self.assertRaises(Rejected) as caught:inspect_docx(source,{'revisionView':view})
             self.assertEqual(caught.exception.code,'STRUCTURAL_REVISIONS')
+    def test_embedded_font_substitution_is_explicit_and_does_not_bypass_other_content(self):
+        source=self.package(extra={'word/fonts/font.odttf':'opaque synthetic font'})
+        with self.assertRaises(Rejected):inspect_docx(source)
+        details={};self.assertTrue(inspect_docx(source,{'useAvailableFonts':True},details=details));self.assertTrue(details['embeddedFonts'])
+        output=source.with_name('font-free.docx')
+        from sanitize import sanitize_copy
+        original=source.read_bytes();sanitize_copy(source,output,fonts=True)
+        self.assertEqual(source.read_bytes(),original);self.assertTrue(inspect_docx(output))
+        with zipfile.ZipFile(output) as package:self.assertFalse(any('fonts/' in p for p in package.namelist()))
+        unsafe=self.package('<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>Hidden</w:t></w:r></w:p>',{'word/fonts/font.odttf':'opaque'})
+        with self.assertRaises(Rejected) as caught:inspect_docx(unsafe,{'useAvailableFonts':True})
+        self.assertEqual(caught.exception.code,'HIDDEN_TEXT')
+    def test_font_relations_and_markers_are_removed_without_touching_images_or_custom_xml(self):
+        from sanitize import sanitize_copy
+        source=self.package(extra={
+            'word/fontTable.xml':'<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:font w:name="Arial 2"><w:embedRegular r:id="font1"/></w:font></w:fonts>',
+            'word/_rels/fontTable.xml.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="font1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="media/font.odttf"/></Relationships>',
+            'word/media/font.odttf':'opaque font',
+            'word/media/image.png':'synthetic image bytes',
+            'customXml/item1.xml':'<x:embedRegular xmlns:x="urn:synthetic">CUSTOM_SENTINEL</x:embedRegular>',
+        })
+        with self.assertRaises(Rejected) as caught:inspect_docx(source)
+        self.assertEqual(caught.exception.code,'EMBEDDED_FONTS')
+        output=source.with_name('without-fonts.docx');sanitize_copy(source,output,fonts=True);self.assertTrue(inspect_docx(output))
+        with zipfile.ZipFile(output) as package:
+            self.assertNotIn('word/media/font.odttf',package.namelist())
+            self.assertEqual(package.read('word/media/image.png'),b'synthetic image bytes')
+            self.assertNotIn(b'embedRegular',package.read('word/fontTable.xml'))
+            self.assertIn(b'Arial 2',package.read('word/fontTable.xml'))
+            self.assertIn(b'CUSTOM_SENTINEL',package.read('customXml/item1.xml'))
     def test_empty(self):
         with self.assertRaises(Rejected): inspect_docx(self.package(''))
     def test_malformed_xml_has_a_specific_non_content_error(self):

@@ -26,11 +26,13 @@ async function mockService(page: Page, mode = "success") {
         ? send(503, {})
         : send(200, {
             region: "Local acceptance server",
+            mode: mode === "local" ? "local" : "cloud",
             available: true,
             retentionMinutes: 60,
             capabilities: {
               revisionViews: ["final", "original"],
               omitComments: true,
+              availableFonts: true,
             },
           });
     if (method === "DELETE") {
@@ -188,7 +190,9 @@ test("selection stays local until explicit start, then preview and download work
   await expect(
     page.getByRole("heading", { name: "Word to PDF", exact: true, level: 1 }),
   ).toBeVisible();
-  await expect(page.getByRole("note")).toContainText("uploaded only when");
+  await expect(page.getByRole("note")).toContainText(
+    "Upload starts only when you convert",
+  );
   await select(page);
   expect(
     calls.filter((c) => c.startsWith("PUT") || c.startsWith("POST")),
@@ -509,4 +513,62 @@ test("chosen content reaches only the explicitly started task", async ({
   await expect(
     page.getByText("PDF content: original content (tracked changes rejected)."),
   ).toBeVisible();
+});
+
+test("embedded fonts offer conversion while verbose notes stay collapsed", async ({
+  page,
+}) => {
+  const calls = await mockService(page);
+  await page.goto("/word-to-pdf/");
+  await select(
+    page,
+    "Embedded fonts.docx",
+    docxFixture(
+      '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/></w:rPr><w:t>Text</w:t></w:r></w:p>',
+      { "word/fonts/font.odttf": "synthetic font payload" },
+    ),
+  );
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByText("Uses available fonts · layout may change", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Font declarations:", { exact: false }),
+  ).not.toBeVisible();
+  expect(calls.some((x) => x.startsWith("POST") || x.startsWith("PUT"))).toBe(
+    false,
+  );
+  const post = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().endsWith("/jobs"),
+  );
+  await page
+    .getByRole("button", { name: "Upload and convert", exact: true })
+    .click();
+  expect((await post).postDataJSON()).toEqual({
+    revisionView: "unchanged",
+    omitComments: false,
+    useAvailableFonts: true,
+  });
+  await expect(
+    page.getByRole("heading", { name: "Your PDF is ready" }),
+  ).toBeVisible();
+});
+
+test("local review identifies on-computer processing without a cloud upload label", async ({
+  page,
+}) => {
+  await mockService(page, "local");
+  await page.goto("/word-to-pdf/");
+  await select(page);
+  await expect(page.getByRole("note")).toContainText(
+    "Files are processed on this computer",
+  );
+  await expect(
+    page.getByRole("button", { name: "Convert to PDF", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toHaveCount(0);
 });

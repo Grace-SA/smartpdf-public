@@ -176,8 +176,8 @@
   font-size: 12px;
 }
 .word-local-check {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 12px;
+  padding: 12px 16px;
   border: 1px solid #dbe3ec;
   border-radius: 10px;
   background: #f8fafc;
@@ -192,8 +192,8 @@
   margin-bottom: 0;
 }
 .word-view-options {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 12px;
+  padding: 12px 16px;
   border: 1px solid #dbe3ec;
   border-radius: 10px;
 }
@@ -260,4 +260,19 @@
   .product-app .word-page {
     padding: 0 12px;
   }
+}
+
+.word-layout-check {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: #4b5f76;
+  margin: 12px 0;
+}
+.word-layout-check summary {
+  cursor: pointer;
+  min-height: 32px;
+  padding: 7px 0;
+}
+.word-local-check p:empty {
+  display: none;
 }

@@ -1,6 +1,9 @@
 """One disposable Stirling container per task. No document network egress."""
 import json
 import os
+import re
+import argparse
+import math
 from pathlib import Path
 import signal
 import subprocess
@@ -10,12 +13,14 @@ import time
 import urllib.request
 import uuid
 from preflight import inspect_docx, conversion_options, Rejected
+from sanitize import sanitize_copy
 
 IMAGE = 'sha256:a202357523296211bceac18fccac696470a05b9a1b5fcc98049471abb5123178'
 MEMORY_MIB = 2560
 # The platform is disposable after one conversion: avoid expensive top-tier JIT warmup.
 # Leave memory for LibreOffice and metaspace within the container's fixed ceiling.
 JAVA_OPTIONS = '-Xms256m -Xmx1280m -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=2'
+HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 def emit(**value):
     print(json.dumps(value), flush=True)
@@ -29,7 +34,31 @@ def remove_verified(name, by_id=False):
     if remaining.stdout.strip():
         raise RuntimeError('Container cleanup could not be verified')
 
-def run(directory):
+def create_converter(name, token=None):
+    network=os.environ.get('WORD_DOCKER_NETWORK','smartpdf-word')
+    def docker(*args):return subprocess.run(['docker',*args],check=True,capture_output=True,timeout=20)
+    if not json.loads(docker('network','inspect',network).stdout)[0].get('Internal'):raise RuntimeError('network')
+    extra=['--label','smartpdf.word-standby='+token] if token else []
+    docker('create','--name',name,'--network',network,'--memory',f'{MEMORY_MIB}m','--memory-swap',f'{MEMORY_MIB}m','--cpus','2',
+           '--label','smartpdf.word-service=word-v1','--pids-limit','512','--security-opt','no-new-privileges','--cap-drop','NET_RAW',
+           '--tmpfs','/tmp:rw,nosuid,nodev,size=384m','-e','SECURITY_ENABLELOGIN=false','-e','SYSTEM_DEFAULTLOCALE=en-US',
+           '-e','TZ=UTC','-e','JAVA_CUSTOM_OPTS='+JAVA_OPTIONS,'-e','SPRING_MAIN_LAZY_INITIALIZATION=true',*extra,IMAGE)
+    docker('start',name)
+    info=json.loads(docker('inspect',name).stdout)[0]
+    return 'http://'+info['NetworkSettings']['Networks'][network]['IPAddress']+':8080'
+
+def inspect_standby(name,token, require_running=True):
+    if not re.fullmatch(r'smartpdf-word-[a-f0-9]{32}',name) or not re.fullmatch(r'[a-f0-9]{32}',token):raise RuntimeError('standby')
+    value=subprocess.run(['docker','inspect',name],check=True,capture_output=True,timeout=20)
+    info=json.loads(value.stdout)[0]
+    labels=info['Config'].get('Labels') or {}
+    if info['Image']!=IMAGE or (require_running and not info['State']['Running']) or labels.get('smartpdf.word-service')!='word-v1' or labels.get('smartpdf.word-standby')!=token:raise RuntimeError('standby')
+    if not require_running:return None
+    network=os.environ.get('WORD_DOCKER_NETWORK','smartpdf-word')
+    return 'http://'+info['NetworkSettings']['Networks'][network]['IPAddress']+':8080'
+
+def run(directory, standby=None, budget=240):
+    if not math.isfinite(budget) or not 0 < budget <= 240:raise ValueError("Invalid execution budget")
     directory = Path(directory).resolve()
     cancel = directory / 'cancel'
     name = 'smartpdf-word-' + uuid.uuid4().hex
@@ -41,6 +70,14 @@ def run(directory):
     created = False
     preparation_created = False
     phase = 'checking'
+    base = None
+    if standby:
+        try:
+            base=inspect_standby(*standby)
+            name=standby[0];created=True
+        except Exception:
+            emit(error='Converter handoff could not be verified.',code='ENGINE_STARTUP_FAILED',cleanupFailed=True)
+            return 3
     def docker(*args, timeout=20, input=None):
         return subprocess.run(['docker', *args], check=True, capture_output=True, timeout=timeout, input=input)
     def stop(*_):
@@ -49,7 +86,7 @@ def run(directory):
     signal.signal(signal.SIGINT, stop)
     def monitor():
         while not done.wait(.25):
-            if cancel.exists() or time.monotonic() - started > 240:
+            if cancel.exists() or time.monotonic() - started > budget:
                 expired.set()
                 cancel.touch()
                 try:
@@ -75,7 +112,15 @@ def run(directory):
         if not net.get('Internal'):
             raise RuntimeError('network')
         filename = 'input.docx'
-        if details['revisions'] or details['comments']:
+        if details['comments'] or details['embeddedFonts']:
+            sanitize_copy(directory/'input.docx',directory/'sanitized.docx',comments=details['comments'],fonts=details['embeddedFonts'])
+            if (directory/'sanitized.docx').stat().st_size>30*1024**2:raise Rejected('The conversion copy exceeds the 30 MiB limit.','PACKAGE_EXPANSION_LIMIT')
+            inspect_docx(directory/'sanitized.docx',dict(options,useAvailableFonts=False,omitComments=False))
+            filename='sanitized.docx'
+        if details['revisions']:
+            if created:
+                remove_verified(name);created=False;base=None
+                name='smartpdf-word-'+uuid.uuid4().hex
             emit(state='preparing'); phase='preparing'
             docker('create', '--name', preparation_name, '--network', 'none', '--memory', f'{MEMORY_MIB}m', '--memory-swap', f'{MEMORY_MIB}m', '--cpus', '2',
                    '--label', 'smartpdf.word-service=word-v1', '--pids-limit', '512', '--security-opt', 'no-new-privileges', '--cap-drop', 'NET_RAW',
@@ -88,7 +133,8 @@ def run(directory):
             writer = 'import sys,pathlib;p=pathlib.Path(sys.argv[1]);p.write_bytes(sys.stdin.buffer.read());p.chmod(0o600)'
             docker('exec','-i',preparation_name,'python3','-c',writer,'/tmp/word-source.docx',input=(directory/filename).read_bytes())
             docker('exec','-i',preparation_name,'python3','-c',writer,'/tmp/prepare_uno.py',input=Path(__file__).with_name('prepare_uno.py').read_bytes())
-            preparation=dict(options,_hasRevisions=details['revisions'])
+            docker('exec','-i',preparation_name,'python3','-c',writer,'/tmp/sanitize.py',input=Path(__file__).with_name('sanitize.py').read_bytes())
+            preparation=dict(options,_hasRevisions=True,omitComments=False)
             docker('exec',preparation_name,'python3','/tmp/prepare_uno.py','/tmp/word-source.docx','/tmp/word-prepared.docx',json.dumps(preparation),timeout=90)
             reader = 'import sys;f=open("/tmp/word-prepared.docx","rb");sys.stdout.buffer.write(f.read(30*1024**2+1))'
             prepared=docker('exec',preparation_name,'python3','-c',reader).stdout
@@ -100,25 +146,15 @@ def run(directory):
             if cancel.exists() or expired.is_set():return
         emit(state='starting')
         phase = 'starting'
-        docker('create', '--name', name, '--network', network, '--memory', f'{MEMORY_MIB}m', '--memory-swap', f'{MEMORY_MIB}m', '--cpus', '2',
-               '--label', 'smartpdf.word-service=word-v1',
-               '--pids-limit', '512', '--security-opt', 'no-new-privileges',
-               '--cap-drop', 'NET_RAW', '--tmpfs', '/tmp:rw,nosuid,nodev,size=384m',
-               '-e', 'SECURITY_ENABLELOGIN=false', '-e', 'SYSTEM_DEFAULTLOCALE=en-US',
-               '-e', 'TZ=UTC', '-e', 'JAVA_CUSTOM_OPTS=' + JAVA_OPTIONS,
-               '-e', 'SPRING_MAIN_LAZY_INITIALIZATION=true', IMAGE)
-        created = True
-        if cancel.exists():
-            return
-        docker('start', name)
-        info = json.loads(docker('inspect', name).stdout)[0]
-        address = info['NetworkSettings']['Networks'][network]['IPAddress']
-        base = 'http://' + address + ':8080'
+        if not created:
+            created=True
+            base=create_converter(name)
+        if cancel.exists():return
         ready = False
         deadline = time.monotonic() + 150
         while time.monotonic() < deadline and not cancel.exists() and not expired.is_set():
             try:
-                with urllib.request.urlopen(base + '/api/v1/info/status', timeout=2) as response:
+                with HTTP.open(base + '/api/v1/info/status', timeout=2) as response:
                     ready = response.status == 200
                 if ready:
                     break
@@ -134,7 +170,7 @@ def run(directory):
                 'Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n').encode() + data + f'\r\n--{boundary}--\r\n'.encode()
         request = urllib.request.Request(base + '/api/v1/convert/file/pdf', data=body,
             headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}, method='POST')
-        with urllib.request.urlopen(request, timeout=90) as response:
+        with HTTP.open(request, timeout=90) as response:
             result = response.read(30 * 1024**2 + 1)
         phase = 'checking-result'
         if len(result) > 30 * 1024**2 or not result.startswith(b'%PDF-'):
@@ -170,4 +206,9 @@ if __name__ == '__main__':
         for container in result.stdout.decode().split():
             remove_verified(container, by_id=True)
     else:
-        sys.exit(run(sys.argv[1]))
+        parser=argparse.ArgumentParser()
+        parser.add_argument('directory')
+        parser.add_argument('--standby',nargs=2)
+        parser.add_argument('--budget',type=float,default=240)
+        args=parser.parse_args()
+        sys.exit(run(args.directory,args.standby,args.budget))

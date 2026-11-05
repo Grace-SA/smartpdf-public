@@ -2,6 +2,7 @@ import type { WordCheck } from "./preflight-core";
 export type WordOptions = {
   revisionView: "unchanged" | "final" | "original";
   omitComments: boolean;
+  useAvailableFonts?: boolean;
 };
 export const defaultWordOptions = (): WordOptions => ({
   revisionView: "unchanged",
@@ -17,7 +18,9 @@ export function blockingWordIssues(
         !(
           issue.code === "TRACKED_CHANGES" &&
           options.revisionView !== "unchanged"
-        ) && !(issue.code === "COMMENTS" && options.omitComments),
+        ) &&
+        !(issue.code === "COMMENTS" && options.omitComments) &&
+        !(issue.code === "EMBEDDED_FONTS" && options.useAvailableFonts),
     ) || [];
   if (check?.originalViewUnsupported && options.revisionView === "original")
     issues.push({
