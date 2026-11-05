@@ -5,6 +5,13 @@ const origin = "https://smartpdf.com.au";
 const reviewProtect = process.env.VITE_ENABLE_PROTECT === "true";
 const publicTools = enabledTools(reviewProtect);
 const pages = {
+  "powerpoint-to-pdf": {
+    title: "PowerPoint to PDF – PPTX Conversion | Smart PDF",
+    description:
+      "Convert a PPTX with clearly marked cloud processing. Keep the original slide size, preview and download your PDF.",
+    keywords: "powerpoint to pdf, pptx to pdf",
+    heading: "Convert PowerPoint slides to PDF",
+  },
   "word-to-pdf": {
     title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
     description:
@@ -143,7 +150,9 @@ for (const [slug, page] of Object.entries(pages)) {
     offers: { "@type": "Offer", price: "0", priceCurrency: "AUD" },
     featureList: [
       "Local browser PDF processing",
-      "No document upload",
+      ...(slug === "word-to-pdf" || slug === "powerpoint-to-pdf"
+        ? ["Explicit cloud upload"]
+        : ["No document upload"]),
       page.heading,
     ],
   }).replaceAll("<", "\\u003c");

@@ -150,6 +150,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  ppt: "Convert visible PPTX slides using cloud processing.",
   word: "Convert a DOCX using cloud processing.",
   protect: "Add an opening password. Keep your PDF on your device.",
   unlock: "Remove a known password. Keep your PDF on your device.",
@@ -344,8 +345,8 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
-      if (next === "word") {
-        window.location.assign(toolPaths.word);
+      if (next === "word" || next === "ppt") {
+        window.location.assign(toolPaths[next]);
         return;
       }
       if (!reuse) resetTask();
@@ -1381,7 +1382,8 @@ export function App() {
             <h1>Simple PDF tools. Clear choices for your files.</h1>
             <p className="hero-lede">
               Merge, split, organize, sign and compress in your browser. Word to
-              PDF uses cloud conversion and uploads only when you start.
+              PDF and PowerPoint to PDF use cloud conversion and upload only
+              when you start.
             </p>
             <div className="tool-cards">
               {publicTools.map((t) => (
@@ -1625,6 +1627,7 @@ export function App() {
               <Completion
                 title={
                   {
+                    ppt: "Your PDF is ready",
                     word: "Your PDF is ready",
                     unlock: "Your unlocked PDF is ready",
                     protect: "Your protected PDF is ready",
@@ -2084,8 +2087,8 @@ export function App() {
               </span>
             </a>
             <p>
-              PDF tools on your device, plus clearly marked cloud Word
-              conversion.
+              PDF tools on your device, plus clearly marked cloud Word and
+              PowerPoint conversion.
             </p>
             <span className="australia-badge">Proudly built in Australia</span>
           </div>

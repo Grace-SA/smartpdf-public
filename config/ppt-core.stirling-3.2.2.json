@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "stage": "local-testing",
+  "version": "3.2.2",
+  "flavor": "core",
+  "imageId": "sha256:3c274ecae5cb89ebeaeaf85d9d715f9c69df32b352934ae70a7dd7245a75e9be",
+  "baselineImageId": "sha256:a6bdc6c64f0f0287043f073cca79bcafd515cc9c5a6786c76a6c4deb2af9e6ee",
+  "baselineTag": "smartpdf-stirling-core:3.2.2-poc2",
+  "dockerfileSha256": "1ea96951d3e83bc38171d8391d6f79144c4be175db4bc54e0da83cecbb2b1e5b",
+  "export": "LibreOffice Impress UNO inside the fixed open-source core container; Java HTTP wrapper is not started. MacroExecutionMode=NEVER_EXECUTE, UpdateDocMode=NO_UPDATE, explicit slide/notes policy.",
+  "fontProfile": "stirling-3.2.2-builtin-v1",
+  "isolation": "One non-root, read-only container per task; network=none, no host mounts, no ports. 2 CPU/2560MiB/512 PID; task timeout 120 seconds.",
+  "promotionPolicy": "Local candidate only. Verify baseline ID before Docker build. Image promotion is explicit; rebuild does not automatically update this pin. Word and Excel pins are unchanged."
+}

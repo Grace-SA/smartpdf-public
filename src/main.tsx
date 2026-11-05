@@ -1,6 +1,10 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { WordBoundary } from "./word/WordBoundary";
+import { lazy, Suspense } from "react";
+const PptPage = lazy(() =>
+  import("./ppt/PptPage").then((module) => ({ default: module.PptPage })),
+);
 import { WordEntry } from "./word/WordEntry";
 import "./style.css";
 import "./product.css";
@@ -17,7 +21,13 @@ if (["smartpdf.com.au", "www.smartpdf.com.au"].includes(location.hostname)) {
 }
 
 createRoot(document.getElementById("root")!).render(
-  /^\/word-to-pdf\/?$/.test(location.pathname) ? (
+  /^\/powerpoint-to-pdf\/?$/.test(location.pathname) ? (
+    <WordBoundary title="PowerPoint to PDF">
+      <Suspense fallback={<main>Opening PowerPoint to PDF...</main>}>
+        <PptPage />
+      </Suspense>
+    </WordBoundary>
+  ) : /^\/word-to-pdf\/?$/.test(location.pathname) ? (
     <WordBoundary>
       <WordEntry />
     </WordBoundary>

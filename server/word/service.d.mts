@@ -12,8 +12,12 @@ export type Task = {
     useAvailableFonts?: boolean;
   };
 };
-export function checkPdf(file: string): Promise<{ pages: number }>;
+export function checkPdf(
+  file: string,
+  policy?: { ppt: boolean; visible: number; width: number; height: number },
+): Promise<{ pages: number }>;
 export function createWordService(options?: {
+  format?: "word" | "ppt";
   root?: string;
   origin?: string;
   now?: () => number;

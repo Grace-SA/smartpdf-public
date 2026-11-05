@@ -65,10 +65,10 @@ async function outputOptions(req) {
   }
 }
 
-export function checkPdf(file) {
+export function checkPdf(file, policy) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./pdf-check.mjs", import.meta.url), {
-      workerData: file,
+      workerData: policy ? { file, policy } : file,
       resourceLimits: { maxOldGenerationSizeMb: 192 },
     });
     const finish = (error, value) => {
@@ -97,7 +97,7 @@ function linuxPath(value) {
     .replaceAll("\\", "/");
 }
 
-export function runStirling(job, update) {
+export function runStirling(job, update, adapter = runner) {
   return new Promise((resolve, reject) => {
     const windows = process.platform === "win32";
     const command = windows
@@ -106,7 +106,7 @@ export function runStirling(job, update) {
     const control = job.warmToken || job.discardToken;
     const script = control
       ? fileURLToPath(new URL("./warm.py", import.meta.url))
-      : runner;
+      : adapter;
     const mapped = (value) =>
       windows && !value.startsWith("--")
         ? linuxPath(realpathSync(value))
@@ -206,10 +206,19 @@ export function runStirling(job, update) {
 }
 
 export async function createWordService(options = {}) {
+  const ppt = options.format === "ppt";
+  const api = ppt ? "/api/ppt" : "/api/word";
+  const cookieName = ppt ? "ppt_session=" : "word_session=";
+  const inputName = ppt ? "input.pptx" : "input.docx";
+  const inputMime = ppt
+    ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ppt && !options.execute)
+    throw new Error("PPT requires its dedicated executor");
   const root = path.resolve(
     options.root ||
       process.env.WORD_DATA_DIR ||
-      path.join(tmpdir(), "smartpdf-word-tasks"),
+      path.join(tmpdir(), ppt ? "smartpdf-ppt-tasks" : "smartpdf-word-tasks"),
   );
   const origin =
     options.origin || process.env.WORD_PUBLIC_ORIGIN || "http://127.0.0.1:4240";
@@ -271,8 +280,8 @@ export async function createWordService(options = {}) {
     const cookie = (req.headers.cookie || "")
       .split(";")
       .map((s) => s.trim())
-      .find((s) => s.startsWith("word_session="))
-      ?.slice(13);
+      .find((s) => s.startsWith(cookieName))
+      ?.slice(cookieName.length);
     if (cookie && /^[a-f0-9]{64}\.[a-f0-9]{64}$/.test(cookie)) {
       const [id, sig] = cookie.split(".");
       if (timingSafeEqual(Buffer.from(sig), Buffer.from(signature(id))))
@@ -282,7 +291,7 @@ export async function createWordService(options = {}) {
     const id = randomBytes(32).toString("hex");
     res.setHeader(
       "Set-Cookie",
-      `word_session=${id}.${signature(id)}; Path=/api/word; HttpOnly; SameSite=Strict; Max-Age=3600${secure ? "; Secure" : ""}`,
+      `${cookieName}${id}.${signature(id)}; Path=${api}; HttpOnly; SameSite=Strict; Max-Age=3600${secure ? "; Secure" : ""}`,
     );
     return id;
   }
@@ -347,10 +356,12 @@ export async function createWordService(options = {}) {
           });
         }
         // Do not announce success while the uploaded source still exists.
-        await rm(path.join(job.directory, "input.docx"), { force: true });
+        await rm(path.join(job.directory, inputName), { force: true });
         await rm(path.join(job.directory, "prepared.docx"), { force: true });
         await rm(path.join(job.directory, "sanitized.docx"), { force: true });
         await rm(path.join(job.directory, "options.json"), { force: true });
+        if (ppt)
+          await rm(path.join(job.directory, "expected.json"), { force: true });
         if (!terminal.has(job.state)) {
           job.pages = result.pages;
           job.state = "succeeded";
@@ -366,13 +377,15 @@ export async function createWordService(options = {}) {
         job.error =
           error.code === "INPUT_REJECTED"
             ? error.message
-            : "Conversion could not finish. Try again, or export from Word.";
+            : ppt
+              ? "Conversion could not finish. Try again, or export from PowerPoint."
+              : "Conversion could not finish. Try again, or export from Word.";
       }
     } finally {
       job.running = false;
       active = false;
       try {
-        await rm(path.join(job.directory, "input.docx"), { force: true });
+        await rm(path.join(job.directory, inputName), { force: true });
         if (job.state !== "succeeded") await erase(job);
       } catch {
         unhealthy = true;
@@ -423,6 +436,11 @@ export async function createWordService(options = {}) {
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, origin);
+      if (ppt) {
+        if (!url.pathname.startsWith(api + "/"))
+          return json(res, 404, { error: "Unknown conversion endpoint." });
+        url.pathname = "/api/word/" + url.pathname.slice(api.length + 1);
+      }
       if (url.pathname === "/api/word/health" && req.method === "GET")
         return json(res, unhealthy || stopped ? 503 : 200, {
           available: !unhealthy && !stopped,
@@ -466,11 +484,13 @@ export async function createWordService(options = {}) {
               : "cloud",
           ready: pool?.ready() ?? true,
           available: !unhealthy && !stopped,
-          capabilities: {
-            revisionViews: ["final", "original"],
-            omitComments: true,
-            availableFonts: true,
-          },
+          capabilities: ppt
+            ? {}
+            : {
+                revisionViews: ["final", "original"],
+                omitComments: true,
+                availableFonts: true,
+              },
         });
       if (!owner)
         return json(res, 401, {
@@ -480,6 +500,13 @@ export async function createWordService(options = {}) {
         let settings;
         try {
           settings = await outputOptions(req);
+          if (
+            ppt &&
+            (settings.revisionView !== "unchanged" ||
+              settings.omitComments ||
+              settings.useAvailableFonts !== undefined)
+          )
+            throw new Error("PPT does not accept Word options");
         } catch {
           return json(res, 400, {
             error: "Choose valid document output options.",
@@ -542,13 +569,18 @@ export async function createWordService(options = {}) {
       if (req.method === "PUT" && match[2] === "input") {
         if (job.state !== "created")
           return json(res, 409, { error: "This upload has already started." });
-        if (
-          req.headers["content-type"] !==
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-          return json(res, 415, { error: "Choose a DOCX document." });
+        if (req.headers["content-type"] !== inputMime)
+          return json(res, 415, {
+            error: ppt
+              ? "Choose a PPTX presentation."
+              : "Choose a DOCX document.",
+          });
         if (Number(req.headers["content-length"]) > MAX_BYTES)
-          return json(res, 413, { error: "Choose a DOCX up to 30 MiB." });
+          return json(res, 413, {
+            error: ppt
+              ? "Choose a PPTX up to 30 MiB."
+              : "Choose a DOCX up to 30 MiB.",
+          });
         job.state = "uploading";
         job.uploading = true;
         job.expiresAt = now() + UPLOAD_TIMEOUT_MS + 10000;
@@ -567,7 +599,7 @@ export async function createWordService(options = {}) {
           await pipeline(
             req,
             limit,
-            createWriteStream(path.join(job.directory, "input.docx"), {
+            createWriteStream(path.join(job.directory, inputName), {
               flags: "wx",
               mode: 0o600,
             }),
@@ -585,8 +617,9 @@ export async function createWordService(options = {}) {
           if (job.state === "uploading") {
             job.state = "failed";
             job.expiresAt = now() + 60000;
-            job.error =
-              "Upload did not finish. Choose a valid DOCX up to 30 MiB and retry.";
+            job.error = ppt
+              ? "Upload did not finish. Choose a valid PPTX up to 30 MiB and retry."
+              : "Upload did not finish. Choose a valid DOCX up to 30 MiB and retry.";
           }
         } finally {
           clearTimeout(timeout);

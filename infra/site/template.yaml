@@ -280,7 +280,7 @@ Resources:
             "download",
             "download_failure",
           ]);
-          const tools = new Set([
+          const tools = new Set(["ppt",
             "word",
             "combine",
             "split",

@@ -128,3 +128,9 @@ private-samples/
 !/server/word/
 /server/word/__pycache__/
 !/playwright.word.config.ts
+
+# Reviewed PPT source and research specification.
+!/server/ppt/
+/server/ppt/__pycache__/
+!/docs/ux/ppt-to-pdf-research-2026-11-05.md
+!/docs/ppt-report.md
