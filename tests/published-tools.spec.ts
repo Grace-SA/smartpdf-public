@@ -25,7 +25,7 @@ test("publication includes Word and Unlock without Protect entry points", async 
       await expect(page.locator("#word-file")).toBeAttached();
       await expect(
         page.getByText(
-          "Your document is uploaded only when you choose Upload and convert.",
+          "Upload starts only when you convert.",
           { exact: false },
         ),
       ).toBeVisible();

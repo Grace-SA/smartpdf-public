@@ -14,6 +14,11 @@ export function waitForBoot(
       signal?.removeEventListener("abort", abort);
     };
     const fail = (reason: Error) => {
+      // A cancelled blob worker can report a queued load error after its boot
+      // listeners are removed (notably in WebKit). Stop it synchronously and
+      // consume only that failed worker's late errors, not live worker errors.
+      port.addEventListener("error", (event) => event.preventDefault());
+      port.terminate();
       clean();
       reject(reason);
     };

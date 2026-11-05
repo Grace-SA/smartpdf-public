@@ -15,6 +15,55 @@ const origin = "http://127.0.0.1:4240";
 const type =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const cleanup: (() => Promise<void>)[] = [];
+it("binds explicit output choices to a task and removes prepared input before success", async () => {
+  const s = await setup(async (job) => {
+    expect(job.options).toEqual({
+      revisionView: "original",
+      omitComments: true,
+    });
+    expect(
+      JSON.parse(
+        await readFile(path.join(job.directory, "options.json"), "utf8"),
+      ),
+    ).toEqual(job.options);
+    await writeFile(
+      path.join(job.directory, "prepared.docx"),
+      "synthetic prepared source",
+    );
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    await writeFile(path.join(job.directory, "output.pdf"), await pdf.save());
+  });
+  const created = await s.api(
+    s.cookie,
+    "/jobs",
+    "POST",
+    JSON.stringify({ revisionView: "original", omitComments: true }),
+  );
+  expect(created.status).toBe(201);
+  const job = await created.json();
+  expect(job.options.revisionView).toBe("original");
+  await s.api(s.cookie, "/jobs/" + job.id + "/input", "PUT", "synthetic input");
+  await s.wait(job.id, "succeeded");
+  expect(await readdir(s.service.jobs.get(job.id)!.directory)).not.toContain(
+    "prepared.docx",
+  );
+});
+it("rejects invalid output options before allocating a task", async () => {
+  const s = await setup();
+  for (const value of [
+    { revisionView: "unknown" },
+    { revisionView: null },
+    { omitComments: "true" },
+    { useAvailableFonts: "true" },
+    { useAvailableFonts: null },
+    { extra: "not allowed" },
+  ])
+    expect(
+      (await s.api(s.cookie, "/jobs", "POST", JSON.stringify(value))).status,
+    ).toBe(400);
+  expect(s.service.jobs.size).toBe(0);
+});
 afterEach(async () => {
   await Promise.all(cleanup.splice(0).map((fn) => fn()));
 });
