@@ -45,9 +45,9 @@ def materialize(styles, sheet, tables):
         info = table.find(q('tableStyleInfo'))
         if info is None or not info.get('name'): continue
         preset = presets.get(info.get('name'))
-        definition = next((item for item in custom or [] if item.get('name') == info.get('name')), None)
+        definition = next((item for item in (custom if custom is not None else []) if item.get('name') == info.get('name')), None)
         if definition is not None:
-            dxfs = list(custom_dxfs or []); rules = list(definition); offset = 0
+            dxfs = list(custom_dxfs) if custom_dxfs is not None else []; rules = list(definition); offset = 0
         elif preset is not None:
             dxfs = [namespace(item) for item in preset.find('dxfs')]
             rules = list(preset.find('tableStyles/tableStyle')); offset = 1

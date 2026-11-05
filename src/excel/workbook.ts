@@ -1,7 +1,12 @@
 import { Inflate } from "pako";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
-export type Sheet = { index: number; name: string; hidden: boolean };
+export type Sheet = {
+  index: number;
+  name: string;
+  hidden: boolean;
+  active?: boolean;
+};
 export type ExcelOptions = {
   sheets: number[];
   orientation: "keep" | "portrait" | "landscape";
@@ -117,6 +122,19 @@ export function readSheets(bytes: Uint8Array): Sheet[] {
   const items = parsed?.workbook?.sheets?.sheet;
   const list = Array.isArray(items) ? items : items ? [items] : [];
   if (!list.length || list.length > 50) return fail();
+  const views = parsed?.workbook?.bookViews?.workbookView;
+  const savedActive = Number(
+    (Array.isArray(views) ? views[0] : views)?.activeTab,
+  );
+  const activeIndex =
+    Number.isInteger(savedActive) &&
+    savedActive >= 0 &&
+    savedActive < list.length &&
+    !["hidden", "veryHidden"].includes(list[savedActive].state)
+      ? savedActive
+      : list.findIndex(
+          (sheet) => !["hidden", "veryHidden"].includes(sheet.state),
+        );
   return list.map((item, index) => {
     if (
       typeof item.name !== "string" ||
@@ -129,6 +147,7 @@ export function readSheets(bytes: Uint8Array): Sheet[] {
       index,
       name: item.name,
       hidden: item.state === "hidden" || item.state === "veryHidden",
+      active: index === activeIndex,
     };
   });
 }

@@ -7,12 +7,12 @@ import zipfile
 S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 
-def workbook(path, sheets=None, rows=8, cols=5, area=None, formula=False):
+def workbook(path, sheets=None, rows=8, cols=5, area=None, formula=False, active=0):
     sheets = sheets or [('Report', 'visible'), ('Other', 'visible'), ('Hidden', 'hidden')]
     parts = {
         '[Content_Types].xml': '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' + ''.join(f'<Override PartName="/xl/worksheets/sheet{i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for i in range(len(sheets))) + '</Types>',
         '_rels/.rels': f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="{R}/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-        'xl/workbook.xml': f'<workbook xmlns="{S}" xmlns:r="{R}"><bookViews><workbookView activeTab="0"/></bookViews><sheets>' + ''.join(f'<sheet name="{escape(name)}" sheetId="{i+1}" state="{state}" r:id="rId{i+1}"/>' for i, (name, state) in enumerate(sheets)) + '</sheets>' + (f'<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">Report!{area}</definedName></definedNames>' if area else '') + '</workbook>',
+        'xl/workbook.xml': f'<workbook xmlns="{S}" xmlns:r="{R}"><bookViews><workbookView activeTab="{active}"/></bookViews><sheets>' + ''.join(f'<sheet name="{escape(name)}" sheetId="{i+1}" state="{state}" r:id="rId{i+1}"/>' for i, (name, state) in enumerate(sheets)) + '</sheets>' + (f'<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">Report!{area}</definedName></definedNames>' if area else '') + '</workbook>',
         'xl/_rels/workbook.xml.rels': f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + ''.join(f'<Relationship Id="rId{i+1}" Type="{R}/worksheet" Target="worksheets/sheet{i+1}.xml"/>' for i in range(len(sheets))) + '</Relationships>',
     }
     for i, (name, _) in enumerate(sheets):

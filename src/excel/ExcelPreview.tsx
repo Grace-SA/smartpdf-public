@@ -9,9 +9,28 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [status, setStatus] = useState("Opening PDF preview…");
+  const [width, setWidth] = useState(0);
+  const [pixelRatio, setPixelRatio] = useState(1);
+  const scroll = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLCanvasElement | null>(null);
   const active = useRef<RenderTask | undefined>(undefined);
+  useLayoutEffect(() => {
+    const element = scroll.current;
+    if (!element) return;
+    const measure = () => {
+      setWidth(Math.max(1, Math.round(element.clientWidth)));
+      setPixelRatio(Math.max(1, Math.min(3, window.devicePixelRatio || 1)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
   useLayoutEffect(() => {
     active.current?.cancel();
     if (frame.current) {
@@ -59,7 +78,7 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
     };
   }, [file, engine]);
   useEffect(() => {
-    if (!document) return;
+    if (!document || !width) return;
     let stopped = false;
     let task: RenderTask | undefined;
     const canvas = window.document.createElement("canvas");
@@ -76,7 +95,7 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
         if (stopped) return;
         const base = pdfPage.getViewport({ scale: 1 });
         const scale = Math.min(
-          1.6,
+          (width * zoom * pixelRatio) / base.width,
           Math.sqrt(LIMITS.canvasPixels / (base.width * base.height)),
         );
         const viewport = pdfPage.getViewport({ scale });
@@ -120,7 +139,7 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
         canvas.width = canvas.height = 0;
       });
     };
-  }, [document, page]);
+  }, [document, page, width, zoom, pixelRatio]);
   return (
     <section className="excel-preview" aria-label="Generated PDF preview">
       <div className="word-actions">
@@ -156,7 +175,7 @@ export function ExcelPreview({ file, engine }: { file: File; engine: Engine }) {
         </label>
       </div>
       {status && <p role="status">{status}</p>}
-      <div className="excel-preview-scroll">
+      <div ref={scroll} className="excel-preview-scroll">
         <div ref={host} style={{ width: `${zoom * 100}%` }} />
       </div>
     </section>

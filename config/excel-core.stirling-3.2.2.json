@@ -3,9 +3,9 @@
   "stage": "local-acceptance-candidate",
   "version": "3.2.2",
   "flavor": "core",
-  "imageId": "sha256:bbc211942a777df3f8adfeb96dacccc2adfb77469dc1e88dd58d35d78ca114ed",
+  "imageId": "sha256:0002261c5e4c4fc98cb9ed13e89cbe3cd957a3e2fb9eac62ebbe86c57e66fa91",
   "baselineImageId": "sha256:a6bdc6c64f0f0287043f073cca79bcafd515cc9c5a6786c76a6c4deb2af9e6ee",
-  "excelRendering": "LibreOffice explicitly selected. Excel-only derived image permits internal charts while macro execution, OLE automation, external-link blocking and the LO sandbox remain enabled. Preflight rejects OLE, macros and external image/data relationships.",
+  "excelRendering": "LibreOffice explicitly selected. Excel-only derived image permits internal charts with SC CJK open-font substitutions; macro execution, OLE automation, external-link blocking and the LO sandbox remain enabled. Cached worksheet formula values are frozen for print, without recalculation. Preflight rejects OLE, macros and external image/data relationships.",
   "baseImage": "stirlingtools/stirling-pdf-base:1.1.0@sha256:3bcc8e10d5319b7c0550cf41b96f6980e1552c974dc37aba462b74fa17c4b5e4",
   "jar": {
     "url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/download/v3.2.2/Stirling-PDF-server.jar",

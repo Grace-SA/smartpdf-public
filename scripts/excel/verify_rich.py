@@ -8,10 +8,15 @@ import pymupdf
 from PIL import Image, ImageDraw
 
 root = Path(sys.argv[1])
-cases = json.loads((root / 'cases.json').read_text())
+cases = json.loads((root / 'cases.json').read_text(encoding='utf-8-sig'))
+engine = {item['case']: item for item in json.loads((root / 'engine-results.json').read_text(encoding='utf-8-sig'))}
 tiles = []; results = []
 for index, case in enumerate(cases):
     assert hashlib.sha256((root / (case['input'] + '.xlsx')).read_bytes()).hexdigest() == case['sourceSha256']
+    if case.get('expectedReject'):
+        assert engine[index].get('refused')
+        results.append(dict(case=index, feature=case['input'], pages=0, refused=True, passed=True))
+        continue
     with pymupdf.open(root / f'output-{index}.pdf') as doc:
         text = '\n'.join(page.get_text() for page in doc)
         normal = re.sub(r'\s+', '', text)
@@ -23,7 +28,7 @@ for index, case in enumerate(cases):
         # All cases contain actual chart/image/conditional-format/table colour,
         # except the plain filtered range, whose criterion is row inclusion.
         visual = coloured >= 200 or case['visual'] == 'filter'
-        passed = not missing and not leaked and visual and len(doc) == 1
+        passed = not missing and not leaked and visual and len(doc) == case.get('expectedPages', 1)
         results.append(dict(case=index, feature=case['input'], pages=len(doc), missing=missing, leaked=leaked,
                             colouredPixels=coloured, passed=passed))
         image.thumbnail((580, 370))

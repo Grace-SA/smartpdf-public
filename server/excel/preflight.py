@@ -1,6 +1,7 @@
 """Bounded XLSX inspection and print-only edits. Never extracts or deletes sheets."""
 import json
 import io
+import math
 import posixpath
 import re
 import stat
@@ -47,6 +48,29 @@ def image_pixels(data, suffix):
         reject('A workbook picture exceeds the 20 megapixel processing limit.')
     return width * height
 
+def svg_pixels(tree):
+    if tree.tag != '{http://www.w3.org/2000/svg}svg': reject('Invalid embedded SVG picture.')
+    for node in tree.iter():
+        if node.tag.rsplit('}',1)[-1] in {'script','foreignObject','animate','animateTransform','animateMotion','set','filter'}:
+            reject('SVG pictures must be static and self-contained.')
+        for key,value in node.attrib.items():
+            local=key.rsplit('}',1)[-1].lower()
+            if local.startswith('on') or (local=='href' and not value.startswith('#')):
+                reject('SVG pictures cannot load external content or run scripts.')
+        css=(node.text or '') if node.tag.endswith('}style') else node.get('style','')
+        if '@' in css or '\\' in css: reject('SVG style imports are not supported.')
+        for value in [css,*node.attrib.values()]:
+            for url in re.findall(r'url\s*\(([^)]*)\)',value,re.I):
+                if not re.fullmatch(r'''\s*['"]?#[\w:.-]+['"]?\s*''',url): reject('SVG pictures cannot load external content.')
+    box=[float(v) for v in re.split(r'[\s,]+',tree.get('viewBox','0 0 300 150').strip())]
+    if len(box)!=4 or not all(math.isfinite(v) for v in box): reject('Invalid SVG dimensions.')
+    def length(value,fallback):
+        match=re.fullmatch(r'([0-9]+(?:\.[0-9]+)?)(px|pt|pc|mm|cm|in)?',value or '')
+        return float(match[1])*{'px':1,'pt':96/72,'pc':16,'mm':96/25.4,'cm':96/2.54,'in':96,None:1}[match[2]] if match else fallback
+    width,height=length(tree.get('width'),box[2]),length(tree.get('height'),box[3])
+    if not 0<width<=20000 or not 0<height<=20000 or width*height>20000000: reject('SVG picture dimensions exceed the processing limit.')
+    return math.ceil(width*height)
+
 class Rejected(ValueError):
     pass
 
@@ -77,6 +101,18 @@ def known_extension(element):
     }
     if not len(element): return False
     for child in element:
+        # Recognized passive DrawingML metadata. Validate the payload vocabulary,
+        # rather than treating a new Office extension GUID as executable content.
+        drawing_metadata = {
+            '{http://schemas.microsoft.com/office/drawing/2010/main}useLocalDpi',
+            '{http://schemas.microsoft.com/office/drawing/2016/SVG/main}svgBlip',
+            '{http://schemas.microsoft.com/office/drawing/2010/main}hiddenFill',
+            '{http://schemas.microsoft.com/office/drawing/2010/main}hiddenLine',
+        }
+        colours = {f'{{http://schemas.openxmlformats.org/drawingml/2006/main}}{tag}' for tag in ['solidFill', 'srgbClr', 'sysClr', 'schemeClr', 'tint', 'shade', 'alpha', 'lumMod', 'lumOff', 'ln', 'miter', 'headEnd', 'tailEnd', 'prstDash']}
+        payload = [node for node in child.iter() if node is not child]
+        if len(child) and all(node.tag in drawing_metadata | colours for node in payload) and any(node.tag in drawing_metadata for node in child):
+            continue
         tags = allowed.get(child.get('uri', '').upper())
         if child.tag.rsplit('}', 1)[-1] != 'ext' or tags is None or not len(child): return False
         for node in child.iter():
@@ -114,6 +150,19 @@ def settings(value):
             reject('Unsupported page settings.')
     return {**{key: 'keep' for key in ('orientation', 'paper', 'scale')}, **value}
 
+def omit_input_validation(tree):
+    validation = {f'{{{S}}}dataValidations', '{http://schemas.microsoft.com/office/spreadsheetml/2009/9/main}dataValidations'}
+    changed=False
+    for parent in list(tree.iter()):
+        for child in list(parent):
+            if child.tag in validation or (child.tag.rsplit('}',1)[-1]=='ext' and len(child) and all(node.tag in validation for node in child)):
+                parent.remove(child); changed=True
+    for parent in reversed(list(tree.iter())):
+        for child in list(parent):
+            if child.tag.rsplit('}',1)[-1]=='extLst' and not len(child):
+                parent.remove(child); changed=True
+    return changed
+
 def prepare(source, output, options):
     options = settings(options)
     start = time.monotonic()
@@ -126,6 +175,8 @@ def prepare(source, output, options):
                 reject('Unsupported workbook package.')
             trees = {}
             contents = {}
+            normalized = set()
+            omitted = set()
             total = nodes = cells = pixels = pictures = charts = 0
             for entry in entries:
                 name = entry.filename
@@ -137,7 +188,12 @@ def prepare(source, output, options):
                 total += entry.file_size
                 if total > 150 * 1024**2 or entry.file_size > 30 * 1024**2 or entry.file_size > max(1, entry.compress_size) * 200:
                     reject('Workbook expands beyond the processing limit.')
-                if re.search(r'(vbaproject|activex|embeddings|externallinks|connections|querytables|pivot|slicer|vml|customui|customxml|_xmlsignatures|metadata\.xml|/revisions/)', name, re.I):
+                if name.lower().startswith('customxml/') or name.lower() == 'xl/xmlmaps.xml':
+                    # XML mapping/provenance payloads are not printed. Keep the
+                    # saved worksheet values and omit these unused data stores.
+                    omitted.add(name)
+                    continue
+                if re.search(r'(vbaproject|activex|embeddings|externallinks|connections|querytables|pivot|slicer|customui|_xmlsignatures|/revisions/)', name, re.I):
                     reject('Remove macros, external data, embedded objects, signatures or advanced workbook features in Excel first.')
                 if name.endswith('/'):
                     continue
@@ -145,7 +201,8 @@ def prepare(source, output, options):
                 contents[name] = data
                 if len(data) != entry.file_size:
                     reject('Invalid workbook entry size.')
-                if not name.lower().endswith(('.xml', '.rels')):
+                svg = bool(re.fullmatch(r'xl/media/[^/]+\.svg',name,re.I))
+                if not name.lower().endswith(('.xml', '.rels', '.vml')) and not svg:
                     if re.fullmatch(r'xl/printerSettings/printerSettings\d+\.bin', name) and len(data) <= 1024**2:
                         warnings.add('Printer-specific device settings are omitted. Check paper size and pagination.')
                         continue
@@ -157,10 +214,30 @@ def prepare(source, output, options):
                             reject('Workbook pictures exceed the image processing limit.')
                         warnings.add('Check picture placement and appearance in the PDF preview.')
                         continue
-                    reject('This workbook contains unsupported binary content. Embedded pictures must use PNG or JPEG.')
+                    reject('This workbook contains unsupported binary content. Use PNG, JPEG or self-contained SVG pictures.')
                 if len(data) > 20 * 1024**2 or re.search(br'<!\s*(DOCTYPE|ENTITY)', data.replace(b'\x00', b''), re.I):
                     reject('Unsupported workbook XML.')
                 tree = ET.fromstring(data)
+                if name.lower() == 'xl/metadata.xml':
+                    kinds={node.get('name') for node in tree.findall(f'{{{S}}}metadataTypes/{{{S}}}metadataType')}
+                    if kinds != {'XLDAPR'}:
+                        reject('Rich linked data types are not supported. Save a plain-values copy in Excel first.')
+                    # Dynamic-array calculation metadata is unnecessary after
+                    # cached spill values are frozen. It is never sent to Office.
+                    omitted.add(name); contents.pop(name)
+                    continue
+                if svg:
+                    if len(data)>5*1024**2: reject('SVG picture exceeds the vector processing limit.')
+                    pixels+=svg_pixels(tree); pictures+=1
+                    if pictures>200 or pixels>80000000: reject('Workbook pictures exceed the image processing limit.')
+                    warnings.add('Check picture placement and appearance in the PDF preview.')
+                if name.lower().endswith('.vml'):
+                    clients = [node for node in tree.iter() if node.tag == '{urn:schemas-microsoft-com:office:excel}ClientData']
+                    if not clients or any(node.get('ObjectType') != 'Note' for node in clients):
+                        reject('VML controls and embedded programs are not supported. Ordinary cell notes are supported.')
+                # Data validation dropdowns constrain editing, not printed output.
+                # Omit them in the print copy, including the Office 2010 form.
+                if b'dataValidations' in data and omit_input_validation(tree): normalized.add(name)
                 trees[name] = tree
                 stack = [(tree, 1)]
                 while stack:
@@ -182,10 +259,12 @@ def prepare(source, output, options):
                         chart_styles = {f'{{{C}}}style', '{http://schemas.microsoft.com/office/drawing/2007/8/2/chart}style'}
                         if not leaves or any(n.tag not in wrappers and n.tag != '{http://schemas.microsoft.com/office/spreadsheetml/2010/11/ac}absPath' and not (tree.tag == f'{{{C}}}chartSpace' and n.tag in chart_styles and not len(n) and re.fullmatch(r'\d{1,4}', n.get('val', ''))) for n in leaves):
                             reject('Alternative workbook content is not supported.')
-                    if tag in {'oleObject', 'control', 'webPublishItems', 'externalReference', 'sheetProtection', 'workbookProtection'}:
+                    if tag in {'oleObject', 'control', 'webPublishItems', 'externalReference'}:
                         reject('This workbook uses protected or unsupported features. Export it from Excel instead.')
-                    if tag == 'definedName' and element.get('name') not in {'_xlnm.Print_Area', '_xlnm.Print_Titles', '_xlnm._FilterDatabase'}:
-                        reject('Custom named ranges and formulas are not supported yet. Export from Excel instead.')
+                    if tag == 'definedName':
+                        expression = re.sub(r'"(?:[^"]|"")*"', '""', element.text or '')
+                        if re.search(r'\[[^\]]+\].*!|\||://|\bfile:|\b(?:DDE|DDEAUTO|EXEC|REGISTER|CALL|WEBSERVICE|RTD|SQLREQUEST)\s*\(', expression, re.I):
+                            reject('Externally linked or executable named expressions are not supported.')
                     if element.tag == f'{{{C}}}chart' and tree.tag == f'{{{C}}}chartSpace':
                         charts += 1
                         if charts > 100: reject('Choose a workbook with at most 100 charts.')
@@ -210,19 +289,20 @@ def prepare(source, output, options):
                         cells += 1
                         if cells > 200000:
                             reject('Choose a workbook with at most 200,000 cells.')
-                    if tag in {'f', 'formula', 'calculatedColumnFormula', 'totalsRowFormula'}:
+                    if element.tag == f'{{{S}}}f':
+                        # Printing is a snapshot, not a spreadsheet calculation service.
+                        # All cell formulas (including shared/array/volatile functions)
+                        # are replaced by their saved result below, never executed.
+                        warnings.add('Formula values last saved in Excel are used without recalculation. Recalculate and save in Excel before converting if needed.')
+                    elif element.tag in {f'{{{C}}}f', f'{{{S}}}formula', f'{{{S}}}calculatedColumnFormula', f'{{{S}}}totalsRowFormula', '{http://schemas.microsoft.com/office/excel/2006/main}f'}:
                         formula = element.text or ''
-                        if element.attrib or not formula or re.search(r'[\[\]|]|://|\b(?:DDE|DDEAUTO|EXEC|REGISTER|CALL)\b|\bfile:|\b(?:NOW|TODAY|RAND|RANDBETWEEN|INDIRECT|OFFSET|WEBSERVICE|HYPERLINK)\s*\(', formula, re.I):
-                            reject('This workbook has unsupported or volatile formulas. Save a values-only copy in Excel first.')
-                        functions = re.findall(r'([A-Z_][A-Z0-9_.]*)\s*\(', formula.upper())
-                        if any(f not in {'SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'IF', 'IFERROR', 'ROUND', 'ROUNDUP', 'ROUNDDOWN', 'ABS', 'AND', 'OR', 'NOT', 'SUMIF', 'COUNTIF'} for f in functions):
-                            reject('This formula is not supported. Save a values-only copy in Excel first.')
-                        warnings.add('Formulas may be recalculated by LibreOffice. Verify totals and dates against Excel.')
+                        if not formula or re.search(r'\[[^\]]+\].*!|://|\b(?:DDE|DDEAUTO|EXEC|REGISTER|CALL)\b|\bfile:|\b(?:WEBSERVICE|RTD|SQLREQUEST)\s*\(', formula, re.I):
+                            reject('Externally linked or executable formatting/chart expressions are not supported.')
                 # A missing formula cache cannot silently become zero on export.
                 for cell in tree.iter(f'{{{S}}}c'):
                     if cell.find(f'{{{S}}}f') is not None:
                         cache = cell.find(f'{{{S}}}v')
-                        if cache is None or cache.text is None or cell.get('t') == 'e':
+                        if cache is None or (cache.text is None and cell.get('t') != 'str'):
                             reject('Save the workbook in Excel to calculate all formulas before converting.')
             workbook = trees.get('xl/workbook.xml')
             types = trees.get('[Content_Types].xml')
@@ -231,7 +311,10 @@ def prepare(source, output, options):
             required = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml'
             if workbook is None or workbook.tag != f'{{{S}}}workbook' or types is None or rels is None or root_rels is None:
                 reject('Choose a valid unencrypted XLSX workbook.')
-            if not any(e.get('PartName') == '/xl/workbook.xml' and e.get('ContentType') == required for e in types):
+            declared = next((e.get('ContentType') for e in types if e.get('PartName') == '/xl/workbook.xml'), None)
+            if declared is None:
+                declared = next((e.get('ContentType') for e in types if e.tag == f'{{{T}}}Default' and e.get('Extension', '').lower() == 'xml'), None)
+            if declared != required:
                 reject('Only standard XLSX workbooks are supported.')
             if any(re.search(r'macroenabled|vbaproject|activex|externalLink', e.get('ContentType', ''), re.I) for e in types):
                 reject('Active workbook content is not supported.')
@@ -262,7 +345,52 @@ def prepare(source, output, options):
             if not 1 <= len(sheets) <= 50 or max(options['sheets']) >= len(sheets):
                 reject('Choose a workbook with 1–50 worksheets.')
             selected = set(options['sheets'])
-            changed = {'xl/workbook.xml'}
+            changed = {'xl/workbook.xml'} | normalized
+            if omitted:
+                for part in omitted: contents.pop(part,None)
+                for element in list(types):
+                    if element.get('PartName','').lstrip('/') in omitted: types.remove(element)
+                changed.add('[Content_Types].xml')
+                for name,tree in trees.items():
+                    if name.endswith('.rels'):
+                        parent=posixpath.dirname(posixpath.dirname(name)) if name!='_rels/.rels' else ''
+                        for element in list(tree):
+                            target=element.get('Target','')
+                            resolved=posixpath.normpath(target.lstrip('/') if target.startswith('/') else posixpath.join(parent,target))
+                            if resolved in omitted: tree.remove(element); changed.add(name)
+            # Freeze cached values in every dependency sheet too. No formulas,
+            # shared/array formula definitions or calculation-chain triggers survive.
+            for name, tree in trees.items():
+                if not name.startswith('xl/worksheets/') or not name.endswith('.xml'): continue
+                for cell in tree.iter(f'{{{S}}}c'):
+                    if 'xl/metadata.xml' in omitted:
+                        cell.attrib.pop('cm',None); cell.attrib.pop('vm',None); changed.add(name)
+                    formula = cell.find(f'{{{S}}}f')
+                    if formula is None: continue
+                    cell.remove(formula)
+                    if cell.get('t') == 'str':
+                        cache = cell.find(f'{{{S}}}v'); value = cache.text or ''
+                        cell.remove(cache); cell.set('t', 'inlineStr')
+                        text = ET.SubElement(ET.SubElement(cell, f'{{{S}}}is'), f'{{{S}}}t')
+                        text.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve'); text.text = value
+                    if cell.get('t') == 'e': warnings.add('Saved Excel error values are preserved. Check formula errors before sharing.')
+                    changed.add(name)
+            for name, tree in trees.items():
+                if not name.startswith('xl/tables/') or not name.endswith('.xml'): continue
+                for column in tree.iter(f'{{{S}}}tableColumn'):
+                    for formula in list(column):
+                        if formula.tag in {f'{{{S}}}calculatedColumnFormula', f'{{{S}}}totalsRowFormula', f'{{{S}}}xmlColumnPr'}:
+                            column.remove(formula); changed.add(name)
+                    if 'totalsRowFunction' in column.attrib:
+                        column.attrib.pop('totalsRowFunction'); changed.add(name)
+            chains = {name for name in contents if name.lower() == 'xl/calcchain.xml'}
+            if chains:
+                for name in chains: contents.pop(name)
+                for element in list(types):
+                    if element.get('PartName', '').lstrip('/') in chains: types.remove(element)
+                for element in list(rels):
+                    if element.get('Type', '').endswith('/calcChain'): rels.remove(element)
+                changed.update({'[Content_Types].xml', 'xl/_rels/workbook.xml.rels'})
             # Strip only opaque driver settings; retain the explicit portable page settings.
             printer_parts = {name for name in contents if re.fullmatch(r'xl/printerSettings/printerSettings\d+\.bin', name)}
             if printer_parts:
@@ -296,7 +424,7 @@ def prepare(source, output, options):
                 table_parts = tree.find(f'{{{S}}}tableParts')
                 if index in selected and table_parts is not None:
                     sheet_rels = trees.get(posixpath.join(posixpath.dirname(target), '_rels', posixpath.basename(target) + '.rels'))
-                    table_targets = {r.get('Id'): posixpath.normpath(posixpath.join(posixpath.dirname(target), r.get('Target', ''))) for r in sheet_rels or [] if r.get('Type', '').endswith('/table')}
+                    table_targets = {r.get('Id'): posixpath.normpath(r.get('Target','').lstrip('/') if r.get('Target','').startswith('/') else posixpath.join(posixpath.dirname(target),r.get('Target',''))) for r in (sheet_rels if sheet_rels is not None else []) if r.get('Type', '').endswith('/table')}
                     tables = []
                     for part in table_parts:
                         table = trees.get(table_targets.get(part.get(f'{{{R}}}id'), ''))

@@ -21,6 +21,7 @@ export const wordRuntimePaths = [
   "server/excel/LICENSE-APACHE-2.0.txt",
   "server/excel/NOTICE",
   "server/excel/Dockerfile",
+  "server/excel/fonts.conf",
   "config/excel-core.stirling-3.2.2.json",
   "infra/word/nginx.conf",
   "infra/word/origin.conf.template",

@@ -41,6 +41,8 @@ def main(root, only=None):
             result = [item for item in result if item['case'] != index]
             stem, sheets, scale = case['input'], case['sheets'], case['scale']
             source = root / (stem + '.xlsx')
+            if case.get('sourceSha256') and hashlib.sha256(source.read_bytes()).hexdigest() != case['sourceSha256']:
+                raise RuntimeError('Frozen source identity changed; conversion not performed')
             prepared = root / f'prepared-{index}.xlsx'
             try:
                 warnings = prepare(source, prepared, {k: v for k, v in case.items() if k in {'sheets', 'scale', 'orientation', 'paper'}})

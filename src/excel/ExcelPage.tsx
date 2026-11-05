@@ -183,7 +183,11 @@ export function ExcelPage() {
       if (!visible.length)
         throw new Error("This workbook has no visible worksheets to export.");
       setSheets(list);
-      setOptions({ ...defaultOptions(), sheets: visible });
+      const active = list.find((sheet) => sheet.active && !sheet.hidden);
+      setOptions({
+        ...defaultOptions(),
+        sheets: [active?.index ?? visible[0]!],
+      });
       setFile(selected);
     } catch (cause) {
       if (!check.signal.aborted && mounted.current)
@@ -549,6 +553,12 @@ export function ExcelPage() {
               }}
             />
           )}
+          {file && !result && (
+            <p className="word-layout-hint">
+              Formula results are taken from the last saved workbook.
+              Recalculate and save in Excel first if you need updated results.
+            </p>
+          )}
           <div className="word-cloud-note" role="note">
             <strong>Cloud conversion</strong>
             <p>
@@ -733,20 +743,22 @@ export function ExcelPage() {
             )}
           </div>
           <p className="word-layout-hint">
-            Fonts, formulas and page breaks may change. Check totals, dates, the
-            last column and print areas before sharing.
+            Fonts and page breaks may change. Saved formula values are used.
+            Check totals, dates, the last column and print areas before sharing.
           </p>
           <details className="input-support">
             <summary>Supported documents</summary>
             <p>
               Ordinary XLSX workbooks with up to 50 worksheets and 200,000
               cells. Only selected visible sheets are exported. Existing print
-              areas are kept. Common cached formulas may be recalculated. Common
-              charts, embedded PNG/JPEG pictures, common conditional formatting
-              and filtered tables are supported. Check their layout, colours and
-              visible rows in the PDF preview. Named ranges, macros, external
-              data, protected files, newer chart types and advanced formulas may
-              require exporting from Excel instead.
+              areas are kept. Formula values last saved in Excel are used
+              without recalculation. Recalculate and save in Excel first if
+              needed. Common charts, embedded PNG/JPEG and static SVG pictures,
+              common conditional formatting and filtered tables are supported.
+              Check their layout, colours and visible rows in the PDF preview.
+              Ordinary named ranges, cell notes and read-only sheet protection
+              are supported. Macros, external data, encrypted files and newer
+              chart types may require exporting from Excel instead.
             </p>
           </details>
         </section>

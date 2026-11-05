@@ -134,6 +134,10 @@ for (const width of [320, 390, 1280]) {
     ).toHaveCount(0);
     await choose(page);
     await expect(page.getByLabel("Report", { exact: true })).toBeChecked();
+    await expect(page.getByLabel("Other", { exact: true })).not.toBeChecked();
+    await page
+      .getByRole("button", { name: "Select all visible", exact: true })
+      .click();
     await expect(page.getByLabel("Other", { exact: true })).toBeChecked();
     await expect(
       page.getByText("1 hidden worksheet(s) excluded."),
@@ -326,6 +330,30 @@ test("inline PDF preview can flip pages and be disposed without late stream erro
     page.locator('.excel-preview canvas[aria-label="PDF preview, page 1"]'),
   ).toBeVisible();
   for (let i = 0; i < 5; i++) {
+    if (i === 0) {
+      const canvas = page.locator(
+        '.excel-preview canvas[aria-label="PDF preview, page 1"]',
+      );
+      const originalPixels = await canvas.evaluate(
+        (node) => (node as HTMLCanvasElement).width,
+      );
+      await page.getByLabel("Preview zoom", { exact: true }).selectOption("2");
+      await expect
+        .poll(() =>
+          canvas.evaluateAll(
+            (nodes) => (nodes[0] as HTMLCanvasElement | undefined)?.width ?? 0,
+          ),
+        )
+        .toBeGreaterThan(originalPixels * 1.5);
+      await page.getByLabel("Preview zoom", { exact: true }).selectOption("1");
+      await expect
+        .poll(() =>
+          canvas.evaluateAll(
+            (nodes) => (nodes[0] as HTMLCanvasElement | undefined)?.width ?? 0,
+          ),
+        )
+        .toBe(originalPixels);
+    }
     await page.getByRole("button", { name: "Next page", exact: true }).click();
     await expect(
       page.locator('.excel-preview canvas[aria-label="PDF preview, page 2"]'),

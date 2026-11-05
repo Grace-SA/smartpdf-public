@@ -1,6 +1,7 @@
 # Build only after verifying the local baseline tag against config's baselineImageId.
 FROM smartpdf-stirling-core:3.2.2-poc2
 USER root
+COPY fonts.conf /etc/fonts/conf.d/50-smartpdf-excel-cjk.conf
 # The slim base removes image themes, including the *document* conditional-format
 # arrow/traffic-light assets. Restore the matching upstream package, hash locked.
 ADD --checksum=sha256:298a9278ed46a7095308173896ea8177bd4f3b2a48e7112d75e2a1f06f14a0f1 https://ppa.launchpadcontent.net/libreoffice/ppa/ubuntu/pool/main/libr/libreoffice/libreoffice-style-colibre_26.2.6.3-0ubuntu0.24.04.1~lo1_all.deb /tmp/excel-colibre.deb

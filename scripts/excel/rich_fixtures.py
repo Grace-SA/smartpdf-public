@@ -33,7 +33,8 @@ for index, feature in enumerate(features):
         sheet.write_row(row, 0, [f'ITEM-{row-1}', value])
     sheet.print_area('A1:J20'); sheet.fit_to_pages(1, 1)
     sheet.set_paper(9); sheet.set_landscape()
-    expected = ['RICH-' + feature.upper()]; forbidden = ['HIDDEN-DO-NOT-EXPORT', 'UNSELECTED-DO-NOT-EXPORT']
+    expected = ['RICH-' + feature.upper()] + [f'ITEM-{i}' for i in range(1,7) if feature not in {'filter','filtered-table'} or i>=4]
+    forbidden = ['HIDDEN-DO-NOT-EXPORT', 'UNSELECTED-DO-NOT-EXPORT']
     chart_type = feature if index < 7 else 'column'
     if index < 7 or feature in {'combined', 'chart-only'}:
         chart = book.add_chart({'type': chart_type})
@@ -44,7 +45,7 @@ for index, feature in enumerate(features):
             source = hidden
             # Remove all cells: drawing alone must count as printable content.
             sheet.table.clear()
-            expected = []
+            expected = [f'POINT-{i}' for i in range(1,7)]
         chart.add_series({'name': 'Sales', 'categories': [source.name, 1 if source is hidden else 2, 0, 6 if source is hidden else 7, 0], 'values': [source.name, 1 if source is hidden else 2, 1, 6 if source is hidden else 7, 1], 'fill': {'color': '#E02020'}, 'line': {'color': '#1050DF'}})
         chart.set_title({'name': 'CHART-' + feature.upper()})
         chart.set_size({'width': 450, 'height': 280})

@@ -103,16 +103,87 @@ class Inspection(unittest.TestCase):
         self.rewrite(**{'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Type="worksheet" Target="https://example.invalid/data" TargetMode="External"/></Relationships>'})
         with self.assertRaises(Rejected): self.run_prepare()
 
-    def test_formula_allowlist_and_cache(self):
+    def test_saved_formula_values_are_frozen_without_executing_functions(self):
         self.parts = fixtures.workbook(self.source, formula=True)
-        self.assertTrue(any('recalculated' in w for w in self.run_prepare()))
+        self.assertTrue(any('without recalculation' in w for w in self.run_prepare()))
         for formula in ['NOW()', 'WEBSERVICE("https://example.invalid")', '[other.xlsx]Sheet1!A1', 'XLOOKUP(1,A1:A2,B1:B2)', 'SUM(1,2)|DDE']:
             self.parts = fixtures.workbook(self.source, formula=True)
             self.rewrite(**{'xl/worksheets/sheet1.xml': self.parts['xl/worksheets/sheet1.xml'].replace('SUM(1,2)', formula.replace('&', '&amp;').replace('<', '&lt;'))})
-            with self.subTest(formula=formula), self.assertRaises(Rejected): self.run_prepare()
+            with self.subTest(formula=formula):
+                self.run_prepare()
+                with zipfile.ZipFile(self.output) as package:
+                    tree = ET.fromstring(package.read('xl/worksheets/sheet1.xml'))
+                    self.assertFalse(list(tree.iter(f'{{{S}}}f')))
+                    self.assertTrue(any(node.text == '3' for node in tree.iter(f'{{{S}}}v')))
         self.parts = fixtures.workbook(self.source, formula=True)
         self.rewrite(**{'xl/worksheets/sheet1.xml': self.parts['xl/worksheets/sheet1.xml'].replace('<v>3</v>', '')})
         with self.assertRaises(Rejected): self.run_prepare()
+
+    def test_named_ranges_shared_formula_strings_errors_and_read_only_protection(self):
+        self.parts = fixtures.workbook(self.source, formula=True)
+        self.parts['xl/workbook.xml'] = self.parts['xl/workbook.xml'].replace('</workbook>', '<definedNames><definedName name="ReportAmount">Report!$A$1</definedName></definedNames><workbookProtection lockStructure="1"/></workbook>')
+        xml = self.parts['xl/worksheets/sheet1.xml'].replace('<f>SUM(1,2)</f>', '<f t="shared" si="0" ref="A1:A2">SUM(1,2)</f>')
+        xml = xml.replace('</sheetData>', '<row r="20"><c r="A20" t="str"><f>IF(1,"OK","")</f><v>OK</v></c><c r="B20" t="str"><f>IF(0,"OK","")</f><v/></c><c r="C20" t="e"><f>1/0</f><v>#DIV/0!</v></c></row></sheetData><sheetProtection sheet="1"/>')
+        self.rewrite(**{'xl/worksheets/sheet1.xml':xml})
+        self.run_prepare()
+        with zipfile.ZipFile(self.output) as package:
+            tree=ET.fromstring(package.read('xl/worksheets/sheet1.xml'))
+            self.assertFalse(list(tree.iter(f'{{{S}}}f')))
+            self.assertEqual(tree.find(f'.//{{{S}}}c[@r="A20"]/{{{S}}}is/{{{S}}}t').text,'OK')
+            self.assertEqual(tree.find(f'.//{{{S}}}c[@r="B20"]').get('t'),'inlineStr')
+            self.assertEqual(tree.find(f'.//{{{S}}}c[@r="C20"]/{{{S}}}v').text,'#DIV/0!')
+            self.assertIn(b'ReportAmount',package.read('xl/workbook.xml'))
+
+    def test_ordinary_notes_and_validation_are_printable_but_controls_are_refused(self):
+        note='<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape><x:ClientData ObjectType="Note"><x:Row>1</x:Row></x:ClientData></v:shape></xml>'
+        self.rewrite(**{'xl/drawings/vmlDrawing1.vml':note,'xl/worksheets/sheet1.xml':self.parts['xl/worksheets/sheet1.xml'].replace('</worksheet>','<dataValidations count="1"><dataValidation type="list" sqref="A1"><formula1>"A,B"</formula1></dataValidation></dataValidations></worksheet>')})
+        self.run_prepare()
+        with zipfile.ZipFile(self.output) as package:
+            self.assertIn('xl/drawings/vmlDrawing1.vml',package.namelist())
+            self.assertNotIn(b'dataValidations',package.read('xl/worksheets/sheet1.xml'))
+        self.rewrite(**{'xl/drawings/vmlDrawing1.vml':note.replace('ObjectType="Note"','ObjectType="Button"')})
+        with self.assertRaisesRegex(Rejected,'VML controls'):self.run_prepare()
+
+    def test_static_svg_and_passive_office_image_metadata(self):
+        svg='<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="#df2020"/></svg>'
+        self.rewrite(**{'xl/media/vector.svg':svg})
+        self.run_prepare()
+        for unsafe in [svg.replace('</svg>','<script>alert(1)</script></svg>'),svg.replace('</svg>','<image href="https://example.invalid/a.png"/></svg>'),svg.replace('fill="#df2020"','fill="url(file:///private)"'),svg.replace('width="100" height="50"','width="20001" height="50"')]:
+            self.rewrite(**{'xl/media/vector.svg':unsafe})
+            with self.assertRaises(Rejected):self.run_prepare()
+
+    def test_default_mime_mapping_and_nonprinting_data_stores(self):
+        self.parts['[Content_Types].xml']=self.parts['[Content_Types].xml'].replace('<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>','').replace('ContentType="application/xml"','ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"')
+        self.rewrite(**{'customXml/item1.xml':'<privateStore>synthetic unprinted mapping</privateStore>'})
+        self.run_prepare()
+        with zipfile.ZipFile(self.output) as package:
+            self.assertFalse(any(name.lower().startswith('customxml/') for name in package.namelist()))
+
+    def test_cached_dynamic_arrays_remove_calculation_metadata(self):
+        self.parts=fixtures.workbook(self.source,formula=True)
+        self.parts['[Content_Types].xml']=self.parts['[Content_Types].xml'].replace('</Types>','<Override PartName="/xl/metadata.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml"/></Types>')
+        self.parts['xl/_rels/workbook.xml.rels']=self.parts['xl/_rels/workbook.xml.rels'].replace('</Relationships>','<Relationship Id="metadata" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sheetMetadata" Target="metadata.xml"/></Relationships>')
+        self.rewrite(**{'xl/metadata.xml':f'<metadata xmlns="{S}"><metadataTypes count="1"><metadataType name="XLDAPR"/></metadataTypes></metadata>'})
+        self.run_prepare()
+        with zipfile.ZipFile(self.output) as package:
+            self.assertNotIn('xl/metadata.xml',package.namelist())
+            self.assertNotIn(b'Target="metadata.xml"',package.read('xl/_rels/workbook.xml.rels'))
+            self.assertFalse(list(ET.fromstring(package.read('xl/worksheets/sheet1.xml')).iter(f'{{{S}}}f')))
+
+    def test_absolute_table_relationship_is_valid_opc(self):
+        styles=f'<styleSheet xmlns="{S}"><fonts><font/></fonts><fills><fill/><fill/></fills><borders><border/></borders><cellXfs><xf fontId="0" fillId="0" borderId="0"/></cellXfs></styleSheet>'
+        sheet=self.parts['xl/worksheets/sheet1.xml'].replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ').replace('</worksheet>','<tableParts count="1"><tablePart r:id="table1"/></tableParts></worksheet>')
+        table=f'<table xmlns="{S}" ref="A1:E8"><tableStyleInfo name="TableStyleMedium2" showRowStripes="1"/></table>'
+        rels='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="table1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="/xl/tables/table1.xml"/></Relationships>'
+        self.rewrite(**{'xl/styles.xml':styles,'xl/worksheets/sheet1.xml':sheet,'xl/tables/table1.xml':table,'xl/worksheets/_rels/sheet1.xml.rels':rels})
+        self.run_prepare()
+
+    def test_named_text_constants_do_not_fetch_urls_and_print_names_cannot_execute(self):
+        original=self.parts['xl/workbook.xml']
+        self.rewrite(**{'xl/workbook.xml':original.replace('</workbook>','<definedNames><definedName name="CompanyWebsite">"https://example.invalid"</definedName></definedNames></workbook>')})
+        self.run_prepare()
+        self.rewrite(**{'xl/workbook.xml':original.replace('</workbook>','<definedNames><definedName name="_xlnm.Print_Area">WEBSERVICE("https://example.invalid")</definedName></definedNames></workbook>')})
+        with self.assertRaisesRegex(Rejected,'executable named'):self.run_prepare()
 
     def test_known_excel_metadata_preserves_prefix_declarations(self):
         xml = self.parts['xl/workbook.xml'].replace('<workbook ', '<workbook xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main" mc:Ignorable="x15" ')

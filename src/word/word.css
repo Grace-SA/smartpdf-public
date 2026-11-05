@@ -243,6 +243,7 @@
   height: 20px;
   flex-shrink: 0;
 }
+.excel-settings > label,
 .excel-settings details label {
   display: grid;
   gap: 8px;

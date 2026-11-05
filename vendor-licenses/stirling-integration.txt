@@ -20,5 +20,8 @@ at /usr/share/doc/excel-colibre/copyright. The chart-capable Excel overlay is pi
 separately in config/excel-core.stirling-3.2.2.json and does not replace Word's pin.
 The 60 OOXML table-style definitions derive from Apache POI, Apache License 2.0;
 source attribution and license are in server/excel/NOTICE and LICENSE-APACHE-2.0.txt.
+Excel's CJK fontconfig aliases reuse the already installed, licensed Noto CJK fonts.
+They do not add, copy or redistribute Microsoft fonts and do not imply identical
+metrics to the original Office fonts. The aliases are scoped to the Excel image.
 
 The public Word service uses the separately released server-only core JAR, not the full upstream application image. Its approved content ID and all build-input hashes are recorded in config/word-core.stirling-3.2.2.json. The upstream app/proprietary license restricts unlicensed client-facing use; disabling login in the full image is not a substitute for using the core build. Preserve the root MIT notice and every bundled third-party/font notice. Rebuilding never automatically approves a new runtime image.
