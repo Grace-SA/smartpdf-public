@@ -182,6 +182,70 @@ test("dropping a document selects locally and changing it does not start an uplo
     calls.some((call) => call.startsWith("POST") || call.startsWith("PUT")),
   ).toBe(false);
 });
+for (const width of [390, 1280])
+  for (const closeWith of ["button", "escape"] as const)
+    test(
+      width +
+        ": closing Word preview with " +
+        closeWith +
+        " preserves the result screen position",
+      async ({ page }) => {
+        await page.setViewportSize({ width, height: 950 });
+        await mockService(page);
+        await page.goto("/word-to-pdf/");
+        await select(page);
+        await page
+          .getByRole("button", { name: "Upload and convert", exact: true })
+          .click();
+        await expect(
+          page.getByRole("heading", { name: "Your PDF is ready" }),
+        ).toBeVisible();
+        const trigger = page.getByRole("button", {
+          name: "Preview PDF",
+          exact: true,
+        });
+        for (const top of [0, 160]) {
+          await page.evaluate(
+            (y) => window.scrollTo({ top: y, behavior: "instant" }),
+            top,
+          );
+          await expect(trigger).toBeInViewport();
+          const before = await page.evaluate(() => scrollY);
+          await trigger.click();
+          const dialog = page.getByRole("dialog");
+          await expect(dialog.locator("canvas")).toBeVisible();
+          await dialog
+            .getByRole("combobox", { name: "Zoom", exact: true })
+            .selectOption("2");
+          const scroller = dialog.getByLabel("Scrollable enlarged page", {
+            exact: true,
+          });
+          await expect
+            .poll(() =>
+              scroller.evaluate((e) => e.scrollHeight > e.clientHeight),
+            )
+            .toBe(true);
+          await scroller.hover();
+          await page.mouse.wheel(0, 5000);
+          await expect
+            .poll(() => scroller.evaluate((e) => e.scrollTop))
+            .toBeGreaterThan(0);
+          await page.mouse.wheel(0, 1000);
+          if (closeWith === "button")
+            await dialog
+              .getByRole("button", { name: "Close preview", exact: true })
+              .click();
+          else await page.keyboard.press("Escape");
+          await expect(dialog).toHaveCount(0);
+          await expect.poll(() => page.evaluate(() => scrollY)).toBe(before);
+          await expect(
+            page.getByRole("heading", { name: "Your PDF is ready" }),
+          ).toBeVisible();
+          await expect(trigger).toBeInViewport();
+        }
+      },
+    );
+
 test("selection stays local until explicit start, then preview and download work", async ({
   page,
 }) => {

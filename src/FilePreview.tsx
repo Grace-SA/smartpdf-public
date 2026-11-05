@@ -56,7 +56,8 @@ export function FilePreview({
   useEffect(
     () => () => {
       const target = focus.current;
-      if (target instanceof HTMLElement && target.isConnected) target.focus();
+      if (target instanceof HTMLElement && target.isConnected)
+        target.focus({ preventScroll: true });
     },
     [],
   );
