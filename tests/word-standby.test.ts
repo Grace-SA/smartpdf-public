@@ -3,6 +3,95 @@ import { mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createStandby } from "../server/word/standby.mjs";
+it("suspends and discards ready Word standby until shared admission resumes it", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "word-pause-synthetic-"));
+  let warm = 0,
+    discard = 0;
+  const pool = createStandby({
+    root,
+    broken: () => {},
+    run: async (job, update) => {
+      if (job.warmToken) {
+        warm++;
+        update({
+          standby: {
+            name: "smartpdf-word-" + "a".repeat(32),
+            token: job.warmToken,
+          },
+        });
+      } else discard++;
+    },
+  });
+  try {
+    pool.ensure();
+    for (let i = 0; i < 50 && !pool.ready(); i++)
+      await new Promise((r) => setTimeout(r, 2));
+    expect(pool.ready()).toBe(true);
+    await pool.pause();
+    expect(discard).toBe(1);
+    expect(pool.ready()).toBe(false);
+    pool.ensure();
+    await Promise.resolve();
+    expect(warm).toBe(1);
+    pool.resume();
+    const ready = await pool.take({ state: "queued" });
+    expect(warm).toBe(2);
+    expect(ready).toBeDefined();
+    await pool.release(ready);
+    expect(discard).toBe(2);
+  } finally {
+    await pool.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("waits for an in-flight warm process to stop before suspended cleanup completes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "word-pause-warming-"));
+  let directory = "",
+    finish!: () => void,
+    started!: () => void;
+  const pending = new Promise<void>((r) => {
+    finish = r;
+  });
+  const entered = new Promise<void>((r) => {
+    started = r;
+  });
+  const pool = createStandby({
+    root,
+    broken: () => {},
+    run: async (job) => {
+      directory = job.directory;
+      started();
+      await pending;
+    },
+  });
+  try {
+    pool.ensure();
+    await entered;
+    let done = false;
+    const pause = pool.pause().then(() => {
+      done = true;
+    });
+    for (let i = 0; i < 50; i++) {
+      try {
+        await readFile(path.join(directory, "cancel"));
+        break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 2));
+      }
+    }
+    expect(await readFile(path.join(directory, "cancel"), "utf8")).toBe(
+      "cancel",
+    );
+    expect(done).toBe(false);
+    finish();
+    await pause;
+    expect(await readdir(root)).toEqual([]);
+  } finally {
+    finish?.();
+    await pool.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 it("stops admission when a clean converter cannot be discarded", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "word-standby-synthetic-"));
   const failure = new Error("discard process unavailable");

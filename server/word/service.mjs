@@ -239,13 +239,17 @@ export async function createWordService(options = {}) {
   let active = false;
   let stopped = false;
   let unhealthy = false;
+  function markUnhealthy() {
+    unhealthy = true;
+    options.onUnsafe?.();
+  }
   const pool =
     !options.execute && process.env.WORD_PREWARM !== "false"
       ? createStandby({
           root,
           run: runStirling,
           broken: () => {
-            unhealthy = true;
+            markUnhealthy();
           },
         })
       : undefined;
@@ -304,7 +308,7 @@ export async function createWordService(options = {}) {
     failureCode: job.failureCode,
     expiresAt: job.expiresAt,
     queueAhead:
-      job.state === "queued"
+      job.state === "queued" && !options.admit
         ? Math.max(
             0,
             [...jobs.values()]
@@ -330,7 +334,12 @@ export async function createWordService(options = {}) {
     }
     active = true;
     job.running = true;
+    const admission = new AbortController();
+    job.admission = admission;
+    let release;
     try {
+      release = await options.admit?.(job, admission.signal);
+      if (terminal.has(job.state)) return;
       await execute(job, (value) => {
         if (terminal.has(job.state)) return;
         if (
@@ -369,7 +378,7 @@ export async function createWordService(options = {}) {
         }
       }
     } catch (error) {
-      if (error.unsafe) unhealthy = true;
+      if (error.unsafe) markUnhealthy();
       if (!terminal.has(job.state)) {
         job.state = "failed";
         job.expiresAt = now() + 60000;
@@ -388,10 +397,16 @@ export async function createWordService(options = {}) {
         await rm(path.join(job.directory, inputName), { force: true });
         if (job.state !== "succeeded") await erase(job);
       } catch {
-        unhealthy = true;
+        markUnhealthy();
         job.state = "failed";
         job.error = "Temporary-file cleanup requires operator attention.";
         job.failureCode = "CLEANUP_FAILED";
+      }
+      delete job.admission;
+      try {
+        await release?.(!unhealthy);
+      } catch {
+        markUnhealthy();
       }
       void drain();
     }
@@ -401,6 +416,7 @@ export async function createWordService(options = {}) {
     if (state === "cancelled")
       job.expiresAt = Math.min(job.expiresAt, now() + 60000);
     job.error = undefined;
+    job.admission?.abort();
     if (job.running)
       await writeFile(path.join(job.directory, "cancel"), "cancel");
     await pool?.cancel(job);
@@ -420,7 +436,7 @@ export async function createWordService(options = {}) {
   const timer = setInterval(
     () =>
       void sweep().catch(() => {
-        unhealthy = true;
+        markUnhealthy();
       }),
     30000,
   );
@@ -442,9 +458,14 @@ export async function createWordService(options = {}) {
         url.pathname = "/api/word/" + url.pathname.slice(api.length + 1);
       }
       if (url.pathname === "/api/word/health" && req.method === "GET")
-        return json(res, unhealthy || stopped ? 503 : 200, {
-          available: !unhealthy && !stopped,
-        });
+        return json(
+          res,
+          unhealthy || stopped || options.available?.() === false ? 503 : 200,
+          {
+            available:
+              !unhealthy && !stopped && options.available?.() !== false,
+          },
+        );
       const mutation = !["GET", "HEAD"].includes(req.method);
       if (
         (mutation && req.headers.origin !== origin) ||
@@ -483,7 +504,7 @@ export async function createWordService(options = {}) {
               ? "local"
               : "cloud",
           ready: pool?.ready() ?? true,
-          available: !unhealthy && !stopped,
+          available: !unhealthy && !stopped && options.available?.() !== false,
           capabilities: ppt
             ? {}
             : {
@@ -513,7 +534,7 @@ export async function createWordService(options = {}) {
           });
         }
         await sweep();
-        if (unhealthy || stopped)
+        if (unhealthy || stopped || options.available?.() === false)
           return json(res, 503, {
             error: "Conversion is temporarily unavailable.",
           });
@@ -664,6 +685,8 @@ export async function createWordService(options = {}) {
     server,
     jobs,
     sweep,
+    pauseStandby: () => pool?.pause(),
+    resumeStandby: () => pool?.resume(),
     async close() {
       stopped = true;
       clearInterval(timer);

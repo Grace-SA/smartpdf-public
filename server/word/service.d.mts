@@ -21,6 +21,12 @@ export function createWordService(options?: {
   root?: string;
   origin?: string;
   now?: () => number;
+  admit?: (
+    job: Task,
+    signal: AbortSignal,
+  ) => Promise<(healthy?: boolean) => Promise<void>>;
+  available?: () => boolean;
+  onUnsafe?: () => void;
   execute?: (
     job: Task,
     update: (value: { state?: string; warnings?: string[] }) => void,
@@ -30,5 +36,7 @@ export function createWordService(options?: {
   server: Server;
   jobs: Map<string, Task>;
   sweep: () => Promise<void>;
+  pauseStandby: () => Promise<void> | undefined;
+  resumeStandby: () => void;
   close: () => Promise<void>;
 }>;
