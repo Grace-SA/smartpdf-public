@@ -1,10 +1,14 @@
 // Create a reviewable, versioned build. This script never deploys to AWS.
-/* global fetch, AbortSignal */
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { prepareOfficeRuntime } from "./office-release-manifest.mjs";
+import {
+  verifyLocalRelease,
+  copyLocalReleaseProof,
+  verifyGitHubRelease,
+} from "./local-release-verification.mjs";
 
 const run = (exe, args, options = {}) =>
   execFileSync(exe, args, {
@@ -29,39 +33,23 @@ git("fetch", "origin", "main");
 const commit = git("rev-parse", "HEAD");
 if (commit !== git("rev-parse", "origin/main"))
   throw new Error("Release HEAD must match GitHub main exactly.");
-const credentials = run("git", ["credential", "fill"], {
-  input: "protocol=https\nhost=github.com\nusername=Grace-SA\n\n",
-});
-const password = credentials
-  .split(/\r?\n/)
-  .find((line) => line.startsWith("password="))
-  ?.slice(9);
-if (!password)
-  throw new Error("Sign in to GitHub using Git Credential Manager first.");
-const response = await fetch(
-  `https://api.github.com/repos/Grace-SA/smartpdf/actions/runs?head_sha=${commit}&event=push&per_page=100`,
-  {
-    headers: {
-      Authorization: `Bearer ${password}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    signal: AbortSignal.timeout(30000),
-  },
-);
-if (!response.ok)
-  throw new Error(`Could not verify GitHub checks (${response.status}).`);
-const checks = (await response.json()).workflow_runs.filter(
-  (item) => item.path === ".github/workflows/ci.yml",
-);
+const flags = process.argv.slice(2);
 if (
-  !checks.length ||
-  checks[0].head_sha !== commit ||
-  checks[0].conclusion !== "success"
+  flags.length > 1 ||
+  flags.some((flag) => !flag.startsWith("--local-verification="))
 )
   throw new Error(
-    "The latest GitHub checks for this exact commit must finish successfully.",
+    "Use only the explicit --local-verification=<manifest> override.",
   );
+const evidence = flags[0]?.slice("--local-verification=".length);
+if (flags.length && !evidence)
+  throw new Error("A local verification manifest is required.");
+const localProof = evidence
+  ? verifyLocalRelease({ repository: process.cwd(), commit, evidence })
+  : undefined;
+const github = localProof
+  ? undefined
+  : await verifyGitHubRelease(process.cwd(), commit);
 const folder = path.resolve("releases", `git-${commit.slice(0, 12)}`);
 if (fs.existsSync(folder))
   throw new Error(
@@ -101,6 +89,9 @@ const walk = (dir) => {
 };
 walk(path.join(source, "dist"));
 const office = prepareOfficeRuntime(source, folder);
+const verification = localProof
+  ? copyLocalReleaseProof(localProof, folder)
+  : github;
 const word = office.word;
 fs.writeFileSync(
   path.join(folder, "release.json"),
@@ -108,7 +99,8 @@ fs.writeFileSync(
     {
       commit,
       branch: "main",
-      checks: checks[0].html_url,
+      checks: localProof ? verification.path : github.checks,
+      verification,
       builtAt: new Date().toISOString(),
       deployed: false,
       features: {

@@ -114,6 +114,9 @@ private-samples/
 !/scripts/word-release-manifest.d.mts
 !/scripts/office-release-manifest.mjs
 !/scripts/office-release-manifest.d.mts
+!/scripts/local-release-verification.mjs
+!/scripts/local-release-verification.d.mts
+!/scripts/verify-release.mjs
 
 /tests/review-color.spec.ts
 /tests/ux-performance.spec.ts
