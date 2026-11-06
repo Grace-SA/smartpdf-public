@@ -112,6 +112,7 @@ export class Engine {
   private async probe(
     bytes: Uint8Array,
     signal: AbortSignal,
+    excelOutput = false,
   ): Promise<ProbeResult> {
     const worker = new ProbeWorker();
     try {
@@ -158,7 +159,7 @@ export class Engine {
       // Transfer a copy: the immutable input remains available for independent rendering.
       try {
         const copy = bytes.slice();
-        worker.postMessage({ id, bytes: copy }, [copy.buffer]);
+        worker.postMessage({ id, bytes: copy, excelOutput }, [copy.buffer]);
       } catch {
         clean();
         reject(new ProbeFailure("PROCESSING_FAILED"));
@@ -170,7 +171,7 @@ export class Engine {
     file: File,
     signal: AbortSignal,
     stage: (text: string) => void,
-    profile: "preview" | "raster" = "preview",
+    profile: "preview" | "raster" | "excel" = "preview",
   ): Promise<Preview> {
     validateSize(file.size);
     if (!/\.pdf$/i.test(file.name))
@@ -179,7 +180,7 @@ export class Engine {
     const bytes = await readLocalFile(file, signal);
     if (signal.aborted) throw new ProbeFailure("CANCELLED");
     stage("Checking document structure…");
-    const result = await this.probe(bytes, signal);
+    const result = await this.probe(bytes, signal, profile === "excel");
     if (!result.ok)
       throw new ProbeFailure(result.code, result.reason, result.reasons);
     stage("Preparing the first page…");

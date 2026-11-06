@@ -6,16 +6,20 @@ const tools = publicTools.map(
   (tool) =>
     [
       toolCatalog[tool].path.replace(/^\//, "").replace(/\/$/, ""),
-      tool === "word"
-        ? "word-file"
-        : tool === "combine"
-          ? "combine-files"
-          : tool === "photos"
-            ? "photo-files"
-            : "pdf-file",
+      tool === "excel"
+        ? "excel-file"
+        : tool === "word"
+          ? "word-file"
+          : tool === "combine"
+            ? "combine-files"
+            : tool === "photos"
+              ? "photo-files"
+              : "pdf-file",
     ] as const,
 );
-const localTools = tools.filter(([path]) => path !== "word-to-pdf");
+const localTools = tools.filter(
+  ([path]) => path !== "word-to-pdf" && path !== "excel-to-pdf",
+);
 
 async function checkPicker(page: Page, id: string) {
   const input = page.locator(`#${id}`);

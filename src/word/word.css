@@ -261,6 +261,81 @@
     padding: 0 12px;
   }
 }
+.excel-settings {
+  border: 1px solid #d4dae3;
+  border-radius: 12px;
+  padding: 18px;
+  margin: 20px 0;
+  min-width: 0;
+}
+.excel-settings legend {
+  font-weight: 700;
+}
+.excel-sheets {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+.excel-sheets label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px;
+  background: #f6f7f9;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.excel-sheets input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.excel-settings > label,
+.excel-settings details label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin-top: 14px;
+}
+.excel-settings select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid #aeb7c5;
+  border-radius: 6px;
+  background: white;
+  color: #172033;
+  font: inherit;
+}
+.excel-settings {
+  min-width: 0;
+}
+.excel-app .word-page {
+  max-width: 1280px;
+}
+@media (max-width: 900px) {
+  .excel-app:has(.word-download, .word-convert:not(:disabled)) {
+    padding-bottom: 84px;
+  }
+  .excel-app :is(button, input, select, a) {
+    scroll-margin-bottom: 96px;
+  }
+  .excel-app .word-download,
+  .excel-app .word-convert:not(:disabled) {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 20;
+    min-height: 48px;
+    text-align: center;
+    box-shadow: 0 3px 16px #17203333;
+  }
+}
 
 .word-layout-check {
   overflow-wrap: anywhere;

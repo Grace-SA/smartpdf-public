@@ -1,5 +1,9 @@
 export type Standby = { name: string; token: string };
-type Job = { state: string; options?: { revisionView?: string } };
+type Job = {
+  kind?: "word" | "excel";
+  state: string;
+  options?: { revisionView?: string };
+};
 export function createStandby(options: {
   root: string;
   run: (

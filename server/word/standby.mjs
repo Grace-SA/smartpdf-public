@@ -83,8 +83,9 @@ export function createStandby({ root, run, broken }) {
       job.warming = slot;
       try {
         if (
-          job.options?.revisionView &&
-          job.options.revisionView !== "unchanged"
+          job.kind === "excel" ||
+          (job.options?.revisionView &&
+            job.options.revisionView !== "unchanged")
         )
           await cancelSlot(slot);
         await slot.promise;

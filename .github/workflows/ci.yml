@@ -63,6 +63,7 @@ jobs:
         run: pnpm build
         env:
           VITE_ENABLE_PROTECT: "true"
+          VITE_ENABLE_EXCEL: "true"
       - name: Select Ubuntu primary mirror for browser dependencies
         run: |
           # The runner's Azure mirror can stall while downloading browsers'
@@ -89,6 +90,7 @@ jobs:
         run: pnpm build
         env:
           VITE_ENABLE_PROTECT: "false"
+          VITE_ENABLE_EXCEL: "true"
       - name: Verify published tool boundaries
         run: pnpm exec playwright test --config playwright.published.config.ts --project ${{ matrix.browser }}
       - name: Retain synthetic diagnostic text on failure

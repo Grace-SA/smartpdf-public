@@ -18,6 +18,33 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  excel: {
+    title: "Excel to PDF – XLSX Worksheets | Smart PDF",
+    description:
+      "Convert selected visible Excel worksheets with cloud processing. Keep print areas, adjust pagination and preview your PDF.",
+    keywords: "excel to pdf, xlsx to pdf",
+    heading: "Excel to PDF",
+    intro: "Choose worksheets and check pagination before sharing.",
+    steps: [
+      "Choose an XLSX workbook.",
+      "Select worksheets, then upload and generate PDF.",
+      "Check totals and pagination, then download.",
+    ],
+    faq: [
+      [
+        "Is my workbook uploaded?",
+        "Only when you start. Temporary server files expire within one hour and can be deleted sooner.",
+      ],
+      [
+        "Are hidden worksheets exported?",
+        "No. Only selected visible worksheets are exported, in their original order. Existing print areas are respected.",
+      ],
+      [
+        "Will it match Excel exactly?",
+        "Fonts, formulas and pagination can change. Check the PDF; use Excel export when exact layout is required.",
+      ],
+    ],
+  },
   word: {
     title: "Word to PDF – Cloud DOCX Conversion | Smart PDF",
     description:
