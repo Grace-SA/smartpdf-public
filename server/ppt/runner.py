@@ -65,6 +65,7 @@ def run(directory):
         docker('start', name)
         writer = 'import sys,pathlib;p=pathlib.Path(sys.argv[1]);p.write_bytes(sys.stdin.buffer.read());p.chmod(0o600)'
         for source, destination in ((directory / 'input.pptx', '/tmp/input.pptx'),
+                                    (Path(__file__).with_name('layout.py'), '/tmp/layout.py'),
                                     (Path(__file__).with_name('export_uno.py'), '/tmp/export_uno.py')):
             docker('exec', '-i', name, 'python3', '-c', writer, destination, input=source.read_bytes())
         if cancel.exists():

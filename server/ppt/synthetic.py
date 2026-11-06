@@ -31,6 +31,21 @@ def pack(files):
     return output.getvalue()
 
 
+def nowrap_presentation():
+    """Original narrow frames distinguish no-wrap, wrapping and explicit breaks."""
+    with zipfile.ZipFile(io.BytesIO(presentation([('SYNTHETIC HEADING WITH WORDS', False)] * 3))) as source:
+        files = {name: source.read(name) for name in source.namelist()}
+    for index in range(1, 4):
+        name = f'ppt/slides/slide{index}.xml'
+        xml = files[name].replace(b'cx="9000000"', b'cx="2286000"').replace(b'sz="2400"', b'sz="3000"')
+        mode = 'square' if index == 2 else 'none'
+        xml = xml.replace(b'<a:bodyPr/>', f'<a:bodyPr wrap="{mode}"><a:spAutoFit/></a:bodyPr>'.encode())
+        if index == 3:
+            xml = xml.replace(b'SYNTHETIC HEADING WITH WORDS', b'SYNTHETIC HEADING</a:t></a:r><a:br/><a:r><a:rPr sz="3000"/><a:t>WITH WORDS')
+        files[name] = xml
+    return pack(files)
+
+
 def svg_presentation(active=False):
     """Original SVG-only picture, with no raster fallback to hide SVG loss."""
     with zipfile.ZipFile(io.BytesIO(presentation([('SYNTHETIC_SVG_SLIDE', False)]))) as source:

@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import uno
+from layout import apply_no_wrap
 from com.sun.star.beans import PropertyValue
 from com.sun.star.document.MacroExecMode import NEVER_EXECUTE
 from com.sun.star.document.UpdateDocMode import NO_UPDATE
@@ -41,6 +42,7 @@ def export(source, destination):
         ))
         if document is None or not document.supportsService('com.sun.star.presentation.PresentationDocument'):
             raise RuntimeError('Not a presentation')
+        apply_no_wrap(document, source)
         pages = document.getDrawPages()
         visible = sum(bool(pages.getByIndex(i).Visible) for i in range(pages.Count))
         if not 1 <= visible <= 200:

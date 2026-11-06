@@ -38,3 +38,13 @@ it("checks static SVG references, active content and expansion budgets", () => {
     ),
   ).not.toThrow();
 });
+
+it("preserves explicit no-wrap intent without altering wrapping or ambiguous text", () => {
+  expect(() =>
+    execFileSync(
+      process.platform === "win32" ? "python" : "python3",
+      ["-B", "server/ppt/test_layout.py"],
+      { encoding: "utf8" },
+    ),
+  ).not.toThrow();
+});
