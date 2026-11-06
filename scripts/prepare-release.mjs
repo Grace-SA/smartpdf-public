@@ -110,7 +110,12 @@ fs.writeFileSync(
       checks: checks[0].html_url,
       builtAt: new Date().toISOString(),
       deployed: false,
-      features: { word: true, unlock: true, protect: false },
+      features: {
+        word: true,
+        excel: process.env.VITE_ENABLE_EXCEL === "true",
+        unlock: true,
+        protect: false,
+      },
       files,
       word,
     },

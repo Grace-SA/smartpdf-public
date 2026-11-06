@@ -21,12 +21,20 @@ export function PreviewDialog({
   const touch = useRef<{ x: number; y: number } | null>(null);
   useLayoutEffect(() => {
     const previousFocus = document.activeElement;
+    const { scrollX, scrollY } = window;
+    const root = document.documentElement.style;
+    const overflow = root.getPropertyValue("overflow-y");
+    const priority = root.getPropertyPriority("overflow-y");
+    root.setProperty("overflow-y", "hidden");
     const node = ref.current!;
     node.showModal();
     return () => {
       node.close();
+      if (overflow) root.setProperty("overflow-y", overflow, priority);
+      else root.removeProperty("overflow-y");
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
         previousFocus.focus({ preventScroll: true });
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
     };
   }, []);
   return (

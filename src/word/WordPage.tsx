@@ -7,6 +7,20 @@ import { ToolNavigation } from "../ToolNavigation";
 import { toolPaths } from "../routes";
 import { LeaveTaskDialog } from "../LeaveTaskDialog";
 import "./word.css";
+import {
+  wordRequest as request,
+  wordFailure,
+  responseFailure,
+  WordRequestError,
+} from "./errors";
+import { substitutedFontDeclarations } from "./font-policy";
+import { checkWordLocally } from "./preflight-service";
+import type { WordCheck } from "./preflight-core";
+import {
+  defaultWordOptions,
+  blockingWordIssues,
+  type WordOptions,
+} from "./view-options";
 
 type Job = {
   id: string;
@@ -15,29 +29,34 @@ type Job = {
   warnings: string[];
   error?: string;
   cleanupPending?: boolean;
+  queueAhead?: number;
+  failureCode?: string;
+  options?: WordOptions;
 };
-type Service = { region: string; available: boolean; retentionMinutes: number };
+type Service = {
+  mode?: "local" | "cloud";
+  region: string;
+  available: boolean;
+  retentionMinutes: number;
+  capabilities?: {
+    revisionViews: string[];
+    omitComments: boolean;
+    availableFonts?: boolean;
+  };
+};
 const stages: Record<string, string> = {
   created: "Ready to upload",
   uploading: "Uploading document…",
   queued: "Waiting for conversion…",
   checking: "Checking document…",
   starting: "Preparing your conversion…",
+  preparing: "Preparing your chosen document view…",
   converting: "Converting to PDF…",
   "checking-result": "Checking the PDF…",
 };
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { credentials: "same-origin", ...init });
-  const value = await response.json();
-  if (!response.ok)
-    throw new Error(
-      value.error ||
-        "The conversion service is unavailable. Try again shortly.",
-    );
-  return value as T;
-}
 export function WordPage() {
   const [service, setService] = useState<Service>();
+  const localMode = service?.mode === "local";
   const [file, setFile] = useState<File>();
   const [job, setJob] = useState<Job>();
   const [busy, setBusy] = useState(false);
@@ -49,6 +68,37 @@ export function WordPage() {
   const [opening, setOpening] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [connecting, setConnecting] = useState(true);
+  const [localCheck, setLocalCheck] = useState<WordCheck>();
+  const [checkingLocal, setCheckingLocal] = useState(false);
+  const [outputOptions, setOutputOptions] =
+    useState<WordOptions>(defaultWordOptions);
+  const [cleanupUnconfirmed, setCleanupUnconfirmed] = useState(false);
+  const [serverRejected, setServerRejected] = useState(false);
+  const fontRisks = substitutedFontDeclarations(localCheck?.fonts || []);
+  const replacingFonts =
+    !!service?.capabilities?.availableFonts &&
+    !!localCheck?.issues.some((issue) => issue.code === "EMBEDDED_FONTS");
+  const localIssues = blockingWordIssues(localCheck, {
+    ...outputOptions,
+    ...(replacingFonts ? { useAvailableFonts: true } : {}),
+  });
+  const needsWordFix = localIssues.some(
+    (issue) =>
+      !["TRACKED_CHANGES", "COMMENTS", "ORIGINAL_VIEW_UNSUPPORTED"].includes(
+        issue.code,
+      ),
+  );
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!busy) return;
+    const clockStarted = Date.now();
+    const timer = setInterval(
+      () => setElapsed(Math.floor((Date.now() - clockStarted) / 1000)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [busy]);
+  const checkController = useRef<AbortController | null>(null);
   const [destination, setDestination] = useState("");
   const leaving = useRef(false);
   const controller = useRef<AbortController | null>(null);
@@ -74,6 +124,7 @@ export function WordPage() {
     applySeo("word");
     mounted.current = true;
     const discard = () => {
+      checkController.current?.abort();
       controller.current?.abort();
       if (currentJob.current)
         void fetch(`/api/word/jobs/${currentJob.current}`, {
@@ -138,6 +189,12 @@ export function WordPage() {
     location.assign(destination);
   }
   function choose(files: File[]) {
+    if (cleanupUnconfirmed) return;
+    setServerRejected(false);
+    checkController.current?.abort();
+    setLocalCheck(undefined);
+    setOutputOptions(defaultWordOptions());
+    setCheckingLocal(false);
     setError("");
     setFile(undefined);
     if (files.length !== 1 || !/\.docx$/i.test(files[0]?.name || "")) {
@@ -154,12 +211,44 @@ export function WordPage() {
     setJob(undefined);
     setResult(undefined);
     setUrl("");
+    const check = new AbortController();
+    checkController.current = check;
+    setCheckingLocal(true);
+    void checkWordLocally(files[0]!, check.signal)
+      .then((value) => {
+        if (mounted.current && !check.signal.aborted) setLocalCheck(value);
+      })
+      .catch((cause) => {
+        if (mounted.current && !check.signal.aborted)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Local checking failed. Choose the document again.",
+          );
+      })
+      .finally(() => {
+        if (mounted.current && !check.signal.aborted) setCheckingLocal(false);
+      });
   }
   async function start() {
-    if (!file || busy) return;
+    if (
+      !file ||
+      busy ||
+      checkingLocal ||
+      cleanupUnconfirmed ||
+      serverRejected ||
+      !localCheck ||
+      localIssues.length
+    )
+      return;
+    const conversionOptions: WordOptions = {
+      ...outputOptions,
+      ...(replacingFonts ? { useAvailableFonts: true } : {}),
+    };
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
+    setElapsed(0);
     setError("");
     setProgress(undefined);
     setResult(undefined);
@@ -167,6 +256,8 @@ export function WordPage() {
     try {
       const created = await request<Job>("/api/word/jobs", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(conversionOptions),
         signal: abort.signal,
       });
       id = created.id;
@@ -190,14 +281,16 @@ export function WordPage() {
         };
         xhr.onloadend = () =>
           abort.signal.removeEventListener("abort", cancelUpload);
-        xhr.onload = () =>
-          xhr.status === 202
-            ? resolve()
-            : reject(
-                new Error(
-                  "Upload could not finish. Retry with a DOCX up to 30 MiB.",
-                ),
-              );
+        xhr.onload = () => {
+          if (xhr.status === 202) return resolve();
+          let value;
+          try {
+            value = JSON.parse(xhr.responseText);
+          } catch {
+            /* A proxy may return HTML. */
+          }
+          reject(responseFailure(xhr.status, value));
+        };
         xhr.onerror = xhr.ontimeout = () =>
           reject(
             new Error(
@@ -220,24 +313,24 @@ export function WordPage() {
         if (!mounted.current) return;
         setJob(next);
         if (["failed", "expired", "cancelled"].includes(next.state))
-          throw new Error(
-            next.error ||
-              "This conversion was cancelled or expired. Choose the document again.",
+          throw new WordRequestError(
+            wordFailure(next.failureCode, next.error),
+            next.failureCode || "TASK_EXPIRED",
           );
         if (next.state === "succeeded") {
           const response = await fetch(`/api/word/jobs/${id}/result`, {
             signal: abort.signal,
           });
-          if (!response.ok)
-            throw new Error(
-              "The PDF could not be downloaded. Retry the conversion.",
-            );
+          if (!response.ok) throw responseFailure(response.status);
           const blob = await response.blob();
           if (
             blob.size > 30 * 1024 ** 2 ||
             !(await blob.slice(0, 5).text()).startsWith("%PDF-")
           )
-            throw new Error("The result is not a valid PDF.");
+            throw new WordRequestError(
+              wordFailure("OUTPUT_INVALID"),
+              "OUTPUT_INVALID",
+            );
           const pdf = new File([blob], file.name.replace(/\.docx$/i, ".pdf"), {
             type: "application/pdf",
           });
@@ -264,11 +357,41 @@ export function WordPage() {
             ? cause.message
             : "Conversion failed. Try again.",
         );
-      if (id)
-        void fetch(`/api/word/jobs/${id}`, {
-          method: "DELETE",
-          keepalive: true,
-        });
+      if (
+        cause instanceof WordRequestError &&
+        ["INPUT_REJECTED", "INPUT_VIEW_PREPARATION_FAILED"].includes(cause.code)
+      )
+        setServerRejected(true);
+      if (id && !abort.signal.aborted) {
+        setCleanupUnconfirmed(true);
+        try {
+          let deleted = await request<Job>(`/api/word/jobs/${id}`, {
+            method: "DELETE",
+          });
+          const until = Date.now() + 30000;
+          while (
+            deleted.cleanupPending &&
+            Date.now() < until &&
+            !abort.signal.aborted
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            deleted = await request<Job>(`/api/word/jobs/${id}`);
+          }
+          if (deleted.cleanupPending) throw new Error("cleanup", { cause });
+          if (!abort.signal.aborted) {
+            currentJob.current = undefined;
+            setCleanupUnconfirmed(false);
+            setJob(undefined);
+          }
+        } catch {
+          if (!abort.signal.aborted)
+            setError(
+              (previous) =>
+                previous +
+                " Server cleanup could not be confirmed. Retry deletion before another conversion.",
+            );
+        }
+      }
     } finally {
       if (mounted.current && controller.current === abort) {
         setBusy(false);
@@ -282,6 +405,8 @@ export function WordPage() {
     active?.abort();
     const id = currentJob.current;
     setBusy(true);
+    setCleanupUnconfirmed(true);
+    setElapsed(0);
     setError("");
     setPreview(undefined);
     setResult(undefined);
@@ -304,7 +429,9 @@ export function WordPage() {
           );
       }
       currentJob.current = undefined;
+      setCleanupUnconfirmed(false);
       setFile(undefined);
+      setLocalCheck(undefined);
       setJob({ id: "", state: "deleted", warnings: [] });
     } catch {
       setError(
@@ -378,7 +505,9 @@ export function WordPage() {
           disabled={busy}
           choose={(tool) => navigate(toolPaths[tool])}
         />
-        <span className="version">Cloud conversion</span>
+        <span className="version">
+          {localMode ? "Local conversion" : "Cloud conversion"}
+        </span>
       </header>
       <main className="word-page">
         <div className="task-heading">
@@ -395,8 +524,9 @@ export function WordPage() {
           aria-label="Word to PDF conversion"
           onDragOver={(event) => {
             event.preventDefault();
-            event.dataTransfer.dropEffect = busy || result ? "none" : "copy";
-            if (!busy && !result) setDragging(true);
+            event.dataTransfer.dropEffect =
+              busy || result || cleanupUnconfirmed ? "none" : "copy";
+            if (!busy && !result && !cleanupUnconfirmed) setDragging(true);
           }}
           onDragLeave={(event) => {
             if (
@@ -407,7 +537,8 @@ export function WordPage() {
           onDrop={(event) => {
             event.preventDefault();
             setDragging(false);
-            if (!busy && !result) choose(Array.from(event.dataTransfer.files));
+            if (!busy && !result && !cleanupUnconfirmed)
+              choose(Array.from(event.dataTransfer.files));
           }}
         >
           {!result && (
@@ -459,7 +590,7 @@ export function WordPage() {
               <FilePicker
                 id="word-file"
                 accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                disabled={busy}
+                disabled={busy || cleanupUnconfirmed}
                 onChange={(event) => {
                   const files = Array.from(event.target.files || []);
                   event.target.value = "";
@@ -475,27 +606,169 @@ export function WordPage() {
               )}
             </div>
           )}
+          {file && !result && !busy && (
+            <div className="word-local-check" aria-live="polite">
+              {checkingLocal ? (
+                <p role="status">
+                  Checking this document on your device… Nothing is being
+                  uploaded.
+                </p>
+              ) : localCheck ? (
+                <>
+                  <strong>
+                    {localIssues.length
+                      ? "This document needs attention"
+                      : "Local checks passed"}
+                  </strong>
+                  {localIssues.length > 0 && (
+                    <ul role="alert">
+                      {localIssues.map((issue) => (
+                        <li key={issue.code}>{issue.message}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : null}
+            </div>
+          )}
+          {file &&
+            localCheck &&
+            !needsWordFix &&
+            !busy &&
+            !result &&
+            ((localCheck.revisions &&
+              service?.capabilities?.revisionViews.includes("final") &&
+              service.capabilities.revisionViews.includes("original")) ||
+              (localCheck.comments && service?.capabilities?.omitComments)) && (
+              <fieldset className="word-view-options">
+                <legend>Choose the PDF content</legend>
+                {localCheck.revisions &&
+                  service?.capabilities?.revisionViews.includes("final") &&
+                  service.capabilities.revisionViews.includes("original") && (
+                    <label>
+                      Tracked changes
+                      <select
+                        aria-label="Tracked changes"
+                        value={outputOptions.revisionView}
+                        onChange={(event) =>
+                          setOutputOptions((previous) => ({
+                            ...previous,
+                            revisionView: event.target
+                              .value as WordOptions["revisionView"],
+                          }))
+                        }
+                      >
+                        <option value="unchanged">
+                          Choose how to handle tracked changes
+                        </option>
+                        <option value="final">
+                          Current content — accept all tracked changes
+                        </option>
+                        <option
+                          value="original"
+                          disabled={localCheck.originalViewUnsupported}
+                        >
+                          Original content — reject all tracked changes
+                        </option>
+                      </select>
+                    </label>
+                  )}
+                {localCheck.comments && service?.capabilities?.omitComments && (
+                  <label className="word-option-check">
+                    <input
+                      type="checkbox"
+                      checked={outputOptions.omitComments}
+                      onChange={(event) =>
+                        setOutputOptions((previous) => ({
+                          ...previous,
+                          omitComments: event.target.checked,
+                        }))
+                      }
+                    />
+                    Create the PDF without comments
+                  </label>
+                )}
+                <p>
+                  These choices affect only the temporary conversion copy. Your
+                  original is unchanged. To include comment markup, export from
+                  Word.
+                </p>
+                {localCheck.originalViewUnsupported && (
+                  <p>
+                    To restore this document’s original formatting or structure,
+                    export from Word. Current content is available here.
+                  </p>
+                )}
+              </fieldset>
+            )}
+          {file &&
+            localCheck &&
+            !result &&
+            !busy &&
+            (replacingFonts ||
+              fontRisks.length > 0 ||
+              localCheck.warnings.length > 0) && (
+              <details className="word-layout-check">
+                <summary>
+                  {replacingFonts
+                    ? "Uses available fonts · layout may change"
+                    : "Layout may change"}
+                </summary>
+                {replacingFonts && (
+                  <p>
+                    Embedded fonts are removed from the conversion copy.
+                    Available fonts are used instead. Your original is
+                    unchanged.
+                  </p>
+                )}
+                {localCheck.warnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+                {fontRisks.length > 0 && (
+                  <p>
+                    Font declarations: {fontRisks.join(", ")}. Some may be
+                    unused styles.
+                  </p>
+                )}
+                <p>
+                  Check the PDF before sharing. For an exact Word layout, export
+                  from Word.
+                </p>
+              </details>
+            )}
+          {serverRejected && (
+            <p>Choose a corrected copy from Word before trying again.</p>
+          )}
           <div className="word-cloud-note" role="note">
-            <strong>Cloud conversion</strong>
+            <strong>
+              {localMode ? "Local conversion" : "Cloud conversion"}
+            </strong>
             <p>
-              Your document is uploaded only when you choose Upload and convert.
+              {localMode
+                ? "Files are processed on this computer. "
+                : "Upload starts only when you convert. "}
               Processing:{" "}
               {service?.region ||
                 (connecting
                   ? "checking server availability…"
                   : "connection unavailable")}
-              . Temporary files are kept for at most one hour. You can delete
-              them sooner.
+              . Auto-delete within 1 hour.
             </p>
           </div>
           {busy && (
             <div role="status" aria-live="polite">
               <p>
-                {job?.state === "cancelled"
+                {cleanupUnconfirmed || job?.state === "cancelled"
                   ? "Removing temporary files…"
                   : stages[job?.state || "created"] || "Connecting…"}
               </p>
-              <p>This can take a few minutes. You can cancel at any time.</p>
+              <p>{elapsed}s elapsed · You can cancel at any time.</p>
+              {job?.state === "queued" && !!job.queueAhead && (
+                <p>
+                  {job.queueAhead} conversion{job.queueAhead === 1 ? "" : "s"}{" "}
+                  ahead.
+                </p>
+              )}
               {progress !== undefined && (
                 <>
                   <progress
@@ -521,15 +794,30 @@ export function WordPage() {
           {result && (
             <div className="word-result">
               <h2>Your PDF is ready</h2>
+              {job?.options?.revisionView &&
+                job.options.revisionView !== "unchanged" && (
+                  <p>
+                    PDF content:{" "}
+                    {job.options.revisionView === "final"
+                      ? "current content (tracked changes accepted)"
+                      : "original content (tracked changes rejected)"}
+                    .
+                  </p>
+                )}
               <p>
                 {job?.pages} {job?.pages === 1 ? "page" : "pages"} · Check the
                 layout before sharing.
               </p>
-              <ul>
-                {job?.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
+              {!!job?.warnings.length && (
+                <details className="word-layout-check">
+                  <summary>Layout notes</summary>
+                  <ul>
+                    {job?.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               <div className="word-actions">
                 <button
                   className="secondary"
@@ -549,9 +837,17 @@ export function WordPage() {
               <button
                 className="word-convert"
                 onClick={() => void start()}
-                disabled={!file || !service?.available}
+                disabled={
+                  !file ||
+                  !service?.available ||
+                  checkingLocal ||
+                  cleanupUnconfirmed ||
+                  serverRejected ||
+                  !localCheck ||
+                  localIssues.length > 0
+                }
               >
-                Upload and convert
+                {localMode ? "Convert to PDF" : "Upload and convert"}
               </button>
             )}
             {busy && job?.state !== "cancelled" && (
@@ -570,20 +866,15 @@ export function WordPage() {
               </button>
             )}
           </div>
-          <p className="word-layout-hint">
-            Fonts, table breaks and picture wrapping may change. Check the
-            preview before sharing. Page numbers and contents may be
-            recalculated.
-          </p>
           <details className="input-support">
             <summary>Supported documents</summary>
             <p>
               Ordinary Chinese and English DOCX documents, tables, embedded
               pictures, headers, footnotes and contents. Complex layouts may
-              change. Resolve tracked changes, comments and hidden content in
-              Word first. Password-protected files, macros, embedded files,
-              embedded fonts and externally linked content are not supported in
-              this first version.
+              change. For tracked changes or comments, choose the PDF content
+              above when available. Hidden text must be shown or removed in Word
+              first. Password-protected files, macros, embedded files and
+              externally linked content are not supported in this first version.
             </p>
           </details>
         </section>
@@ -602,7 +893,7 @@ export function WordPage() {
       )}
       {destination && (
         <LeaveTaskDialog
-          description="Leaving will request deletion of temporary server files. Download your PDF first if you want to keep it."
+          description="Leaving will request deletion of temporary conversion files. Download your PDF first if you want to keep it."
           keep={() => setDestination("")}
           leave={leave}
         />

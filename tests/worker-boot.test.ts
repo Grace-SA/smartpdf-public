@@ -2,7 +2,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import { waitForBoot } from "../src/platform/worker-boot";
 
 afterEach(() => vi.useRealTimers());
-const port = () => new EventTarget() as unknown as Worker;
+const port = () =>
+  Object.assign(new EventTarget(), { terminate: vi.fn() }) as unknown as Worker;
 test("boot waits for the actual ready packet and clears its deadline", async () => {
   vi.useFakeTimers();
   const worker = port();
@@ -72,6 +73,28 @@ test("request listeners are installed before a synchronous acknowledgement", asy
     },
   );
   expect(vi.getTimerCount()).toBe(0);
+});
+
+test("cancellation terminates synchronously and consumes only a failed worker's late error", async () => {
+  const worker = port();
+  const controller = new AbortController();
+  const pending = expect(
+    waitForBoot(worker, () => false, controller.signal),
+  ).rejects.toMatchObject({ code: "CANCELLED" });
+  controller.abort();
+  expect(worker.terminate).toHaveBeenCalledTimes(1);
+  const late = new Event("error", { cancelable: true });
+  worker.dispatchEvent(late);
+  expect(late.defaultPrevented).toBe(true);
+  await pending;
+  const live = port();
+  const ready = waitForBoot(live, (data) => data?.ready === true);
+  live.dispatchEvent(new MessageEvent("message", { data: { ready: true } }));
+  await ready;
+  expect(live.terminate).not.toHaveBeenCalled();
+  const unexpected = new Event("error", { cancelable: true });
+  live.dispatchEvent(unexpected);
+  expect(unexpected.defaultPrevented).toBe(false);
 });
 
 test("a synchronous request failure clears listeners and its deadline", async () => {

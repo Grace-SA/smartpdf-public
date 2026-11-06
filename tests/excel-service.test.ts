@@ -104,10 +104,7 @@ it("validates a PDF, removes both original and prepared workbook, and confirms d
       .status,
   ).toBe(202);
   await t.wait(id, "succeeded");
-  expect(await readdir(path.join(t.root, id))).toEqual([
-    "options.json",
-    "output.pdf",
-  ]);
+  expect(await readdir(path.join(t.root, id))).toEqual(["output.pdf"]);
   expect((await t.api(`/jobs/${id}/result`)).headers.get("content-type")).toBe(
     "application/pdf",
   );

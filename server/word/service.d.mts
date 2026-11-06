@@ -7,6 +7,11 @@ export type Task = {
   owner: string;
   expiresAt: number;
   error?: string;
+  options?: {
+    revisionView: "unchanged" | "final" | "original";
+    omitComments: boolean;
+    useAvailableFonts?: boolean;
+  };
 };
 export function checkPdf(
   file: string,

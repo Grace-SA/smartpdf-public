@@ -6,7 +6,8 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, realpathSync } from "node:fs";
+import { createStandby } from "./standby.mjs";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { spawn } from "node:child_process";
@@ -14,6 +15,7 @@ import { Worker } from "node:worker_threads";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { performance } from "node:perf_hooks";
 
 const MAX_BYTES = 30 * 1024 ** 2;
 const UPLOAD_TIMEOUT_MS = 120000;
@@ -21,6 +23,47 @@ const terminal = new Set(["succeeded", "failed", "cancelled", "expired"]);
 // Leave a minute for the 30-second cleanup sweep inside the one-hour promise.
 const ttl = 59 * 60 * 1000;
 const runner = fileURLToPath(new URL("./runner.py", import.meta.url));
+async function outputOptions(req) {
+  const chunks = [];
+  let size = 0;
+  const timeout = setTimeout(() => req.destroy(), 5000);
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 2048) throw Error("options");
+      chunks.push(chunk);
+    }
+    const value = size
+      ? JSON.parse(Buffer.concat(chunks).toString("utf8"))
+      : {};
+    const view =
+      value?.revisionView === undefined ? "unchanged" : value.revisionView;
+    const omit = value?.omitComments === undefined ? false : value.omitComments;
+    if (
+      !value ||
+      Array.isArray(value) ||
+      typeof value !== "object" ||
+      Object.keys(value).some(
+        (k) =>
+          !["revisionView", "omitComments", "useAvailableFonts"].includes(k),
+      ) ||
+      !["unchanged", "final", "original"].includes(view) ||
+      typeof omit !== "boolean" ||
+      (value.useAvailableFonts !== undefined &&
+        typeof value.useAvailableFonts !== "boolean")
+    )
+      throw Error("options");
+    return {
+      revisionView: view,
+      omitComments: omit,
+      ...(value.useAvailableFonts !== undefined
+        ? { useAvailableFonts: value.useAvailableFonts }
+        : {}),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export function checkPdf(file, kind = "word") {
   return new Promise((resolve, reject) => {
@@ -60,6 +103,30 @@ export function runStirling(job, update) {
     const command = windows
       ? process.env.WORD_WSL || "C:/Program Files/WSL/wsl.exe"
       : "python3";
+    const control = job.warmToken || job.discardToken;
+    const script = control
+      ? fileURLToPath(new URL("./warm.py", import.meta.url))
+      : runner;
+    const mapped = (value) =>
+      windows && !value.startsWith("--")
+        ? linuxPath(realpathSync(value))
+        : value;
+    const values = job.discardToken
+      ? ["--discard", job.directory, job.discardToken]
+      : [
+          mapped(job.directory),
+          ...(!control && job.kind === "excel" ? ["excel"] : []),
+          ...(job.warmToken
+            ? [job.warmToken]
+            : [
+                ...(job.standby
+                  ? ["--standby", job.standby.name, job.standby.token]
+                  : []),
+                ...(job.budgetSeconds
+                  ? ["--budget", String(job.budgetSeconds)]
+                  : []),
+              ]),
+        ];
     const args = windows
       ? [
           "-d",
@@ -68,11 +135,10 @@ export function runStirling(job, update) {
           "root",
           "--",
           "python3",
-          linuxPath(runner),
-          linuxPath(job.directory),
-          ...(job.kind === "excel" ? ["excel"] : []),
+          linuxPath(realpathSync(script)),
+          ...values,
         ]
-      : [runner, job.directory, ...(job.kind === "excel" ? ["excel"] : [])];
+      : [script, ...values];
     const child = spawn(command, args, {
       windowsHide: true,
       stdio: ["ignore", "pipe", "ignore"],
@@ -93,6 +159,7 @@ export function runStirling(job, update) {
     child.stdout.on("data", (text) => {
       buffer += text;
       if (buffer.length > 32000) {
+        cleanupFailed = true;
         child.kill();
         return;
       }
@@ -106,7 +173,8 @@ export function runStirling(job, update) {
           if (value.cleanupFailed) cleanupFailed = true;
           update(value);
         } catch {
-          /* Only bounded structured messages are consumed. */
+          cleanupFailed = true;
+          child.kill();
         }
       }
     });
@@ -120,7 +188,7 @@ export function runStirling(job, update) {
         reject(
           Object.assign(
             new Error("Conversion cleanup requires operator attention."),
-            { unsafe: true },
+            { unsafe: true, code: "CLEANUP_FAILED" },
           ),
         );
       else if (error || code)
@@ -163,7 +231,39 @@ export async function createWordService(options = {}) {
   let active = false;
   let stopped = false;
   let unhealthy = false;
-  const execute = options.execute || runStirling;
+  const pool =
+    !options.execute && process.env.WORD_PREWARM !== "false"
+      ? createStandby({
+          root,
+          run: runStirling,
+          broken: () => {
+            unhealthy = true;
+          },
+        })
+      : undefined;
+  const execute =
+    options.execute ||
+    (async (job, update) => {
+      const started = performance.now();
+      update({ state: "starting" });
+      job.standby = await pool?.take(job);
+      if (terminal.has(job.state)) {
+        await pool?.release(job.standby);
+        return;
+      }
+      job.budgetSeconds = Math.max(
+        1,
+        240 - (performance.now() - started) / 1000,
+      );
+      await runStirling(job, update);
+      const next = [...jobs.values()].find((value) => value.state === "queued");
+      if (
+        !stopped &&
+        !unhealthy &&
+        (!next || next.options?.revisionView === "unchanged")
+      )
+        pool?.ensure();
+    });
   const validate = options.validate || checkPdf;
   const now = options.now || Date.now;
   const signature = (value) =>
@@ -195,9 +295,19 @@ export async function createWordService(options = {}) {
     error: job.error,
     failureCode: job.failureCode,
     expiresAt: job.expiresAt,
+    queueAhead:
+      job.state === "queued"
+        ? Math.max(
+            0,
+            [...jobs.values()]
+              .filter((value) => value.state === "queued")
+              .findIndex((value) => value.id === job.id) + (active ? 1 : 0),
+          )
+        : undefined,
     cleanupPending:
       (job.state === "cancelled" || job.state === "expired") &&
       !!(job.running || job.uploading),
+    options: job.options,
   });
   async function erase(job) {
     if (job.running || job.uploading) return;
@@ -206,26 +316,40 @@ export async function createWordService(options = {}) {
   async function drain() {
     if (active || unhealthy || stopped) return;
     const job = [...jobs.values()].find((j) => j.state === "queued");
-    if (!job) return;
+    if (!job) {
+      if (!stopped && !unhealthy) pool?.ensure();
+      return;
+    }
     active = true;
     job.running = true;
     try {
       await execute(job, (value) => {
         if (terminal.has(job.state)) return;
         if (
-          ["checking", "starting", "converting", "checking-result"].includes(
-            value.state,
-          )
+          [
+            "checking",
+            "starting",
+            "preparing",
+            "converting",
+            "checking-result",
+          ].includes(value.state)
         )
           job.state = value.state;
         if (Array.isArray(value.warnings)) job.warnings = value.warnings;
       });
       if (!terminal.has(job.state)) {
         job.state = "checking-result";
-        const result = await validate(
-          path.join(job.directory, "output.pdf"),
-          job.kind,
-        );
+        let result;
+        try {
+          result = await validate(
+            path.join(job.directory, "output.pdf"),
+            job.kind,
+          );
+        } catch {
+          throw Object.assign(new Error("Invalid PDF output"), {
+            code: "OUTPUT_INVALID",
+          });
+        }
         // Do not announce success while the uploaded source still exists.
         await rm(
           path.join(
@@ -235,6 +359,9 @@ export async function createWordService(options = {}) {
           { force: true },
         );
         await rm(path.join(job.directory, "prepared.xlsx"), { force: true });
+        await rm(path.join(job.directory, "prepared.docx"), { force: true });
+        await rm(path.join(job.directory, "sanitized.docx"), { force: true });
+        await rm(path.join(job.directory, "options.json"), { force: true });
         if (!terminal.has(job.state)) {
           job.pages = result.pages;
           job.state = "succeeded";
@@ -269,6 +396,7 @@ export async function createWordService(options = {}) {
         unhealthy = true;
         job.state = "failed";
         job.error = "Temporary-file cleanup requires operator attention.";
+        job.failureCode = "CLEANUP_FAILED";
       }
       void drain();
     }
@@ -280,6 +408,7 @@ export async function createWordService(options = {}) {
     job.error = undefined;
     if (job.running)
       await writeFile(path.join(job.directory, "cancel"), "cancel");
+    await pool?.cancel(job);
     job.uploadController?.abort();
     await erase(job);
   }
@@ -361,13 +490,31 @@ export async function createWordService(options = {}) {
             "This self-hosted conversion server",
           maxBytes: MAX_BYTES,
           retentionMinutes: 60,
+          mode:
+            !secure && process.env.WORD_PROCESSING_MODE === "local"
+              ? "local"
+              : "cloud",
+          ready: pool?.ready() ?? true,
           available: !unhealthy && !stopped,
+          capabilities: {
+            revisionViews: ["final", "original"],
+            omitComments: true,
+            availableFonts: true,
+          },
         });
       if (!owner)
         return json(res, 401, {
           error: "Reopen this tool to start a new session.",
         });
       if (url.pathname === "/api/word/jobs" && req.method === "POST") {
+        let settings;
+        try {
+          settings = await outputOptions(req);
+        } catch {
+          return json(res, 400, {
+            error: "Choose valid document output options.",
+          });
+        }
         await sweep();
         if (unhealthy || stopped)
           return json(res, 503, {
@@ -392,9 +539,16 @@ export async function createWordService(options = {}) {
           directory: path.join(root, id),
           state: "created",
           warnings: [],
+          options: settings,
           expiresAt: now() + 60000,
         };
         await mkdir(job.directory, { mode: 0o700 });
+        if (kind === "word")
+          await writeFile(
+            path.join(job.directory, "options.json"),
+            JSON.stringify(settings),
+            { mode: 0o600, flag: "wx" },
+          );
         jobs.set(id, job);
         return json(res, 201, view(job));
       }
@@ -548,6 +702,7 @@ export async function createWordService(options = {}) {
   });
   server.requestTimeout = UPLOAD_TIMEOUT_MS + 10000;
   server.headersTimeout = 10000;
+  pool?.ensure();
   return {
     server,
     jobs,
@@ -560,6 +715,7 @@ export async function createWordService(options = {}) {
           .filter((j) => !terminal.has(j.state))
           .map((j) => cancel(j)),
       );
+      await pool?.close();
       await new Promise((resolve) => server.close(resolve));
     },
   };
