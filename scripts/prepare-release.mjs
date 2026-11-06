@@ -68,7 +68,11 @@ run(process.execPath, [pnpmCli, "install", "--frozen-lockfile"], {
 run(process.execPath, [pnpmCli, "build"], {
   cwd: source,
   stdio: "inherit",
-  env: { ...process.env, VITE_ENABLE_PROTECT: "false" },
+  env: {
+    ...process.env,
+    VITE_ENABLE_EXCEL: localProof ? "true" : process.env.VITE_ENABLE_EXCEL,
+    VITE_ENABLE_PROTECT: "false",
+  },
 });
 const files = [];
 const walk = (dir) => {
@@ -106,7 +110,7 @@ fs.writeFileSync(
       features: {
         word: true,
         ppt: true,
-        excel: process.env.VITE_ENABLE_EXCEL === "true",
+        excel: !!localProof || process.env.VITE_ENABLE_EXCEL === "true",
         unlock: true,
         protect: false,
       },
