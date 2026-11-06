@@ -8,6 +8,14 @@ export const toolGroups = [
 
 // All public tool discovery surfaces share this catalogue.
 export const toolCatalog = {
+  ppt: {
+    path: "/powerpoint-to-pdf/",
+    title: "PowerPoint to PDF",
+    label: "PowerPoint to PDF",
+    summary:
+      "Convert a PPTX with cloud processing. Keep the original slide size.",
+    group: "Convert PDF",
+  },
   excel: {
     path: "/excel-to-pdf/",
     title: "Excel to PDF",

@@ -112,6 +112,8 @@ private-samples/
 !/scripts/prepare-release.mjs
 !/scripts/word-release-manifest.mjs
 !/scripts/word-release-manifest.d.mts
+!/scripts/office-release-manifest.mjs
+!/scripts/office-release-manifest.d.mts
 
 /tests/review-color.spec.ts
 /tests/ux-performance.spec.ts
@@ -133,3 +135,10 @@ private-samples/
 !/docs/ux/excel-to-pdf-research-2026-11-04.md
 /server/word/__pycache__/
 !/playwright.word.config.ts
+
+# Reviewed PPT source and research specification.
+!/server/ppt/
+!/server/office/
+/server/ppt/__pycache__/
+!/docs/ux/ppt-to-pdf-research-2026-11-05.md
+!/docs/ppt-report.md

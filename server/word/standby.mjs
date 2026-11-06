@@ -5,6 +5,7 @@ import path from "node:path";
 // Only a clean, never-used converter is retained. A claim consumes the slot.
 export function createStandby({ root, run, broken }) {
   let current,
+    paused = false,
     closed = false;
   async function removeReady(ready) {
     try {
@@ -35,7 +36,7 @@ export function createStandby({ root, run, broken }) {
     })());
   }
   function ensure() {
-    if (closed || current) return;
+    if (closed || paused || current) return;
     const slot = { cancelled: false, token: randomBytes(16).toString("hex") };
     current = slot;
     slot.promise = (async () => {
@@ -68,6 +69,20 @@ export function createStandby({ root, run, broken }) {
   }
   return {
     ensure,
+    async pause() {
+      paused = true;
+      const slot = current;
+      if (!slot) return;
+      await cancelSlot(slot);
+      await slot.promise;
+      await clean(slot);
+      if (current === slot) current = undefined;
+      if (slot.error?.unsafe) throw slot.error;
+    },
+    resume() {
+      paused = false;
+      ensure();
+    },
     ready: () =>
       !!current?.ready &&
       !current?.claimed &&

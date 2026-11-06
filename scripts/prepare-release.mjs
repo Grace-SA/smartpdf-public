@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { prepareWordRuntime } from "./word-release-manifest.mjs";
+import { prepareOfficeRuntime } from "./office-release-manifest.mjs";
 
 const run = (exe, args, options = {}) =>
   execFileSync(exe, args, {
@@ -100,7 +100,8 @@ const walk = (dir) => {
   }
 };
 walk(path.join(source, "dist"));
-const word = prepareWordRuntime(source, folder);
+const office = prepareOfficeRuntime(source, folder);
+const word = office.word;
 fs.writeFileSync(
   path.join(folder, "release.json"),
   JSON.stringify(
@@ -112,12 +113,14 @@ fs.writeFileSync(
       deployed: false,
       features: {
         word: true,
+        ppt: true,
         excel: process.env.VITE_ENABLE_EXCEL === "true",
         unlock: true,
         protect: false,
       },
       files,
       word,
+      office,
     },
     null,
     2,

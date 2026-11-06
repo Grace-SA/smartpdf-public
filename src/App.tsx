@@ -150,6 +150,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  ppt: "Convert visible PPTX slides using cloud processing.",
   excel: "Choose worksheets and convert an XLSX using cloud processing.",
   word: "Convert a DOCX using cloud processing.",
   protect: "Add an opening password. Keep your PDF on your device.",
@@ -217,6 +218,7 @@ export function App() {
   const [downloadNotice, setDownloadNotice] = useState<DownloadNotice>(null);
   const engine = useRef<Engine | null>(null);
   const enginePreparation = useRef<Promise<void>>(Promise.resolve());
+  const resourceController = useRef<AbortController | null>(null);
   const processingReady = useRef(!initialTool);
   const queuedInput = useRef<File | null>(null);
   const [waitingForResources, setWaitingForResources] = useState(false);
@@ -345,7 +347,10 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
-      if (next === "word" || next === "excel") {
+      if (next === "word" || next === "ppt" || next === "excel") {
+        // React cleanup does not run when replacing this document. Stop pending
+        // blob workers while their document and error handlers still exist.
+        resourceController.current?.abort();
         window.location.assign(toolPaths[next]);
         return;
       }
@@ -581,7 +586,13 @@ export function App() {
   useEffect(() => {
     if (tool === "read") return;
     const controller = new AbortController();
+    resourceController.current = controller;
     let mounted = true;
+    const leavingDocument = () => {
+      mounted = false;
+      controller.abort();
+    };
+    window.addEventListener("pagehide", leavingDocument);
     let disposeCompression = () => {};
     let timeout = 0;
     const timedOut = new Promise<never>((_, reject) => {
@@ -782,8 +793,10 @@ export function App() {
     };
     void initialize();
     return () => {
-      mounted = false;
-      controller.abort();
+      leavingDocument();
+      window.removeEventListener("pagehide", leavingDocument);
+      if (resourceController.current === controller)
+        resourceController.current = null;
       window.clearTimeout(timeout);
       if (!engineReady.current) {
         engine.current?.dispose();
@@ -794,15 +807,20 @@ export function App() {
   }, [tool, retry]);
 
   const engineReady = useRef(false);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const restore = (event: PageTransitionEvent) => {
+      // Cancelled workers cannot be reused after a cross-document BFCache restore.
+      if (event.persisted) location.reload();
+    };
+    window.addEventListener("pageshow", restore);
+    return () => {
+      window.removeEventListener("pageshow", restore);
       job.current?.abort();
       void active.current?.dispose();
       engine.current?.dispose();
       engineReady.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   function clearCanvas() {
     const canvas = host.current?.querySelector("canvas");
@@ -1382,7 +1400,8 @@ export function App() {
             <h1>Simple PDF tools. Clear choices for your files.</h1>
             <p className="hero-lede">
               Merge, split, organize, sign and compress in your browser. Word to
-              PDF uses cloud conversion and uploads only when you start.
+              PDF and PowerPoint to PDF use cloud conversion and upload only
+              when you start.
             </p>
             <div className="tool-cards">
               {publicTools.map((t) => (
@@ -1626,6 +1645,7 @@ export function App() {
               <Completion
                 title={
                   {
+                    ppt: "Your PDF is ready",
                     word: "Your PDF is ready",
                     excel: "Your PDF is ready",
                     unlock: "Your unlocked PDF is ready",
@@ -2086,8 +2106,8 @@ export function App() {
               </span>
             </a>
             <p>
-              PDF tools on your device, plus clearly marked cloud Word
-              conversion.
+              PDF tools on your device, plus clearly marked cloud Word and
+              PowerPoint conversion.
             </p>
             <span className="australia-badge">Proudly built in Australia</span>
           </div>
