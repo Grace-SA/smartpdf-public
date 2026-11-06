@@ -10,11 +10,13 @@ export function FilePreview({
   engine,
   existing,
   close,
+  profile,
 }: {
   file: File;
   engine: Engine;
   existing?: Preview;
   close: () => void;
+  profile?: "excel";
 }) {
   const [preview, setPreview] = useState<Preview | undefined>(existing);
   const [status, setStatus] = useState("Opening preview…");
@@ -30,7 +32,7 @@ export function FilePreview({
       );
     }, LIMITS.timeoutMs);
     void engine
-      .open(file, controller.signal, setStatus)
+      .open(file, controller.signal, setStatus, profile)
       .then(async (result) => {
         clearTimeout(timer);
         if (controller.signal.aborted) {
@@ -52,7 +54,7 @@ export function FilePreview({
       controller.abort();
       void owned?.dispose();
     };
-  }, [file, engine, existing]);
+  }, [file, engine, existing, profile]);
   useEffect(
     () => () => {
       const target = focus.current;

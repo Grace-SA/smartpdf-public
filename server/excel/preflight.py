@@ -19,7 +19,7 @@ C = 'http://schemas.openxmlformats.org/drawingml/2006/chart'
 CHARTS = {'barChart', 'lineChart', 'areaChart', 'pieChart', 'doughnutChart', 'scatterChart',
           'bar3DChart', 'line3DChart', 'area3DChart', 'pie3DChart', 'radarChart', 'bubbleChart', 'stockChart', 'surfaceChart', 'surface3DChart', 'ofPieChart'}
 
-def automatic_layout(tree, workbook, sheet, index, styles, options):
+def automatic_layout(tree, workbook, sheet, index, styles, options, drawing=None):
     """Give unconfigured tables readable paper pages, without changing cell geometry."""
     names = workbook.find(f'{{{S}}}definedNames')
     saved_fit = tree.find(f'{{{S}}}sheetPr/{{{S}}}pageSetUpPr')
@@ -28,9 +28,8 @@ def automatic_layout(tree, workbook, sheet, index, styles, options):
         any(n.get('localSheetId') == str(index) and n.get('name') in {'_xlnm.Print_Area', '_xlnm.Print_Titles'} for n in (names if names is not None else [])) or
         tree.find(f'{{{S}}}rowBreaks') is not None or tree.find(f'{{{S}}}colBreaks') is not None):
         return None
-    # Drawings can extend beyond cell anchors. Preserve their original geometry instead
-    # of inferring a print region from cell text and accidentally excluding objects.
-    if tree.find(f'{{{S}}}drawing') is not None:
+    # Include object bounds; never create a print area from cell text alone.
+    if tree.find(f'{{{S}}}drawing') is not None and drawing is None:
         return None
     cells = list(tree.iter(f'{{{S}}}c'))
     if not cells: return None
@@ -41,6 +40,15 @@ def automatic_layout(tree, workbook, sheet, index, styles, options):
         if value > 16384: reject('Invalid worksheet cell reference.')
         return value
     last = max(column(c.get('r')) for c in cells)
+    D = '{http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing}'
+    if drawing is not None:
+        for anchor in drawing:
+            if anchor.tag not in {D+'twoCellAnchor', D+'oneCellAnchor', D+'absoluteAnchor'}: return None
+            for marker in [anchor.find(D+'from'), anchor.find(D+'to')]:
+                if marker is not None:
+                    col = int(marker.findtext(D+'col', '-1'))
+                    if not 0 <= col < 16384: reject('Invalid drawing anchor.')
+                    last = max(last, col + 1)
     for merge in tree.findall(f'{{{S}}}mergeCells/{{{S}}}mergeCell'):
         last = max(last, column(merge.get('ref').split(':')[-1]))
     default = tree.find(f'{{{S}}}sheetFormatPr')
@@ -72,10 +80,27 @@ def automatic_layout(tree, workbook, sheet, index, styles, options):
     # OOXML widths use the default font's maximum digit width; the estimate is
     # conservative and only chooses a fixed percentage, never edits cell widths.
     total = sum((w * digit_width + 5) * .75 for w in widths if w)
+    if drawing is not None:
+        column_points = [(w * digit_width + 5) * .75 if w else 0 for w in widths]
+        for anchor in drawing:
+            start = anchor.find(D+'from'); end = anchor.find(D+'to'); extent = anchor.find(D+'ext')
+            if start is not None:
+                left = sum(column_points[:int(start.findtext(D+'col'))]) + int(start.findtext(D+'colOff', '0')) / 12700
+            else:
+                position = anchor.find(D+'pos')
+                if position is None: return None
+                left = int(position.get('x', '0')) / 12700
+            if end is not None:
+                right = sum(column_points[:int(end.findtext(D+'col'))]) + int(end.findtext(D+'colOff', '0')) / 12700
+            elif extent is not None:
+                right = left + int(extent.get('cx', '0')) / 12700
+            else: return None
+            if not 0 <= left <= right <= 100000: reject('Invalid drawing extent.')
+            total = max(total, right)
     margins = tree.find(f'{{{S}}}pageMargins')
     if margins is None:
         margins = ET.Element(f'{{{S}}}pageMargins', {'left': '.3', 'right': '.3', 'top': '.4', 'bottom': '.4', 'header': '.2', 'footer': '.2'})
-        tail = {'headerFooter', 'rowBreaks', 'colBreaks', 'customProperties', 'cellWatches', 'ignoredErrors', 'smartTags', 'legacyDrawing', 'legacyDrawingHF', 'picture', 'tableParts', 'extLst'}
+        tail = {'headerFooter', 'rowBreaks', 'colBreaks', 'customProperties', 'cellWatches', 'ignoredErrors', 'smartTags', 'drawing', 'legacyDrawing', 'legacyDrawingHF', 'picture', 'tableParts', 'extLst'}
         position = next((i for i, c in enumerate(tree) if c.tag.rsplit('}', 1)[-1] in tail), len(tree))
         tree.insert(position, margins)
     horizontal_margin = (float(margins.get('left', '.3')) + float(margins.get('right', '.3'))) * 72
@@ -556,7 +581,15 @@ def prepare(source, output, options):
                 for view in tree.findall(f'{{{S}}}sheetViews/{{{S}}}sheetView'):
                     view.set('tabSelected', '0')
                 if options['scale'] == 'auto':
-                    layout_warning = automatic_layout(tree, workbook, sheet, index, trees.get('xl/styles.xml'), options)
+                    drawing = None
+                    part = tree.find(f'{{{S}}}drawing')
+                    if part is not None:
+                        rels = trees.get(posixpath.join(posixpath.dirname(target), '_rels', posixpath.basename(target) + '.rels'))
+                        for rel in (rels if rels is not None else []):
+                            if rel.get('Id') == part.get(f'{{{R}}}id') and rel.get('Type', '').endswith('/drawing'):
+                                location = rel.get('Target', '')
+                                drawing = trees.get(posixpath.normpath(location.lstrip('/') if location.startswith('/') else posixpath.join(posixpath.dirname(target), location)))
+                    layout_warning = automatic_layout(tree, workbook, sheet, index, trees.get('xl/styles.xml'), options, drawing)
                     if layout_warning:
                         warnings.add(layout_warning); changed.update({target, 'xl/workbook.xml'})
                 setup = tree.find(f'{{{S}}}pageSetup')

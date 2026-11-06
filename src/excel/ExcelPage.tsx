@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FilePicker } from "../FilePicker";
-import { ExcelPreview } from "./ExcelPreview";
+import { FilePreview } from "../FilePreview";
 import type { Engine } from "../platform/engine";
 import { SeoContent, applySeo } from "../SeoContent";
 import { ToolNavigation } from "../ToolNavigation";
@@ -300,7 +300,6 @@ export function ExcelPage() {
           setResult(pdf);
           setUrl(URL.createObjectURL(pdf));
           setDirty(false);
-          void showPreview();
           break;
         }
         await new Promise<void>((resolve, reject) => {
@@ -440,7 +439,7 @@ export function ExcelPage() {
           disabled={busy}
           choose={(tool) => navigate(toolPaths[tool])}
         />
-        <span className="version">Cloud conversion</span>
+        <span className="version">Excel to PDF</span>
       </header>
       <main className="word-page">
         <div className="task-heading">
@@ -449,7 +448,7 @@ export function ExcelPage() {
           </a>
           <div>
             <h1>Excel to PDF</h1>
-            <p>Convert one XLSX, then check and download your PDF.</p>
+            <p>Convert your spreadsheet to PDF.</p>
           </div>
         </div>
         <section
@@ -553,25 +552,11 @@ export function ExcelPage() {
               }}
             />
           )}
-          {file && !result && (
-            <p className="word-layout-hint">
-              Formula results are taken from the last saved workbook.
-              Recalculate and save in Excel first if you need updated results.
-            </p>
-          )}
-          <div className="word-cloud-note" role="note">
-            <strong>Cloud conversion</strong>
-            <p>
-              Your workbook is uploaded only when you choose Upload and generate
-              PDF or Update PDF. Processing:{" "}
-              {service?.region ||
-                (connecting
-                  ? "checking server availability…"
-                  : "connection unavailable")}
-              . Temporary files are kept for at most one hour. You can delete
-              them sooner.
-            </p>
-          </div>
+          <p className="word-layout-hint">
+            Processing:{" "}
+            {service?.region || (connecting ? "connecting…" : "unavailable")}.
+            Temporary files auto-delete within one hour.
+          </p>
           {busy && (
             <div role="status" aria-live="polite">
               <p>
@@ -579,7 +564,6 @@ export function ExcelPage() {
                   ? "Removing temporary files…"
                   : stages[job?.state || "created"] || "Connecting…"}
               </p>
-              <p>This can take a few minutes. You can cancel at any time.</p>
               {progress !== undefined && (
                 <>
                   <progress
@@ -609,18 +593,21 @@ export function ExcelPage() {
                 {job?.pages} {job?.pages === 1 ? "page" : "pages"} · Check the
                 layout before sharing.
               </p>
-              <ul>
-                {job?.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-              <p>
-                Selected worksheets:{" "}
-                {sheets
-                  .filter((sheet) => options.sheets.includes(sheet.index))
-                  .map((sheet) => sheet.name)
-                  .join(", ")}
-              </p>
+              <details className="input-support">
+                <summary>Conversion details</summary>
+                <ul>
+                  {job?.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+                <p>
+                  Selected worksheets:{" "}
+                  {sheets
+                    .filter((sheet) => options.sheets.includes(sheet.index))
+                    .map((sheet) => sheet.name)
+                    .join(", ")}
+                </p>
+              </details>
               {dirty && (
                 <p role="status">
                   Settings have changed. Update the PDF before downloading.
@@ -630,7 +617,7 @@ export function ExcelPage() {
                 <button
                   className="secondary"
                   onClick={() => void showPreview()}
-                  disabled={opening || dirty || !!preview}
+                  disabled={opening || dirty}
                 >
                   {opening ? "Opening preview…" : "Preview PDF"}
                 </button>
@@ -666,49 +653,18 @@ export function ExcelPage() {
                   </button>
                 )}
               </div>
-              <div
-                className={`excel-result-grid${adjusting ? " is-adjusting" : ""}`}
-              >
-                <aside aria-label="Selected worksheet list">
-                  <h3>Worksheets</h3>
-                  <ul>
-                    {sheets
-                      .filter((sheet) => options.sheets.includes(sheet.index))
-                      .map((sheet) => (
-                        <li key={sheet.index}>{sheet.name}</li>
-                      ))}
-                  </ul>
-                  <p>
-                    PDF pages follow worksheet order. Each sheet may span
-                    several pages.
-                  </p>
-                </aside>
-                <div>
-                  {preview && !dirty ? (
-                    <ExcelPreview file={result} engine={preview} />
-                  ) : (
-                    <p>
-                      {dirty
-                        ? "The previous preview no longer matches your settings."
-                        : "Use Preview PDF to check the generated pages."}
-                    </p>
-                  )}
-                </div>
-                {adjusting && (
-                  <aside>
-                    <ExcelSettings
-                      sheets={sheets}
-                      value={options}
-                      disabled={busy}
-                      change={(next) => {
-                        setOptions(next);
-                        setDirty(true);
-                        setPreview(undefined);
-                      }}
-                    />
-                  </aside>
-                )}
-              </div>
+              {adjusting && (
+                <ExcelSettings
+                  sheets={sheets}
+                  value={options}
+                  disabled={busy}
+                  change={(next) => {
+                    setOptions(next);
+                    setDirty(true);
+                    setPreview(undefined);
+                  }}
+                />
+              )}
             </div>
           )}
           <div className="word-actions">
@@ -723,7 +679,7 @@ export function ExcelPage() {
                   !options.sheets.length
                 }
               >
-                Upload and generate PDF
+                Convert to PDF
               </button>
             )}
             {busy && job?.state !== "cancelled" && (
@@ -742,10 +698,6 @@ export function ExcelPage() {
               </button>
             )}
           </div>
-          <p className="word-layout-hint">
-            Fonts and page breaks may change. Saved formula values are used.
-            Check totals, dates, the last column and print areas before sharing.
-          </p>
           <details className="input-support">
             <summary>Supported documents</summary>
             <p>
@@ -769,6 +721,14 @@ export function ExcelPage() {
           <a href="/notices/index.html">Third-party notices</a>
         </footer>
       </main>
+      {preview && result && !dirty && (
+        <FilePreview
+          file={result}
+          engine={preview}
+          profile="excel"
+          close={() => setPreview(undefined)}
+        />
+      )}
       {destination && (
         <LeaveTaskDialog
           description="Leaving will request deletion of temporary server files. Download your PDF first if you want to keep it."

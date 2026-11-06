@@ -138,6 +138,27 @@ class Inspection(unittest.TestCase):
         self.rewrite()
         with self.assertRaises(Rejected): self.run_prepare(scale='auto')
 
+    def test_auto_picture_bounds_choose_landscape_without_cropping(self):
+        from preflight import automatic_layout
+        D = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing'
+        def base():
+            return ET.fromstring(f'<worksheet xmlns="{S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>PUBLIC FIXTURE</t></is></c></row></sheetData><drawing/></worksheet>')
+        for anchor in [
+            '<twoCellAnchor><from><col>0</col><colOff>0</colOff></from><to><col>14</col><colOff>127000</colOff></to></twoCellAnchor>',
+            '<oneCellAnchor><from><col>0</col></from><ext cx="9000000" cy="1000000"/></oneCellAnchor>',
+            '<absoluteAnchor><pos x="127000" y="0"/><ext cx="9000000" cy="1000000"/></absoluteAnchor>',
+        ]:
+            tree = base(); book = ET.fromstring(f'<workbook xmlns="{S}"/>'); sheet = ET.Element('sheet', {'name':'Public'})
+            drawing = ET.fromstring(f'<wsDr xmlns="{D}">{anchor}</wsDr>')
+            automatic_layout(tree, book, sheet, 0, None, {'orientation':'keep','paper':'keep'}, drawing)
+            self.assertEqual(tree.find(f'{{{S}}}pageSetup').get('orientation'), 'landscape')
+            self.assertIsNone(book.find(f'{{{S}}}definedNames'))
+            self.assertLess(list(tree).index(tree.find(f'{{{S}}}pageSetup')), list(tree).index(tree.find(f'{{{S}}}drawing')))
+        tree = base()
+        self.assertIsNone(automatic_layout(tree, book, sheet, 0, None, {'orientation':'keep','paper':'keep'}))
+        drawing = ET.fromstring(f'<wsDr xmlns="{D}"><oneCellAnchor><from><col>16384</col></from><ext cx="1"/></oneCellAnchor></wsDr>')
+        with self.assertRaises(Rejected): automatic_layout(tree, book, sheet, 0, None, {'orientation':'keep','paper':'keep'}, drawing)
+
     def test_overlapping_columns_refused_without_losing_valid_hidden_columns(self):
         original = self.parts['xl/worksheets/sheet1.xml']
         self.rewrite(**{'xl/worksheets/sheet1.xml': original.replace('<cols>', '<cols><col min="2" max="2" hidden="1"/>')})

@@ -17,7 +17,7 @@ export const defaultOptions = (): ExcelOptions => ({
   sheets: [],
   orientation: "keep",
   paper: "keep",
-  scale: "keep",
+  scale: "auto",
 });
 
 /** Metadata only. Server independently validates the complete uploaded package. */

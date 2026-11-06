@@ -123,23 +123,26 @@ test("500-page Excel output previews and jumps to the last page without widening
   await page.goto("/excel-to-pdf/");
   await choose(page);
   await page
-    .getByRole("button", { name: "Upload and generate PDF", exact: true })
+    .getByRole("button", { name: "Convert to PDF", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Your PDF is ready", exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Preview PDF", exact: true }).click();
   await expect(
-    page.locator('.excel-preview canvas[aria-label="PDF preview, page 1"]'),
+    page.locator(
+      '.preview-dialog canvas[aria-label="Original page 1, 0 degrees added rotation"]',
+    ),
   ).toBeVisible();
-  await page.getByLabel("Page number", { exact: true }).fill("500");
-  await page.getByRole("button", { name: "Go to page", exact: true }).click();
+  await page.getByLabel("Page number", { exact: true }).selectOption("499");
   const canvas = page.locator(
-    '.excel-preview canvas[aria-label="PDF preview, page 500"]',
+    '.preview-dialog canvas[aria-label="Original page 500, 0 degrees added rotation"]',
   );
   await expect(canvas).toBeVisible();
-  await expect(
-    page.getByText("Page 500 of 500", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Page number", { exact: true })).toHaveValue(
+    "499",
+  );
   await expect(
     page.getByRole("button", { name: "Next page", exact: true }),
   ).toBeDisabled();
@@ -182,7 +185,7 @@ for (const width of [320, 390, 1280]) {
     ).toBeVisible();
     await expect(
       page.getByRole("button", {
-        name: "Upload and generate PDF",
+        name: "Convert to PDF",
         exact: true,
       }),
     ).toHaveCount(0);
@@ -202,11 +205,9 @@ for (const width of [320, 390, 1280]) {
     await page.getByText("More page settings", { exact: true }).click();
     const scale = width === 1280 ? "auto" : "width";
     await expect(page.getByLabel("Scaling", { exact: true })).toHaveValue(
-      "keep",
+      "auto",
     );
     await page.getByLabel("Scaling", { exact: true }).selectOption(scale);
-    if (scale === "auto")
-      await expect(page.getByText(/Unconfigured tables use A4/)).toBeVisible();
     await page
       .getByLabel("Orientation", { exact: true })
       .selectOption("landscape");
@@ -217,7 +218,7 @@ for (const width of [320, 390, 1280]) {
     ).toBe(true);
     if (width < 900) {
       const primary = page.getByRole("button", {
-        name: "Upload and generate PDF",
+        name: "Convert to PDF",
         exact: true,
       });
       await expect(primary).toHaveCSS("position", "fixed");
@@ -230,7 +231,7 @@ for (const width of [320, 390, 1280]) {
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: "Upload and generate PDF", exact: true })
+      .getByRole("button", { name: "Convert to PDF", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { name: "Your PDF is ready" }),
@@ -276,7 +277,7 @@ test("empty selection blocks upload, and unsupported file / corrupt workbook can
   await page.getByLabel("Report", { exact: true }).uncheck();
   await page.getByLabel("Other", { exact: true }).uncheck();
   await expect(
-    page.getByRole("button", { name: "Upload and generate PDF", exact: true }),
+    page.getByRole("button", { name: "Convert to PDF", exact: true }),
   ).toBeDisabled();
   await page.locator("#excel-file").setInputFiles({
     name: "bad.xlsx",
@@ -300,7 +301,7 @@ test("cancel removes an active job and resets the worksheet selection", async ({
   await page.goto("/excel-to-pdf/");
   await choose(page);
   await page
-    .getByRole("button", { name: "Upload and generate PDF", exact: true })
+    .getByRole("button", { name: "Convert to PDF", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Cancel conversion" }),
@@ -320,7 +321,7 @@ for (const mode of ["reject", "full", "offline"])
     await page.goto("/excel-to-pdf/");
     await choose(page);
     const start = page.getByRole("button", {
-      name: "Upload and generate PDF",
+      name: "Convert to PDF",
       exact: true,
     });
     if (mode === "offline") {
@@ -345,7 +346,7 @@ test("changed settings invalidate download until updated, then delete and start 
   // Avoid an auto-open preview covering the result controls during this state-machine check.
   await page.route("**/assets/engine-*.js", (route) => route.abort());
   await page
-    .getByRole("button", { name: "Upload and generate PDF", exact: true })
+    .getByRole("button", { name: "Convert to PDF", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Your PDF is ready" }),
@@ -375,7 +376,7 @@ test("changed settings invalidate download until updated, then delete and start 
   await choose(page, "print-area.xlsx");
 });
 
-test("inline PDF preview can flip pages and be disposed without late stream errors", async ({
+test("shared modal PDF preview can flip pages and be disposed without late stream errors", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -384,28 +385,38 @@ test("inline PDF preview can flip pages and be disposed without late stream erro
   await page.goto("/excel-to-pdf/");
   await choose(page);
   await page
-    .getByRole("button", { name: "Upload and generate PDF", exact: true })
+    .getByRole("button", { name: "Convert to PDF", exact: true })
     .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Preview PDF", exact: true }).click();
   await expect(
-    page.locator('.excel-preview canvas[aria-label="PDF preview, page 1"]'),
+    page.locator(
+      '.preview-dialog canvas[aria-label="Original page 1, 0 degrees added rotation"]',
+    ),
   ).toBeVisible();
   for (let i = 0; i < 5; i++) {
     if (i === 0) {
       const canvas = page.locator(
-        '.excel-preview canvas[aria-label="PDF preview, page 1"]',
+        '.preview-dialog canvas[aria-label="Original page 1, 0 degrees added rotation"]',
       );
       const originalPixels = await canvas.evaluate(
         (node) => (node as HTMLCanvasElement).width,
       );
-      await page.getByLabel("Preview zoom", { exact: true }).selectOption("2");
+      await page.getByRole("dialog").getByLabel(/^Zoom/).selectOption("2");
       await expect
         .poll(() =>
           canvas.evaluateAll(
             (nodes) => (nodes[0] as HTMLCanvasElement | undefined)?.width ?? 0,
           ),
         )
-        .toBeGreaterThan(originalPixels * 1.5);
-      await page.getByLabel("Preview zoom", { exact: true }).selectOption("1");
+        .toBeGreaterThan(originalPixels);
+      expect(
+        await canvas.evaluate((node) => {
+          const c = node as HTMLCanvasElement;
+          return c.width * c.height;
+        }),
+      ).toBeLessThanOrEqual(4_000_000);
+      await page.getByRole("dialog").getByLabel(/^Zoom/).selectOption("1");
       await expect
         .poll(() =>
           canvas.evaluateAll(
@@ -416,16 +427,27 @@ test("inline PDF preview can flip pages and be disposed without late stream erro
     }
     await page.getByRole("button", { name: "Next page", exact: true }).click();
     await expect(
-      page.locator('.excel-preview canvas[aria-label="PDF preview, page 2"]'),
+      page.locator(
+        '.preview-dialog canvas[aria-label="Original page 2, 0 degrees added rotation"]',
+      ),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Previous page", exact: true })
       .click();
     await expect(
-      page.locator('.excel-preview canvas[aria-label="PDF preview, page 1"]'),
+      page.locator(
+        '.preview-dialog canvas[aria-label="Original page 1, 0 degrees added rotation"]',
+      ),
     ).toBeVisible();
   }
   await page.getByRole("button", { name: "Next page", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Preview PDF", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close preview", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Adjust pagination", exact: true })
     .click();
@@ -433,7 +455,7 @@ test("inline PDF preview can flip pages and be disposed without late stream erro
   await page
     .getByLabel("Orientation", { exact: true })
     .selectOption("landscape");
-  await expect(page.locator(".excel-preview canvas")).toHaveCount(0);
+  await expect(page.locator(".preview-dialog canvas")).toHaveCount(0);
   await page
     .getByRole("button", { name: "Delete temporary files", exact: true })
     .click();
