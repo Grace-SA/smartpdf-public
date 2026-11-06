@@ -3,9 +3,17 @@ import { probePdf } from "../core/probe";
 console.warn = () => undefined;
 console.log = () => undefined;
 self.onmessage = async (
-  event: MessageEvent<{ id: number; bytes: Uint8Array }>,
+  event: MessageEvent<{ id: number; bytes: Uint8Array; excelOutput?: boolean }>,
 ) => {
-  const { id, bytes } = event.data;
-  self.postMessage({ id, result: await probePdf(bytes, "preview") });
+  const { id, bytes, excelOutput } = event.data;
+  self.postMessage({
+    id,
+    result: await probePdf(
+      bytes,
+      "preview",
+      undefined,
+      excelOutput === true ? "excel-output" : "local",
+    ),
+  });
 };
 self.postMessage({ ready: true });

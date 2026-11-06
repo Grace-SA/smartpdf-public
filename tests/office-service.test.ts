@@ -17,7 +17,12 @@ async function setup(
   const root = await mkdtemp(path.join(os.tmpdir(), "office-synthetic-"));
   const origin = "http://127.0.0.1:4240";
   const services = await createOfficeServices({
-    word: { root: path.join(root, "word"), origin, execute: word },
+    word: {
+      root: path.join(root, "word"),
+      origin,
+      execute: word,
+      enableExcel: true,
+    },
     ppt: { root: path.join(root, "ppt"), origin, execute: ppt },
   });
   clean.push(async () => {
@@ -28,9 +33,10 @@ async function setup(
     string,
     (route: string, method?: string, body?: string) => Promise<Response>
   > = {};
-  for (const kind of ["word", "ppt"] as const) {
-    const service = services[kind];
-    await new Promise<void>((r) => service.server.listen(0, "127.0.0.1", r));
+  for (const kind of ["word", "ppt", "excel"] as const) {
+    const service = services[kind === "excel" ? "word" : kind];
+    if (kind !== "excel")
+      await new Promise<void>((r) => service.server.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${(service.server.address() as AddressInfo).port}/api/${kind}`;
     const session = await fetch(url + "/session");
     const cookie = session.headers.get("set-cookie")!.split(";")[0]!;
@@ -39,12 +45,20 @@ async function setup(
         method,
         body,
         headers: {
+          "X-Excel-Options": JSON.stringify({
+            sheets: [0],
+            orientation: "keep",
+            paper: "keep",
+            scale: "keep",
+          }),
           origin,
           cookie,
           "Content-Type":
-            kind === "ppt"
-              ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-              : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            kind === "excel"
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              : kind === "ppt"
+                ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         },
       });
   }
@@ -62,10 +76,12 @@ async function setup(
     return value.id;
   }
   async function wait(kind: string, id: string, state: string) {
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 100; i++) {
       const j = await (await api[kind]!(`/jobs/${id}`)).json();
       if (j.state === state && !j.cleanupPending) return j;
-      await new Promise((r) => setTimeout(r, 10));
+      if (j.state === "failed" && state !== "failed")
+        throw Error(JSON.stringify(j));
+      await new Promise((r) => setTimeout(r, 100));
     }
     throw Error("state not reached");
   }
@@ -80,48 +96,51 @@ async function output(job: Task) {
     JSON.stringify({ visible: 1, width: 960, height: 540 }),
   );
 }
-it("queues both real HTTP APIs behind one engine and cancels waiting PPT without executing", async () => {
-  let finish!: () => void, started!: () => void;
-  const pending = new Promise<void>((r) => {
-    finish = r;
-  });
-  const entered = new Promise<void>((r) => {
-    started = r;
-  });
-  let live = 0,
-    peak = 0,
-    pptCalls = 0;
-  const s = await setup(
-    async (j) => {
-      peak = Math.max(peak, ++live);
-      started();
-      await pending;
-      await output(j);
-      live--;
-    },
-    async (j) => {
-      pptCalls++;
-      peak = Math.max(peak, ++live);
-      await output(j);
-      live--;
-    },
-  );
-  const word = await s.job("word");
-  await entered;
-  const ppt = await s.job("ppt");
-  expect((await (await s.api.ppt!(`/jobs/${ppt}`)).json()).state).toBe(
-    "queued",
-  );
-  expect(pptCalls).toBe(0);
-  await s.api.ppt!(`/jobs/${ppt}`, "DELETE");
-  await s.wait("ppt", ppt, "cancelled");
-  finish();
-  await s.wait("word", word, "succeeded");
-  const next = await s.job("ppt");
-  await s.wait("ppt", next, "succeeded");
-  expect(peak).toBe(1);
-  expect(pptCalls).toBe(1);
-});
+it.each(["word", "excel"])(
+  "queues %s and PPT behind one engine and cancels waiting PPT without executing",
+  async (kind) => {
+    let finish!: () => void, started!: () => void;
+    const pending = new Promise<void>((r) => {
+      finish = r;
+    });
+    const entered = new Promise<void>((r) => {
+      started = r;
+    });
+    let live = 0,
+      peak = 0,
+      pptCalls = 0;
+    const s = await setup(
+      async (j) => {
+        peak = Math.max(peak, ++live);
+        started();
+        await pending;
+        await output(j);
+        live--;
+      },
+      async (j) => {
+        pptCalls++;
+        peak = Math.max(peak, ++live);
+        await output(j);
+        live--;
+      },
+    );
+    const word = await s.job(kind);
+    await entered;
+    const ppt = await s.job("ppt");
+    expect((await (await s.api.ppt!(`/jobs/${ppt}`)).json()).state).toBe(
+      "queued",
+    );
+    expect(pptCalls).toBe(0);
+    await s.api.ppt!(`/jobs/${ppt}`, "DELETE");
+    await s.wait("ppt", ppt, "cancelled");
+    finish();
+    await s.wait(kind, word, "succeeded");
+    const next = await s.job("ppt");
+    await s.wait("ppt", next, "succeeded");
+    expect(peak).toBe(1);
+    expect(pptCalls).toBe(1);
+  },
+);
 it("marks both API health and admission unavailable after uncertain cleanup", async () => {
   const s = await setup(async () => {
     throw Object.assign(Error("synthetic cleanup uncertainty"), {

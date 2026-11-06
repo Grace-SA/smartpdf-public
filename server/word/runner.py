@@ -22,6 +22,15 @@ MEMORY_MIB = 2560
 JAVA_OPTIONS = '-Xms256m -Xmx1280m -XX:TieredStopAtLevel=1 -XX:ActiveProcessorCount=2'
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
+def load_excel_preflight():
+    import importlib.util
+    excel_directory = Path(__file__).resolve().parents[1] / 'excel'
+    sys.path.insert(0, str(excel_directory))
+    spec = importlib.util.spec_from_file_location('excel_preflight', excel_directory / 'preflight.py')
+    excel = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(excel)
+    return excel
+
 def emit(**value):
     print(json.dumps(value), flush=True)
 
@@ -57,7 +66,7 @@ def inspect_standby(name,token, require_running=True):
     network=os.environ.get('WORD_DOCKER_NETWORK','smartpdf-word')
     return 'http://'+info['NetworkSettings']['Networks'][network]['IPAddress']+':8080'
 
-def run(directory, standby=None, budget=240):
+def run(directory, standby=None, budget=240, kind='word'):
     if not math.isfinite(budget) or not 0 < budget <= 240:raise ValueError("Invalid execution budget")
     directory = Path(directory).resolve()
     cancel = directory / 'cancel'
@@ -100,13 +109,59 @@ def run(directory, standby=None, budget=240):
     watcher.start()
     try:
         emit(state='checking')
-        options_file = directory / 'options.json'
-        options = conversion_options(json.loads(options_file.read_text()) if options_file.exists() else None)
-        details = {}
-        warnings = inspect_docx(directory / 'input.docx', options, details=details)
+        filename = 'input.docx'
+        mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        image = IMAGE
+        if kind == 'excel':
+            excel = load_excel_preflight()
+            try:
+                warnings = excel.prepare(directory / 'input.xlsx', directory / 'prepared.xlsx', json.loads((directory / 'options.json').read_text()))
+            except excel.Rejected as error:
+                raise Rejected(str(error)) from None
+            filename = 'prepared.xlsx'
+            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            # Separate reviewed local candidate; never change Word's runtime pin.
+            image = json.loads((Path(__file__).resolve().parents[2] / 'config/excel-core.stirling-3.2.2.json').read_text())['imageId']
+        else:
+            options_file = directory / 'options.json'
+            options = conversion_options(json.loads(options_file.read_text()) if options_file.exists() else None)
+            details = {}
+            warnings = inspect_docx(directory / 'input.docx', options, details=details)
         emit(warnings=warnings)
         if cancel.exists():
             return
+        if kind == 'excel':
+            # Same reviewed LibreOffice engine, without starting the Java HTTP app.
+            # One fresh, disconnected container and profile for each document.
+            emit(state='starting')
+            phase = 'starting'
+            docker('create', '--name', name, '--network', 'none',
+                   '--memory', f'{MEMORY_MIB}m', '--memory-swap', f'{MEMORY_MIB}m', '--cpus', '2',
+                   '--label', 'smartpdf.word-service=word-v1', '--pids-limit', '512',
+                   '--security-opt', 'no-new-privileges', '--cap-drop', 'NET_RAW',
+                   '--tmpfs', '/tmp:rw,nosuid,nodev,size=384m', '-e', 'TZ=UTC',
+                   '-e', 'HOME=/tmp', '-e', 'XDG_CACHE_HOME=/tmp/.cache',
+                   '--entrypoint', 'sleep', image, '240')
+            created = True
+            docker('start', name)
+            if cancel.exists(): return
+            # Stream into the live tmpfs as the unprivileged renderer user.
+            # docker cp can write below a tmpfs mount rather than into the mounted directory.
+            subprocess.run(['docker', 'exec', '-i', name, 'sh', '-c', 'umask 077; cat > /tmp/input.xlsx'],
+                           input=(directory / filename).read_bytes(), check=True, capture_output=True, timeout=20)
+            emit(state='converting')
+            phase = 'converting'
+            docker('exec', name, 'libreoffice', '--headless',
+                   '-env:UserInstallation=file:///tmp/excel-profile',
+                   '--convert-to', 'pdf:calc_pdf_Export', '--outdir', '/tmp', '/tmp/input.xlsx', timeout=90)
+            size = int(docker('exec', name, 'stat', '-c', '%s', '/tmp/input.pdf').stdout)
+            if not 0 < size <= 30 * 1024**2: raise RuntimeError('output')
+            if cancel.exists() or expired.is_set(): return
+            result = docker('exec', name, 'cat', '/tmp/input.pdf').stdout
+            if len(result) != size or not result.startswith(b'%PDF-'): raise RuntimeError('output')
+            (directory / 'output.pdf').write_bytes(result)
+            emit(state='checking-result')
+            return 0
         # The network must be provisioned as internal; never create a permissive fallback.
         net = json.loads(docker('network', 'inspect', network).stdout)[0]
         if not net.get('Internal'):
@@ -208,7 +263,8 @@ if __name__ == '__main__':
     else:
         parser=argparse.ArgumentParser()
         parser.add_argument('directory')
+        parser.add_argument('kind',nargs='?',choices=['word','excel'],default='word')
         parser.add_argument('--standby',nargs=2)
         parser.add_argument('--budget',type=float,default=240)
         args=parser.parse_args()
-        sys.exit(run(args.directory,args.standby,args.budget))
+        sys.exit(run(args.directory,args.standby,args.budget,kind=args.kind))

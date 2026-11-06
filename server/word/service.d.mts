@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 export type Task = {
   id: string;
+  kind?: "word" | "excel" | "ppt";
   directory: string;
   state: string;
   owner: string;
@@ -14,11 +15,16 @@ export type Task = {
 };
 export function checkPdf(
   file: string,
-  policy?: { ppt: boolean; visible: number; width: number; height: number },
+  policyOrKind?:
+    | "word"
+    | "excel"
+    | "ppt"
+    | { ppt: boolean; visible: number; width: number; height: number },
 ): Promise<{ pages: number }>;
 export function createWordService(options?: {
   format?: "word" | "ppt";
   root?: string;
+  enableExcel?: boolean;
   origin?: string;
   now?: () => number;
   admit?: (
@@ -31,7 +37,10 @@ export function createWordService(options?: {
     job: Task,
     update: (value: { state?: string; warnings?: string[] }) => void,
   ) => Promise<void>;
-  validate?: (file: string) => Promise<{ pages: number }>;
+  validate?: (
+    file: string,
+    kind?: "word" | "excel" | "ppt",
+  ) => Promise<{ pages: number }>;
 }): Promise<{
   server: Server;
   jobs: Map<string, Task>;

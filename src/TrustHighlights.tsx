@@ -73,7 +73,7 @@ export function TrustHighlights({ variant }: { variant: Variant }) {
                 ? {
                     ...original,
                     title: "Clearly marked cloud conversion",
-                    text: "Word documents upload only when you start.",
+                    text: "Office documents upload only when you start.",
                   }
                 : original;
           return (

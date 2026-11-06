@@ -17,6 +17,10 @@ export function ToolIcon({ tool }: { tool: string }) {
           <rect x="5" y="7" width="38" height="27" rx="3" />
           <path d="M24 34v9M15 43h18M13 26V15h5a4 4 0 0 1 0 8h-5M29 15h7M29 22h7M29 28h5" />
         </>
+      ) : tool === "excel" ? (
+        <>
+          <path d="M10 5h20l8 8v30H10zM30 5v9h8M15 21h18v16H15zM15 27h18M15 32h18M21 21v16M27 21v16" />
+        </>
       ) : tool === "word" ? (
         <>
           <path d="M10 5h20l8 8v30H10zM30 5v9h8M15 21l3 13 5-10 5 10 3-13" />

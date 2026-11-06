@@ -151,6 +151,7 @@ const toolTitles = {
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
   ppt: "Convert visible PPTX slides using cloud processing.",
+  excel: "Choose worksheets and convert an XLSX using cloud processing.",
   word: "Convert a DOCX using cloud processing.",
   protect: "Add an opening password. Keep your PDF on your device.",
   unlock: "Remove a known password. Keep your PDF on your device.",
@@ -346,7 +347,7 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
-      if (next === "word" || next === "ppt") {
+      if (next === "word" || next === "ppt" || next === "excel") {
         // React cleanup does not run when replacing this document. Stop pending
         // blob workers while their document and error handlers still exist.
         resourceController.current?.abort();
@@ -1646,6 +1647,7 @@ export function App() {
                   {
                     ppt: "Your PDF is ready",
                     word: "Your PDF is ready",
+                    excel: "Your PDF is ready",
                     unlock: "Your unlocked PDF is ready",
                     protect: "Your protected PDF is ready",
                     numbers: "Your numbered PDF is ready",

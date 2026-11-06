@@ -210,6 +210,36 @@ it("discards an unused clean slot for revision preparation and on shutdown", asy
     await rm(root, { recursive: true, force: true });
   }
 });
+it("discards the Word standby before Excel and preheats a fresh Word slot afterwards", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "word-standby-synthetic-"));
+  const discarded: string[] = [];
+  const pool = createStandby({
+    root,
+    broken: () => {},
+    run: async (job, update) => {
+      if (job.warmToken)
+        update({
+          standby: {
+            name: "smartpdf-word-" + "b".repeat(32),
+            token: job.warmToken,
+          },
+        });
+      else if (job.discardToken) discarded.push(job.discardToken);
+    },
+  });
+  try {
+    pool.ensure();
+    expect(await pool.take({ state: "queued", kind: "excel" })).toBeUndefined();
+    expect(discarded).toHaveLength(1);
+    pool.ensure();
+    await pool.close();
+    expect(discarded).toHaveLength(2);
+    expect(await readdir(root)).toEqual([]);
+  } finally {
+    await pool.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 it("cancels a warming task through a local control file before handoff", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "word-standby-synthetic-"));
   let finish!: () => void, started!: () => void;

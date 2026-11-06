@@ -207,10 +207,10 @@ Resources:
         Name: !Sub ${AWS::StackName}-word-origin
         CookiesConfig:
           CookieBehavior: whitelist
-          Cookies: [word_session]
+          Cookies: [word_session, excel_session]
         HeadersConfig:
           HeaderBehavior: whitelist
-          Headers: [Host, Origin, Content-Type]
+          Headers: [Host, Origin, Content-Type, X-Excel-Options]
         QueryStringsConfig:
           QueryStringBehavior: none
 
@@ -303,8 +303,7 @@ Resources:
             "download",
             "download_failure",
           ]);
-          const tools = new Set(["ppt",
-            "word",
+          const tools = new Set(["ppt", "word", "excel",
             "combine",
             "split",
             "organize",
@@ -528,6 +527,18 @@ Resources:
               Compress: false
               CachePolicyId: !Ref NoCachePolicy
               OriginRequestPolicyId: !Ref PptOriginRequestPolicy
+              ResponseHeadersPolicyId: !Ref SecurityHeaders
+            - !Ref AWS::NoValue
+          - !If
+            - HasWordApi
+            - PathPattern: api/excel/*
+              TargetOriginId: word
+              ViewerProtocolPolicy: https-only
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+              CachedMethods: [GET, HEAD]
+              Compress: false
+              CachePolicyId: !Ref NoCachePolicy
+              OriginRequestPolicyId: !Ref WordOriginRequestPolicy
               ResponseHeadersPolicyId: !Ref SecurityHeaders
             - !Ref AWS::NoValue
           - PathPattern: assets/*

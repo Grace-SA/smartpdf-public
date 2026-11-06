@@ -11,6 +11,7 @@ const events = new Set([
 const tools = new Set([
   "ppt",
   "word",
+  "excel",
   "combine",
   "split",
   "organize",

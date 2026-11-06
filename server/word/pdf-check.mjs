@@ -19,7 +19,7 @@ try {
   const pages = pdf.getPages();
   if (
     !pages.length ||
-    pages.length > 200 ||
+    pages.length > workerData.maxPages ||
     pages.some((p) => {
       const { width, height } = p.getSize();
       return (

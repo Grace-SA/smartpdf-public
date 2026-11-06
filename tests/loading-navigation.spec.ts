@@ -6,19 +6,21 @@ const tools = publicTools.map(
   (tool) =>
     [
       toolCatalog[tool].path.replace(/^\//, "").replace(/\/$/, ""),
-      tool === "word"
-        ? "word-file"
-        : tool === "ppt"
-          ? "ppt-file"
-          : tool === "combine"
-            ? "combine-files"
-            : tool === "photos"
-              ? "photo-files"
-              : "pdf-file",
+      tool === "excel"
+        ? "excel-file"
+        : tool === "word"
+          ? "word-file"
+          : tool === "ppt"
+            ? "ppt-file"
+            : tool === "combine"
+              ? "combine-files"
+              : tool === "photos"
+                ? "photo-files"
+                : "pdf-file",
     ] as const,
 );
 const cloudTools = tools.filter(([path]) =>
-  ["word-to-pdf", "powerpoint-to-pdf"].includes(path),
+  ["word-to-pdf", "powerpoint-to-pdf", "excel-to-pdf"].includes(path),
 );
 const localTools = tools.filter(
   ([path]) => !cloudTools.some(([cloud]) => path === cloud),

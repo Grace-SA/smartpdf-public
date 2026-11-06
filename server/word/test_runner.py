@@ -10,7 +10,55 @@ import warm
 from unittest.mock import patch
 from runner import remove_verified
 from doctor import inspect_host
-from runner import IMAGE, create_converter, inspect_standby
+from runner import IMAGE
+from pathlib import Path
+from types import SimpleNamespace
+import runner
+
+class ExcelDirectTests(unittest.TestCase):
+    def exercise(self, failure=None):
+        calls = []; events = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'input.xlsx').write_bytes(b'synthetic-workbook')
+            (root/'options.json').write_text('{"sheets":[0],"scale":"auto"}')
+            def prepare(source, target, options):
+                target.write_bytes(source.read_bytes()); return []
+            def execute(args, **kwargs):
+                calls.append((args, kwargs))
+                if 'stat' in args:
+                    if failure == 'timeout': raise subprocess.TimeoutExpired(args, 90)
+                    return subprocess.CompletedProcess(args, 0, stdout=str(30*1024**2+1 if failure == 'size' else 14).encode())
+                if args[-2:] == ['cat', '/tmp/input.pdf']:
+                    return subprocess.CompletedProcess(args, 0, stdout=b'%PDF-synthetic' if failure != 'invalid' else b'not-a-pdf-file')
+                return subprocess.CompletedProcess(args, 0, stdout=b'')
+            with patch('runner.load_excel_preflight', return_value=SimpleNamespace(prepare=prepare,Rejected=ValueError)), patch('runner.subprocess.run', side_effect=execute), patch('runner.signal.signal'), patch('runner.emit', side_effect=lambda **v:events.append(v)), patch('runner.urllib.request.urlopen', side_effect=AssertionError('No HTTP app for Excel')):
+                result = runner.run(root, kind='excel')
+            return result, calls, events, (root/'output.pdf').exists()
+
+    def test_excel_uses_disconnected_single_document_renderer_and_cleans_up(self):
+        result, calls, events, output = self.exercise()
+        self.assertEqual(result, 0); self.assertTrue(output)
+        create = next(args for args, _ in calls if args[1] == 'create')
+        self.assertEqual(create[create.index('--network')+1], 'none')
+        self.assertIn('--pids-limit', create); self.assertIn('no-new-privileges', create)
+        self.assertNotIn('--user', create)
+        office = next((args, kw) for args, kw in calls if 'libreoffice' in args)
+        self.assertEqual(office[1]['timeout'], 90)
+        self.assertIn('pdf:calc_pdf_Export', office[0])
+        stream = next(kw for args, kw in calls if '-i' in args)
+        self.assertEqual(stream['input'], b'synthetic-workbook')
+        self.assertTrue(any(args[1:3] == ['rm','-fv'] for args, _ in calls))
+        self.assertEqual(events[-1], {'state':'checking-result'})
+
+    def test_excel_failed_or_oversize_output_is_never_exposed_and_container_removed(self):
+        for failure in ['size','invalid','timeout']:
+            with self.subTest(failure=failure):
+                result, calls, events, output = self.exercise(failure)
+                self.assertEqual(result, 3); self.assertFalse(output)
+                self.assertTrue(any(args[1:3] == ['rm','-fv'] for args, _ in calls))
+                self.assertTrue(any('error' in event for event in events))
+from runner import create_converter, inspect_standby
 
 class PrimingTests(unittest.TestCase):
     @patch('warm.signal.signal')

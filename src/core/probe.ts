@@ -120,6 +120,7 @@ export async function probePdf(
   bytes: Uint8Array,
   mode: "strict" | "preview" | "combine" = "strict",
   stage: (text: string) => void = () => {},
+  scope: "local" | "excel-output" = "local",
 ): Promise<ProbeResult> {
   try {
     const unsupported = new Set<Reason>();
@@ -588,7 +589,10 @@ export async function probePdf(
     visit(doc.catalog, 0);
     if (doc.context.trailerInfo.Info) visit(doc.context.trailerInfo.Info, 0);
     if (pages.length < 1) throw new ProbeFailure("INVALID_INPUT", "pages");
-    if (pages.length > LIMITS.pages)
+    if (
+      pages.length >
+      (mode === "preview" && scope === "excel-output" ? 500 : LIMITS.pages)
+    )
       throw new ProbeFailure("RESOURCE_LIMIT", "pages");
     for (const page of pages) {
       const unitObj = resolve(page.node.get(PDFName.of("UserUnit")));
