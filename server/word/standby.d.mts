@@ -13,6 +13,8 @@ export function createStandby(options: {
   broken: (error: unknown) => void;
 }): {
   ensure: () => void;
+  pause: () => Promise<void>;
+  resume: () => void;
   ready: () => boolean;
   release: (ready: Standby | undefined) => Promise<void>;
   take: (job: Job) => Promise<Standby | undefined>;

@@ -76,7 +76,7 @@ jobs:
         if: matrix.browser == 'webkit'
         run: >-
           pnpm exec playwright test --config playwright.github.config.ts --project webkit
-          --grep '1280: every tool-to-tool|back from a completed task|browser back and forward restore clean tool pickers|Type: offline multilingual signing|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation|leave confirmation restores focus before removal|photos leave confirmation|renderer waits for PDF.js readiness|credentials consent prepares|dialog closes before removal'
+          --grep 'cloud navigation stops|390: every local tool exchanges|1280: every tool-to-tool|back from a completed task|browser back and forward restore clean tool pickers|Type: offline multilingual signing|200 pages and unusual sizes retain|PERF-SIGN|images 390: completion|completed images → Split|image and generated PDF previews|probe waits for worker readiness|repeated image generation|leave confirmation restores focus before removal|photos leave confirmation|renderer waits for PDF.js readiness|credentials consent prepares|dialog closes before removal'
         env:
           DEBUG: pw:browser
       - name: M9 WebKit navigation stability

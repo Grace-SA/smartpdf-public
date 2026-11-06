@@ -6,6 +6,7 @@ export default defineConfig({
   testMatch: [
     "excel.spec.ts",
     "word.spec.ts",
+    "ppt.spec.ts",
     ...(base.testMatch as string[]),
     "grouped-navigation.spec.ts",
     "raster-return-paths.spec.ts",

@@ -61,8 +61,8 @@ type Entry = {
   method: number;
   crc: number;
 };
-function entries(bytes: Uint8Array): Entry[] {
-  if (bytes.length < 22 || bytes.length > 30 * 1048576)
+export function entries(bytes: Uint8Array, maxBytes = 30 * 1048576): Entry[] {
+  if (bytes.length < 22 || bytes.length > maxBytes)
     throw new Invalid("INVALID_DOCX");
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = -1;
@@ -168,7 +168,7 @@ function entries(bytes: Uint8Array): Entry[] {
     throw new Invalid("UNSAFE_PACKAGE");
   return result;
 }
-function xmlBytes(bytes: Uint8Array, entry: Entry): Uint8Array {
+export function xmlBytes(bytes: Uint8Array, entry: Entry): Uint8Array {
   if (entry.raw > 8 * 1048576) throw new Invalid("PACKAGE_LIMIT");
   const input = bytes.subarray(entry.start, entry.start + entry.size);
   let output: Uint8Array;

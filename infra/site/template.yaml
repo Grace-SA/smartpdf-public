@@ -27,6 +27,11 @@ Parameters:
     Default: "false"
     AllowedValues: ["false", "true"]
     Description: Enable only after core host acceptance and trusted origin TLS.
+  PptApiEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Enable only after shared Word/PPT admission and host acceptance.
 
 Conditions:
   HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
@@ -35,6 +40,9 @@ Conditions:
     - !Condition HasWordOrigin
     - !Equals [!Ref WordApiEnabled, "true"]
     - !Not [!Equals [!Ref WordOriginSecret, ""]]
+  HasPptApi: !And
+    - !Condition HasWordApi
+    - !Equals [!Ref PptApiEnabled, "true"]
 
 Resources:
   SiteBucket:
@@ -206,6 +214,21 @@ Resources:
         QueryStringsConfig:
           QueryStringBehavior: none
 
+  PptOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Condition: HasPptApi
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${AWS::StackName}-ppt-origin
+        CookiesConfig:
+          CookieBehavior: whitelist
+          Cookies: [ppt_session]
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [Host, Origin, Content-Type]
+        QueryStringsConfig:
+          QueryStringBehavior: none
+
   WordAcmeRequestPolicy:
     Type: AWS::CloudFront::OriginRequestPolicy
     Condition: HasWordOrigin
@@ -280,8 +303,7 @@ Resources:
             "download",
             "download_failure",
           ]);
-          const tools = new Set([
-            "word", "excel",
+          const tools = new Set(["ppt", "word", "excel",
             "combine",
             "split",
             "organize",
@@ -493,6 +515,18 @@ Resources:
               Compress: false
               CachePolicyId: !Ref NoCachePolicy
               OriginRequestPolicyId: !Ref WordOriginRequestPolicy
+              ResponseHeadersPolicyId: !Ref SecurityHeaders
+            - !Ref AWS::NoValue
+          - !If
+            - HasPptApi
+            - PathPattern: api/ppt/*
+              TargetOriginId: word
+              ViewerProtocolPolicy: https-only
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+              CachedMethods: [GET, HEAD]
+              Compress: false
+              CachePolicyId: !Ref NoCachePolicy
+              OriginRequestPolicyId: !Ref PptOriginRequestPolicy
               ResponseHeadersPolicyId: !Ref SecurityHeaders
             - !Ref AWS::NoValue
           - !If

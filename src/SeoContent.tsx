@@ -18,6 +18,29 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  ppt: {
+    title: "PowerPoint to PDF - PPTX Conversion | Smart PDF",
+    description:
+      "Convert a PPTX to PDF with self-hosted cloud processing. Keep the original slide size and preview before sharing.",
+    keywords: "powerpoint to pdf, pptx to pdf",
+    heading: "PowerPoint to PDF",
+    intro: "Convert visible slides, then check and download your PDF.",
+    steps: [
+      "Choose one PPTX.",
+      "Upload and convert.",
+      "Preview and download your PDF.",
+    ],
+    faq: [
+      [
+        "Is my presentation uploaded?",
+        "Yes, only when you choose Upload and convert. The tool identifies the processing location and retention period.",
+      ],
+      [
+        "What is included?",
+        "Each visible slide becomes one PDF page at its original size. Hidden slides, speaker notes and comments are excluded. Animations become static; fonts and complex graphics may change.",
+      ],
+    ],
+  },
   excel: {
     title: "Excel to PDF – XLSX Worksheets | Smart PDF",
     description:
