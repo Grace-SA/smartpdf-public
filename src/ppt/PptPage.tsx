@@ -569,9 +569,9 @@ export function PptPage() {
           <details className="input-support">
             <summary>Supported presentations</summary>
             <p>
-              Standard PPTX with text, shapes, tables, embedded PNG/JPEG
-              pictures and common charts. Check fonts, diagrams and complex
-              layouts in the PDF. Older PPT, passwords, macros, embedded
+              Standard PPTX with text, shapes, tables, embedded PNG/JPEG or
+              static SVG pictures and common charts. Check fonts, diagrams and
+              complex layouts in the PDF. Older PPT, passwords, macros, embedded
               media/fonts, active objects and externally linked resources are
               not supported. Your original stays unchanged.
             </p>

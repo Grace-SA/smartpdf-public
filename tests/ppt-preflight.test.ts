@@ -28,3 +28,13 @@ it("checks slide scope, relationships, active content, geometry and resource bou
     ),
   ).not.toThrow();
 });
+
+it("checks static SVG references, active content and expansion budgets", () => {
+  expect(() =>
+    execFileSync(
+      process.platform === "win32" ? "python" : "python3",
+      ["-B", "server/ppt/test_svg.py"],
+      { encoding: "utf8" },
+    ),
+  ).not.toThrow();
+});

@@ -5,6 +5,7 @@ import re
 import struct
 import zipfile
 from xml.etree import ElementTree as ET
+from svg_check import inspect_svg, SVGRejected
 
 P = '{http://schemas.openxmlformats.org/presentationml/2006/main}'
 R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
@@ -98,13 +99,18 @@ def package_xml(data, *, workbook=False, budget=None):
                 package_xml(raw, workbook=True, budget=budget)
             elif re.fullmatch(r'ppt/printersettings/printersettings[0-9]+\.bin', lower) and len(raw) <= 65536:
                 pass  # Passive, bounded saved printer configuration; never executed.
+            elif lower.endswith('.svg') and not workbook:
+                try:
+                    inspect_svg(raw, budget)
+                except SVGRejected as error:
+                    fail(str(error))
             elif lower.endswith(('.png', '.jpg', '.jpeg')) and not workbook:
                 width, height = image_size(raw)
                 budget['pixels'] += width * height
                 if not width or not height or width * height > 40_000_000 or budget['pixels'] > 160_000_000:
                     fail('Slide images exceed the supported pixel budget.')
             else:
-                fail('This presentation contains an unsupported embedded resource. Use PowerPoint to export it.')
+                fail('This presentation contains an unsupported embedded resource. Supported images are PNG, JPEG and static SVG. Use PowerPoint to export other resources.')
         for name, root in trees.items():
             if not name.endswith('.rels'):
                 continue
@@ -124,6 +130,8 @@ def package_xml(data, *, workbook=False, budget=None):
                 resolved = posixpath.normpath(posixpath.join(base, target)) if not target.startswith('/') else target[1:]
                 if resolved.startswith('../') or resolved not in blobs:
                     fail('The presentation has a missing or unsafe resource relationship.')
+                if kind == 'image' and not resolved.lower().endswith(('.png', '.jpg', '.jpeg', '.svg')):
+                    fail('Unsupported image format. Use PNG, JPEG or static SVG images.')
                 if kind in ('oleObject', 'control', 'audio', 'video', 'media', 'font', 'vbaProject'):
                     fail('Remove embedded media, fonts or active objects before converting.')
         types = trees.get('[Content_Types].xml')

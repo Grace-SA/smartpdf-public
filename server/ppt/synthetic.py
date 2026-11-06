@@ -31,6 +31,22 @@ def pack(files):
     return output.getvalue()
 
 
+def svg_presentation(active=False):
+    """Original SVG-only picture, with no raster fallback to hide SVG loss."""
+    with zipfile.ZipFile(io.BytesIO(presentation([('SYNTHETIC_SVG_SLIDE', False)]))) as source:
+        files = {name: source.read(name) for name in source.namelist()}
+    files['[Content_Types].xml'] = files['[Content_Types].xml'].replace(b'</Types>', b'<Default Extension="svg" ContentType="image/svg+xml"/></Types>')
+    files['ppt/media/static.svg'] = ('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">'
+        + ('<script>throw 1</script>' if active else '')
+        + '<defs><linearGradient id="paint"><stop offset="0" stop-color="#ed2024"/><stop offset="1" stop-color="#208020"/></linearGradient></defs>'
+        + '<rect width="400" height="200" fill="url(#paint)"/><circle cx="100" cy="100" r="50" fill="#2040e0"/>'
+        + '<text x="165" y="110" font-size="20" fill="#ffffff">SVG_ONLY_MARKER</text></svg>')
+    files['ppt/slides/_rels/slide1.xml.rels'] = f'<Relationships xmlns="{PKG}"><Relationship Id="svgImage" Type="{R}/image" Target="../media/static.svg"/></Relationships>'
+    picture = '<p:pic><p:nvPicPr><p:cNvPr id="3" name="Original synthetic SVG"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="svgImage"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="914400" y="2743200"/><a:ext cx="7315200" cy="3657600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>'
+    files['ppt/slides/slide1.xml'] = files['ppt/slides/slide1.xml'].replace(b'</p:spTree>', picture.encode() + b'</p:spTree>')
+    return pack(files)
+
+
 def large_presentation():
     """Original stored PNG ancillary data exercises the 30–60 MiB input range."""
     import struct

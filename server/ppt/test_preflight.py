@@ -4,7 +4,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from preflight import inspect_pptx, Rejected
-from synthetic import presentation, large_presentation, pack, PKG, R
+from synthetic import presentation, svg_presentation, large_presentation, pack, PKG, R
 
 
 class PresentationTests(unittest.TestCase):
@@ -53,6 +53,16 @@ class PresentationTests(unittest.TestCase):
         files = self.files()
         files['ppt/slides/_rels/slide1.xml.rels'] = f'<Relationships xmlns="{PKG}"><Relationship Id="ext" Type="{R}/hyperlink" TargetMode="External" Target="https://example.invalid/"/></Relationships>'
         self.assertEqual(self.check(pack(files))['visible'], 2)
+
+    def test_svg_must_not_hide_in_an_xml_image(self):
+        files = self.files()
+        files['ppt/media/hidden.xml'] = '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>'
+        files['ppt/slides/_rels/slide1.xml.rels'] = f'<Relationships xmlns="{PKG}"><Relationship Id="image" Type="{R}/image" Target="../media/hidden.xml"/></Relationships>'
+        with self.assertRaisesRegex(Rejected, 'image format'): self.check(pack(files))
+
+    def test_static_svg_picture_and_active_refusal(self):
+        self.assertEqual(self.check(svg_presentation())['visible'], 1)
+        with self.assertRaisesRegex(Rejected, 'SVG'): self.check(svg_presentation(active=True))
 
     def test_missing_slide(self):
         files = self.files(); del files['ppt/slides/slide1.xml']
