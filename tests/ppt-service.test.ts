@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
+import { request } from "node:http";
 import { PDFDocument, PDFName, PDFString } from "pdf-lib";
 import { createPptService } from "../server/ppt/service.mjs";
 import { checkPdf, type Task } from "../server/word/service.mjs";
@@ -72,6 +73,9 @@ async function setup(execute?: (job: Task) => Promise<void>) {
 
 it("namespaces cookies and endpoints and requires own-origin mutations", async () => {
   const s = await setup();
+  expect((await (await s.api("/session")).json()).maxBytes).toBe(
+    60 * 1024 ** 2,
+  );
   expect(s.cookie).toMatch(/^ppt_session=/);
   expect(
     (
@@ -87,6 +91,49 @@ it("namespaces cookies and endpoints and requires own-origin mutations", async (
   expect(
     (await s.api("/jobs", "POST", undefined, "word_session=invalid")).status,
   ).toBe(401);
+});
+
+it("accepts a 31 MiB upload and rejects a declared input above 60 MiB", async () => {
+  const s = await setup(async (job) => {
+    expect(
+      (await readFile(path.join(job.directory, "input.pptx"))).length,
+    ).toBe(31 * 1024 ** 2);
+    const pdf = await PDFDocument.create();
+    pdf.addPage([960, 540]);
+    await writeFile(path.join(job.directory, "output.pdf"), await pdf.save());
+    await writeFile(
+      path.join(job.directory, "expected.json"),
+      JSON.stringify({ visible: 1, width: 960, height: 540 }),
+    );
+  });
+  const job = await (await s.api("/jobs", "POST")).json();
+  expect(
+    (await s.api(`/jobs/${job.id}/input`, "PUT", "x".repeat(31 * 1024 ** 2)))
+      .status,
+  ).toBe(202);
+  await s.wait(job.id, "succeeded");
+  const next = await (await s.api("/jobs", "POST")).json();
+  const status = await new Promise<number>((resolve, reject) => {
+    const req = request(
+      `${s.url}/jobs/${next.id}/input`,
+      {
+        method: "PUT",
+        headers: {
+          origin,
+          cookie: s.cookie,
+          "Content-Type": mime,
+          "Content-Length": 60 * 1024 ** 2 + 1,
+        },
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode!);
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+  expect(status).toBe(413);
 });
 
 it("rejects Word options and the wrong upload format", async () => {

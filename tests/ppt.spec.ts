@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
 
 const input = execFileSync(
@@ -17,6 +18,52 @@ const selection = {
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   buffer: input,
 };
+
+test("PPT accepts a 32 MiB selection locally and refuses above 60 MiB without uploading", async ({
+  page,
+}, testInfo) => {
+  let mutations = 0;
+  await page.route("**/api/ppt/**", async (route) => {
+    if (route.request().method() !== "GET") mutations++;
+    return route.fulfill({
+      json: {
+        available: true,
+        ready: true,
+        mode: "local",
+        region: "Synthetic",
+        retentionMinutes: 60,
+        maxBytes: 60 * 1024 ** 2,
+      },
+    });
+  });
+  const large = execFileSync(
+    process.platform === "win32" ? "python" : "python3",
+    [
+      "-B",
+      "-c",
+      "import sys;sys.path.insert(0,'server/ppt');from synthetic import large_presentation;sys.stdout.buffer.write(large_presentation())",
+    ],
+    { maxBuffer: 40 * 1024 ** 2 },
+  );
+  await page.goto("/powerpoint-to-pdf/");
+  await expect(
+    page.getByText("One PPTX · up to 60 MiB · up to 200 visible slides", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles({ ...selection, buffer: large });
+  await expect(
+    page.getByRole("button", { name: "Upload and convert", exact: true }),
+  ).toBeEnabled();
+  expect(mutations).toBe(0);
+  const oversized = testInfo.outputPath("synthetic-oversized.pptx");
+  await writeFile(oversized, Buffer.alloc(60 * 1024 ** 2 + 1));
+  await page.locator('input[type="file"]').setInputFiles(oversized);
+  await expect(page.getByRole("alert")).toContainText("60 MiB");
+  expect(mutations).toBe(0);
+});
 
 for (const width of [320, 390, 1280]) {
   test(`PPT ${width}: explicit upload, correct result download and a clean next task`, async ({

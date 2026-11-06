@@ -144,8 +144,8 @@ def package_xml(data, *, workbook=False, budget=None):
 
 def inspect_pptx(path):
     data = path.read_bytes()
-    if not 0 < len(data) <= 30 * 1024**2:
-        fail('Choose a PPTX up to 30 MiB.')
+    if not 0 < len(data) <= 60 * 1024**2:
+        fail('Choose a PPTX up to 60 MiB.')
     trees, blobs = package_xml(data)
     types = trees['[Content_Types].xml']
     if not any(n.get('PartName') == '/ppt/presentation.xml' and n.get('ContentType') == MIME for n in types):

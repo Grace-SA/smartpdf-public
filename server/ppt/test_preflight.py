@@ -4,7 +4,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from preflight import inspect_pptx, Rejected
-from synthetic import presentation, pack, PKG, R
+from synthetic import presentation, large_presentation, pack, PKG, R
 
 
 class PresentationTests(unittest.TestCase):
@@ -96,6 +96,13 @@ class PresentationTests(unittest.TestCase):
 
     def test_visible_page_budget(self):
         with self.assertRaises(Rejected): self.check(presentation([('visible', False)]*201))
+
+    def test_sixty_mib_input_boundary(self):
+        data = large_presentation()
+        self.assertGreater(len(data), 30 * 1024**2)
+        self.assertEqual(self.check(data)['visible'], 2)
+        with self.assertRaisesRegex(Rejected, '60 MiB'):
+            self.check(b'x' * (60 * 1024**2 + 1))
 
 
 if __name__ == '__main__':

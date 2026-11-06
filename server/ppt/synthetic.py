@@ -31,6 +31,22 @@ def pack(files):
     return output.getvalue()
 
 
+def large_presentation():
+    """Original stored PNG ancillary data exercises the 30–60 MiB input range."""
+    import struct
+    import zlib
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0))
+           + chunk(b'tEXt', b'Synthetic\x00' + b'x' * (16 * 1024**2))
+           + chunk(b'IDAT', zlib.compress(b'\x00\xff\xff\xff')) + chunk(b'IEND', b''))
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(presentation())) as source, zipfile.ZipFile(output, 'w', zipfile.ZIP_STORED) as package:
+        for name in source.namelist(): package.writestr(name, source.read(name))
+        for index in range(2): package.writestr(f'ppt/media/synthetic{index}.png', png)
+    return output.getvalue()
+
+
 if __name__ == '__main__':
     import sys
     from pathlib import Path

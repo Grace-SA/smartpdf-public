@@ -145,10 +145,10 @@ export function PptPage() {
       files.length !== 1 ||
       !/\.pptx$/i.test(next.name) ||
       !next.size ||
-      next.size > 30 * 1024 ** 2
+      next.size > 60 * 1024 ** 2
     ) {
       setError(
-        "Choose one PPTX up to 30 MiB. Older PPT files are not supported yet.",
+        "Choose one PPTX up to 60 MiB. Older PPT files are not supported yet.",
       );
       return;
     }
@@ -457,7 +457,7 @@ export function PptPage() {
               </FilePicker>
               {!file && (
                 <p className="limits">
-                  One PPTX · up to 30 MiB · up to 200 visible slides
+                  One PPTX · up to 60 MiB · up to 200 visible slides
                 </p>
               )}
             </div>

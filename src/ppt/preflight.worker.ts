@@ -4,7 +4,7 @@ import { entries, xmlBytes } from "../word/preflight-core";
 self.onmessage = async (event: MessageEvent<File>) => {
   try {
     const bytes = new Uint8Array(await event.data.arrayBuffer());
-    const list = entries(bytes);
+    const list = entries(bytes, 60 * 1024 ** 2);
     const main = list.find((entry) => entry.name === "ppt/presentation.xml");
     const types = list.find((entry) => entry.name === "[Content_Types].xml");
     if (!main || !types)
@@ -42,7 +42,7 @@ self.onmessage = async (event: MessageEvent<File>) => {
     const message = error instanceof Error ? error.message : "";
     self.postMessage({
       error: /DOCX|document|package/i.test(message)
-        ? "Choose a valid, unprotected PPTX up to 30 MiB."
+        ? "Choose a valid, unprotected PPTX up to 60 MiB."
         : message || "Choose a valid PPTX presentation.",
     });
   }

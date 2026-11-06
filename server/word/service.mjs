@@ -17,7 +17,6 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { performance } from "node:perf_hooks";
 
-const MAX_BYTES = 30 * 1024 ** 2;
 const UPLOAD_TIMEOUT_MS = 120000;
 const terminal = new Set(["succeeded", "failed", "cancelled", "expired"]);
 // Leave a minute for the 30-second cleanup sweep inside the one-hour promise.
@@ -207,6 +206,7 @@ export function runStirling(job, update, adapter = runner) {
 
 export async function createWordService(options = {}) {
   const ppt = options.format === "ppt";
+  const maxInputBytes = (ppt ? 60 : 30) * 1024 ** 2;
   const api = ppt ? "/api/ppt" : "/api/word";
   const cookieName = ppt ? "ppt_session=" : "word_session=";
   const inputName = ppt ? "input.pptx" : "input.docx";
@@ -476,7 +476,7 @@ export async function createWordService(options = {}) {
           region:
             process.env.WORD_PROCESSING_LABEL ||
             "This self-hosted conversion server",
-          maxBytes: MAX_BYTES,
+          maxBytes: maxInputBytes,
           retentionMinutes: 60,
           mode:
             !secure && process.env.WORD_PROCESSING_MODE === "local"
@@ -575,10 +575,10 @@ export async function createWordService(options = {}) {
               ? "Choose a PPTX presentation."
               : "Choose a DOCX document.",
           });
-        if (Number(req.headers["content-length"]) > MAX_BYTES)
+        if (Number(req.headers["content-length"]) > maxInputBytes)
           return json(res, 413, {
             error: ppt
-              ? "Choose a PPTX up to 30 MiB."
+              ? "Choose a PPTX up to 60 MiB."
               : "Choose a DOCX up to 30 MiB.",
           });
         job.state = "uploading";
@@ -591,7 +591,7 @@ export async function createWordService(options = {}) {
         const limit = new Transform({
           transform(chunk, encoding, callback) {
             bytes += chunk.length;
-            callback(bytes > MAX_BYTES ? new Error("size") : null, chunk);
+            callback(bytes > maxInputBytes ? new Error("size") : null, chunk);
           },
         });
         let uploadStatus = 202;
@@ -618,7 +618,7 @@ export async function createWordService(options = {}) {
             job.state = "failed";
             job.expiresAt = now() + 60000;
             job.error = ppt
-              ? "Upload did not finish. Choose a valid PPTX up to 30 MiB and retry."
+              ? "Upload did not finish. Choose a valid PPTX up to 60 MiB and retry."
               : "Upload did not finish. Choose a valid DOCX up to 30 MiB and retry.";
           }
         } finally {
