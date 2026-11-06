@@ -11,6 +11,7 @@ export default defineConfig({
     "raster-return-paths.spec.ts",
     "processing-overlay.spec.ts",
     "probe-startup.spec.ts",
+    "renderer-lifecycle.spec.ts",
     "probe-image-stress.spec.ts",
     "leave-focus.spec.ts",
     "numbers.spec.ts",

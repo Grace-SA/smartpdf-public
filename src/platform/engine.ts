@@ -48,33 +48,9 @@ export class Engine {
         type: "text/javascript",
       }),
     );
-    // Confirm both engines can boot before enabling the file chooser.
-    try {
-      const probe = new ProbeWorker();
-      try {
-        await waitForBoot(probe, (data) => data?.ready === true, signal);
-      } finally {
-        probe.terminate();
-      }
-      const port = new Worker(this.workerUrl, { type: "module" });
-      try {
-        // External PDFWorker.promise only confirms attachment, not boot.
-        // PDF.js 6.4.299 sends this packet after initializeFromPort setup.
-        await waitForBoot(
-          port,
-          (data) =>
-            data?.sourceName === "worker" &&
-            data?.targetName === "main" &&
-            data?.action === "ready",
-          signal,
-        );
-      } finally {
-        port.terminate();
-      }
-    } catch (error) {
-      this.dispose();
-      throw error;
-    }
+    // Warm immutable resources here. Workers start only for an actual document,
+    // where probe() and renderingWorker() await their own ready packets.
+    // Background canaries can still be linking when navigation destroys a page.
   }
 
   dispose(): void {
