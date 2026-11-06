@@ -193,12 +193,10 @@ test("a slow first CJK font download keeps the selected PDF beyond the ordinary 
   page,
 }) => {
   await page.clock.install();
-  let bootWorkersClosed = 0;
-  page.on("worker", (worker) =>
-    worker.on("close", () => {
-      bootWorkersClosed += 1;
-    }),
-  );
+  let workersStarted = 0;
+  page.on("worker", () => {
+    workersStarted += 1;
+  });
   let release!: () => void;
   let requested!: () => void;
   const barrier = new Promise<void>((resolve) => {
@@ -215,12 +213,13 @@ test("a slow first CJK font download keeps the selected PDF beyond the ordinary 
   await page.goto("/watermark-pdf/");
   await started;
   await page.locator("#pdf-file").setInputFiles("tests/fixtures/m8-device.pdf");
-  // Observe both real startup workers finish before advancing window timers.
-  // Advancing earlier would incorrectly fire their independent boot deadlines.
-  await expect.poll(() => bootWorkersClosed).toBe(2);
+  // Resource warming no longer starts canaries. A selected file waits for the
+  // font before any document worker, so advancing timers cannot expire boot.
+  expect(workersStarted).toBe(0);
   await page.clock.fastForward(45000);
   await expect(page.locator(".status.error")).toHaveCount(0);
   await expect(page.locator(".watermark-task")).toHaveCount(0);
+  expect(workersStarted).toBe(0);
   await page.clock.resume();
   release();
   await expect(page.locator(".watermark-task")).toBeVisible();
