@@ -142,6 +142,11 @@ test("desktop shortcuts work and the grouped menu supports outside dismissal and
   await expect(page.locator(".tools-toggle")).toBeFocused();
   await expect(page.locator(".tool-nav")).toBeHidden();
   await page.keyboard.press("Enter");
+  await expect(page.locator(".tools-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(page.locator(".tool-nav")).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(
     page.getByRole("button", { name: "Close tools", exact: true }),

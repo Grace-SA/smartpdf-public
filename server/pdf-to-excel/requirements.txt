@@ -1,0 +1,7 @@
+pdfplumber==0.11.9
+pypdf==6.21.4
+openpyxl==3.1.5
+rapidocr-onnxruntime==1.4.4
+opencv-python==4.11.0.86
+defusedxml==0.7.1
+docling-slim[format-pdf,models-local,convert-core]==2.150.0

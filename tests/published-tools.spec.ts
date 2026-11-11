@@ -7,6 +7,10 @@ test("publication includes Word, Excel and Unlock without Protect entry points",
 }) => {
   expect(existsSync("dist/protect-pdf/index.html")).toBe(false);
   expect(readFileSync("dist/sitemap.xml", "utf8")).not.toContain("protect-pdf");
+  expect(existsSync("dist/pdf-to-excel/index.html")).toBe(false);
+  expect(readFileSync("dist/sitemap.xml", "utf8")).not.toContain(
+    "pdf-to-excel",
+  );
   expect(existsSync("dist/excel-to-pdf/index.html")).toBe(true);
   expect(readFileSync("dist/sitemap.xml", "utf8")).toContain("excel-to-pdf");
   for (const path of [
@@ -15,6 +19,7 @@ test("publication includes Word, Excel and Unlock without Protect entry points",
     "/excel-to-pdf/",
     "/unlock-pdf/",
     "/protect-pdf/",
+    "/pdf-to-excel/",
   ]) {
     await page.goto(path);
     await openTools(page);
@@ -28,6 +33,10 @@ test("publication includes Word, Excel and Unlock without Protect entry points",
       page.locator('.tool-nav a[href="/excel-to-pdf/"]'),
     ).toBeVisible();
     await expect(page.locator('a[href="/protect-pdf/"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/pdf-to-excel/"]')).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "PDF to Excel", exact: true }),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("heading", { name: "Protect PDF", exact: true }),
     ).toHaveCount(0);

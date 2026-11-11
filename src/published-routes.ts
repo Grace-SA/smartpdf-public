@@ -14,6 +14,7 @@ const reviewProtect =
 export const publicTools = enabledTools(
   reviewProtect,
   !import.meta.env.PROD || import.meta.env.VITE_ENABLE_EXCEL === "true",
+  !import.meta.env.PROD || import.meta.env.VITE_ENABLE_PDF_EXCEL === "true",
 );
 export const toolFromPath = (pathname: string) =>
   catalogPath(pathname, publicTools);

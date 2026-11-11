@@ -303,7 +303,7 @@ Resources:
             "download",
             "download_failure",
           ]);
-          const tools = new Set(["ppt", "word", "excel",
+          const tools = new Set(["pdfExcel", "ppt", "word", "excel",
             "combine",
             "split",
             "organize",

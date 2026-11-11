@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { pushToolPath } from "./platform/navigation";
 import { loadModule } from "./platform/module-loading";
 import type { SignHandle } from "./sign/SignPanel";
 import type { CompressHandle } from "./compress/CompressPanel";
@@ -150,6 +151,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  pdfExcel: "Extract PDF tables into Excel using server processing.",
   ppt: "Convert visible PPTX slides using cloud processing.",
   excel: "Choose worksheets and convert an XLSX using cloud processing.",
   word: "Convert a DOCX using cloud processing.",
@@ -347,7 +349,12 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
-      if (next === "word" || next === "ppt" || next === "excel") {
+      if (
+        next === "word" ||
+        next === "ppt" ||
+        next === "excel" ||
+        next === "pdfExcel"
+      ) {
         // React cleanup does not run when replacing this document. Stop pending
         // blob workers while their document and error handlers still exist.
         resourceController.current?.abort();
@@ -373,8 +380,7 @@ export function App() {
       setScreen("task");
       if (next !== "read") {
         const path = toolPaths[next];
-        if (window.location.pathname !== path)
-          window.history.pushState({}, "", path);
+        if (!pushToolPath(path)) return;
       }
       setMessage("");
       setPhotos(false);
@@ -407,7 +413,7 @@ export function App() {
     setCompressing(false);
     resetTask();
     setScreen("home");
-    if (window.location.pathname !== "/") window.history.pushState({}, "", "/");
+    if (!pushToolPath("/")) return;
   }
   const navigateHistory = useEffectEvent(() => {
     // Empty and completed tasks can change routes without tearing down the app.
@@ -1645,6 +1651,7 @@ export function App() {
               <Completion
                 title={
                   {
+                    pdfExcel: "Your Excel is ready",
                     ppt: "Your PDF is ready",
                     word: "Your PDF is ready",
                     excel: "Your PDF is ready",

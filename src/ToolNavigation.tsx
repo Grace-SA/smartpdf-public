@@ -69,6 +69,25 @@ export function ToolNavigation({
       className="tool-navigation"
       ref={host}
       data-open={expanded}
+      onKeyDown={(event) => {
+        if (!expanded || event.key !== "Tab") return;
+        // Keep the menu's tab order usable even when Safari's platform setting
+        // skips buttons/links in ordinary keyboard navigation. Do not trap focus.
+        const controls = [
+          toggle.current,
+          ...Array.from(
+            host.current?.querySelectorAll<HTMLElement>(
+              ".tools-close, .tool-nav a[href]",
+            ) ?? [],
+          ),
+        ];
+        const index = controls.indexOf(document.activeElement as HTMLElement);
+        const next = controls[index + (event.shiftKey ? -1 : 1)];
+        if (index >= 0 && next) {
+          event.preventDefault();
+          next.focus();
+        }
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) close();
       }}

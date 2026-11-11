@@ -2,6 +2,11 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { WordBoundary } from "./word/WordBoundary";
 import { lazy, Suspense } from "react";
+const PdfExcelPage = lazy(() =>
+  import("./pdf-to-excel/PdfExcelPage").then((module) => ({
+    default: module.PdfExcelPage,
+  })),
+);
 const PptPage = lazy(() =>
   import("./ppt/PptPage").then((module) => ({ default: module.PptPage })),
 );
@@ -22,7 +27,14 @@ if (["smartpdf.com.au", "www.smartpdf.com.au"].includes(location.hostname)) {
 }
 
 createRoot(document.getElementById("root")!).render(
-  /^\/powerpoint-to-pdf\/?$/.test(location.pathname) ? (
+  (!import.meta.env.PROD || import.meta.env.VITE_ENABLE_PDF_EXCEL === "true") &&
+    /^\/pdf-to-excel\/?$/.test(location.pathname) ? (
+    <WordBoundary title="PDF to Excel">
+      <Suspense fallback={<main>Opening PDF to Excel…</main>}>
+        <PdfExcelPage />
+      </Suspense>
+    </WordBoundary>
+  ) : /^\/powerpoint-to-pdf\/?$/.test(location.pathname) ? (
     <WordBoundary title="PowerPoint to PDF">
       <Suspense fallback={<main>Opening PowerPoint to PDF...</main>}>
         <PptPage />

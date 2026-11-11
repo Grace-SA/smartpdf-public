@@ -145,3 +145,10 @@ private-samples/
 /server/ppt/__pycache__/
 !/docs/ux/ppt-to-pdf-research-2026-11-05.md
 !/docs/ppt-report.md
+
+# PDF to Excel implementation; corpus/results stay outside the checkout.
+!/server/pdf-to-excel/
+!/scripts/pdf-to-excel/
+!/docs/pdf-to-excel-design.md
+!/docs/pdf-to-excel-report.md
+!/docs/pdf-to-excel-progress.md

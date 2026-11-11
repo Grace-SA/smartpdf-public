@@ -1,0 +1,11 @@
+**
+!server/
+!server/pdf-to-excel/
+!server/pdf-to-excel/**
+!scripts/
+!scripts/pdf-to-excel/
+!scripts/pdf-to-excel/prepare-models.py
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
