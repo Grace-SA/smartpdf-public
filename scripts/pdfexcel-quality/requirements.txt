@@ -1,0 +1,14 @@
+# Local evaluation dependencies, never installed in the production service.
+pdfplumber==0.11.9
+openpyxl==3.1.5
+reportlab==4.4.9
+pypdf==6.21.4
+Pillow==13.0.0
+# Transitive versions used for the recorded evaluation (Python 3.12).
+pdfminer.six==20251230
+pypdfium2==5.14.0
+cryptography==50.0.0
+charset-normalizer==3.5.2
+et_xmlfile==2.0.0
+cffi==2.1.1
+pycparser==3.0

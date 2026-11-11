@@ -1,0 +1,28 @@
+name: PDF to Excel quality baseline
+on:
+  push:
+    branches: ["feature/pdfexcel-quality-baseline"]
+    paths:
+      - "scripts/pdfexcel-quality/**"
+      - ".github/workflows/pdfexcel-quality.yml"
+  pull_request:
+    paths:
+      - "scripts/pdfexcel-quality/**"
+      - ".github/workflows/pdfexcel-quality.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r scripts/pdfexcel-quality/requirements.txt
+      - name: Quality-gate regression tests
+        run: python -B -m unittest discover -s scripts/pdfexcel-quality -p 'test_*.py' -v
+      - name: Report known synthetic coverage gaps (not release acceptance)
+        run: python -B scripts/pdfexcel-quality/evaluate.py --report-only
