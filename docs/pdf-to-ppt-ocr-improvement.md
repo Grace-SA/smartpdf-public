@@ -50,15 +50,15 @@
 
 页面仍显示 development preview、所有可编辑任务仍为 `needs_review`。发布前须补齐上述项，并按仓库发布规则处理 CI 暂停期间的发布门禁及显式发布授权；本轮未请求部署、未修改发布门禁、未合并主分支。
 
-### AWS 部署方向（用户已确认云平台，尚未创建资源）
+### AWS 部署尝试已按用户要求停止
 
-仓库 `docs/m13-stirling-implementation.md` 记录既有 Office 转换为悉尼专用 4GB 主机，转换容器预算 2,560MiB、服务 768MiB；这是历史验收记录，不是本轮 AWS 实例实时查询。当前环境没有发现可用 AWS CLI 或默认 profile，无法核实实例现状、区域 GPU 配额或实际账单。不要把已有主机直接视为三模型推理容量充足。
+用户先确认使用 AWS 并授权准备环境，随后明确要求暂不发布 AWS、先提交 GitHub。本轮通过 CLI 临时登录只读确认：既有悉尼 4GB/2 vCPU Office 主机和 2GB 网站主机正常运行；没有修改它们。账户 G/VT 按需 GPU 配额为 0，8 vCPU 配额申请进入 AWS 审核，申请本身不会创建实例。
 
-建议保留既有 CloudFront/站点和 Office 服务，把 PDF→PPT/OCR 放在独立工作节点；先单任务串行验证，再依据峰值内存与耗时配置并发。Linux x86_64 + NVIDIA L4 为优先实测路线，`g6.2xlarge`（8 vCPU、32GiB 主内存、1 张 L4）可作为容量探针候选，不是已经验收或采购的型号。[AWS 官方规格](https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html)
+AWS 拒绝了非 Free Tier eligible 的 `m7i.xlarge`。随后创建了一台独立 `m7i-flex.large`（2 vCPU/8GB）基础验收节点，设置两小时自动停机、加密磁盘和 SSM 管理、无公网入站端口。用户停止部署时尚未上传应用，也未发布任何网站流量。已终止该临时实例，确认磁盘自动删除，并清理本轮专用安全组、实例配置和 IAM 角色。既有两台 Lightsail 主机保持运行。GPU 配额申请仍由 AWS 审核，不会自动创建或部署 GPU 资源；后续 AWS 部署需用户重新指示。
 
-Mac MLX 适配器不能直接部署到此节点。Linux 路线须采用官方框架与固定的模型版本：OXR 当前部署说明使用额外的 vLLM 插件，不能假设普通 `vllm serve` 已原生支持；Unlimited OCR 2 的官方模型卡提供 Transformers/SGLang 等路线，涉及自定义模型代码时先固定版本并审查，不在处理用户文件时下载执行浮动代码。[OXR 官方部署说明](https://github.com/SoMarkAI/OXR#quick-start)、[Unlimited OCR 2 官方说明](https://huggingface.co/baidu/Unlimited-OCR-2)
+当前交付只在 GitHub 功能分支。Mac MLX 实测不能替代 Linux/CUDA 验收；GPU 账户限制、Linux 模型运行时、生产字体、负载和清理测试仍是上线缺口。未升级账户付费计划、未修改发布门禁、未合并主分支。准备部署时另修复 Paddle 字典写入模型目录的问题：字典保留在整批识别生命周期内的临时目录，结束后清理，允许模型以只读方式挂载；真实扫描识别输出与修复前一致。
 
-模型服务保持私有；运行时使用预置权重和已许可字体。AWS 验收需覆盖固定 200 份回放、三引擎真实推理、近输入上限、排队/取消/重启、任务数据清理及负载下的延迟/显存，之后才接主站同源路径。软件许可不收 OCR API 费用，但 GPU/磁盘/网络有 AWS 费用；本轮未报价、未创建付费资源、未复用旧授权采购新主机。
+AWS 官方实例规格和模型部署资料保留供后续重新评估：[AWS 实例规格](https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html)、[OXR 官方说明](https://github.com/SoMarkAI/OXR)、[Unlimited OCR 2 官方说明](https://huggingface.co/baidu/Unlimited-OCR-2)。
 
 以下为上一轮基础方案与历史指标，供对照；最新 OXR 接入和上线判定以上述追加为准。
 

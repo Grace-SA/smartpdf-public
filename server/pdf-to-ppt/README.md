@@ -40,7 +40,7 @@ PYTHONPATH=src .venv/bin/python -m uvicorn smartppt.api:app --host 127.0.0.1 --p
 PYTHONPATH=src .venv/bin/python -m smartppt.worker
 ```
 
-`SMARTPPT_STIRLING_KEY` 为可选的服务端 API key。HTTP 仅支持回环地址，远端引擎需 HTTPS。模型目录可通过 `SMARTPPT_OCR_MODELS` 改写。模型下载脚本固定 URL、版本、大小及 SHA-256；权重不进 Git，运行时无需模型 API。
+`SMARTPPT_STIRLING_KEY` 为可选的服务端 API key。HTTP 仅支持回环地址，远端引擎需 HTTPS。模型目录可通过 `SMARTPPT_OCR_MODELS` 改写。模型下载脚本固定 URL、版本、大小及 SHA-256；权重不进 Git，运行时无需模型 API。识别字典写入任务临时目录并在整批识别后清理，运行时不写模型目录，可将模型只读挂载。
 
 字体目录需提供实际字体。这里的 OCR 字号校准使用 Arial/Arial Bold 度量；其他字体/平台需重新验收，缺失度量会报告。Noto Sans SC 可使用仓库已有 OFL 字体；输出明确写入东亚字体，但没有嵌入字体，因此接收端也需字体或合适替代。不得默认复制受限系统字体到服务器。
 
