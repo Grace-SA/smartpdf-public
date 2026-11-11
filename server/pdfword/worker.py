@@ -1,159 +1,345 @@
-"""Conservative text-PDF importer. Run each task in a disposable offline process.
+"""Native PDF reconstruction, bounded OCR and editable Word export."""
 
-The intermediate model deliberately separates PDF interpretation from Word export.
-Rejected documents never produce a partial Word file. OCR is not enabled here.
-"""
 import argparse
+import ctypes
 import json
 import math
-import os
+import re
 import tempfile
-import ctypes
 import unicodedata
 from contextlib import closing
 from pathlib import Path
-
+import pdfplumber
 import pypdfium2 as pdf
-from docx import Document
-from docx.enum.section import WD_SECTION_START
-from docx.shared import Pt
 from pypdf import PdfReader
+from model import Rejected, validate, box
+from layout import native_page, repeated_margins, link_tables
+from exporter import export_word
+from ocr import OCR
 
 
-class Rejected(ValueError):
-    pass
-
-
-def parse_pdf(source):
+def preflight(source):
     if not 0 < source.stat().st_size <= 30 * 1024**2:
-        raise Rejected('Choose a PDF under 30 MB.')
-    with source.open('rb') as stream:
-        reader = PdfReader(stream, strict=True)
-        if reader.is_encrypted:
-            raise Rejected('Unlock the PDF before converting it.')
-        count = len(reader.pages)
-        if not 0 < count <= 200:
-            raise Rejected('Choose a PDF with 1 to 200 pages.')
-        root = reader.trailer['/Root']
-        if any(key in root for key in ('/AcroForm', '/OCProperties', '/OpenAction', '/AA', '/Names')):
-            raise Rejected('This PDF has interactive content. Export a simple PDF first.')
-        for page in reader.pages:
-            if page.get('/Annots') or page.get('/AA'):
-                raise Rejected('This PDF has annotations or interactive content. Export a simple PDF first.')
-    result = {'schema': 1, 'pages': [], 'issues': []}
-    total = 0
-    with pdf.PdfDocument(source) as original:
-        if len(original) != count:
-            raise Rejected('The PDF page structure needs review.')
-        for index in range(count):
-            with closing(original[index]) as page:
+        raise Rejected("Choose a PDF under 30 MiB.")
+    reader = PdfReader(source, strict=True)
+    if reader.is_encrypted:
+        raise Rejected("Unlock the PDF before converting it.")
+    if not 1 <= len(reader.pages) <= 200:
+        raise Rejected("Choose a PDF with 1 to 200 pages.")
+    root = reader.trailer["/Root"]
+    form = root.get("/AcroForm")
+    form = form.get_object() if hasattr(form, "get_object") else form
+    action = root.get("/OpenAction")
+    action = action.get_object() if hasattr(action, "get_object") else action
+    # A destination array merely sets the opening view. It is not executable content.
+    if (
+        any(k in root for k in ("/OCProperties", "/AA"))
+        or (form and (form.get("/Fields") or form.get("/XFA")))
+        or (action and not isinstance(action, list))
+    ):
+        raise Rejected("Export a flattened PDF before converting interactive content.")
+    names = root.get("/Names", {})
+    if hasattr(names, "get_object"):
+        names = names.get_object()
+    if any(k in names for k in ("/EmbeddedFiles", "/JavaScript")):
+        raise Rejected("Remove embedded files or scripts before conversion.")
+    for p in reader.pages:
+        if p.get("/AA"):
+            raise Rejected("Interactive page actions are unsupported.")
+        for ref in p.get("/Annots", []):
+            if ref.get_object().get("/Subtype") != "/Link":
+                raise Rejected("Flatten visible annotations before conversion.")
+    return len(reader.pages)
+
+
+def clips_text(obj):
+    clip = pdf.raw.FPDFPageObj_GetClipPath(obj)
+    for i in range(pdf.raw.FPDFClipPath_CountPaths(clip)):
+        count = pdf.raw.FPDFClipPath_CountPathSegments(clip, i)
+        if count not in (4, 5):
+            return True
+        points = []
+        for j in range(count):
+            segment = pdf.raw.FPDFClipPath_GetPathSegment(clip, i, j)
+            if pdf.raw.FPDFPathSegment_GetType(segment) not in (0, 2):
+                return True
+            x, y = ctypes.c_float(), ctypes.c_float()
+            if not pdf.raw.FPDFPathSegment_GetPoint(
+                segment, ctypes.byref(x), ctypes.byref(y)
+            ):
+                return True
+            points.append((round(x.value, 3), round(y.value, 3)))
+        xs = {p[0] for p in points}
+        ys = {p[1] for p in points}
+        if len(xs) != 2 or len(ys) != 2 or len(set(points)) != 4:
+            return True
+        if any(
+            a[0] != b[0] and a[1] != b[1]
+            for a, b in zip(points, points[1:] + points[:1])
+        ):
+            return True
+        l, b, r, t = obj.get_bounds()
+        if (
+            l < min(xs) - 0.5
+            or r > max(xs) + 0.5
+            or b < min(ys) - 0.5
+            or t > max(ys) + 0.5
+        ):
+            return True
+    return False
+
+
+def needs_ocr(page):
+    visible = 0
+    images = 0
+    unsafe = False
+    with closing(page.get_textpage()) as tp:
+        objects = 0
+        for obj in page.get_objects(max_depth=8, textpage=tp):
+            objects += 1
+            if objects > 10000:
+                raise Rejected("Page exceeds object limit.")
+            if obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE:
+                images += 1
+            if obj.type != pdf.raw.FPDF_PAGEOBJ_TEXT:
+                continue
+            value = obj.extract()
+            if not value.strip():
+                continue
+            rgba = [ctypes.c_uint() for _ in range(4)]
+            ok = pdf.raw.FPDFPageObj_GetFillColor(obj, *(ctypes.byref(v) for v in rgba))
+            mode = pdf.raw.FPDFTextObj_GetTextRenderMode(obj)
+            if mode in (3, 7):
+                unsafe = True
+                continue
+            visible += len(value)
+            unsafe |= (
+                not ok
+                or rgba[3].value != 255
+                or min(v.value for v in rgba[:3]) > 240
+                or "\ufffd" in value
+            )
+            unsafe |= any(unicodedata.category(c) in ("Co", "Cn", "Cs") for c in value)
+            unsafe |= clips_text(obj)
+            l, b, r, t = obj.get_bounds()
+            crop = page.get_bbox()
+            unsafe |= (
+                l < crop[0] - 0.5
+                or b < crop[1] - 0.5
+                or r > crop[2] + 0.5
+                or t > crop[3] + 0.5
+            )
+            matrix = obj.get_matrix()
+            unsafe |= (
+                abs(matrix.b) > 0.001
+                or abs(matrix.c) > 0.001
+                or matrix.a <= 0
+                or matrix.d <= 0
+            )
+    return (
+        (not visible and bool(images)) or unsafe or bool(page.get_rotation()),
+        visible,
+        images,
+    )
+
+
+def render(page, path):
+    width, height = page.get_size()
+    scale = min(2.5, math.sqrt(16000000 / (width * height)))
+    with closing(page.render(scale=scale)) as bitmap:
+        bitmap.to_pil().convert("RGB").save(path)
+
+
+def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
+    source = Path(source)
+    work = Path(work)
+    count = preflight(source)
+    model = dict(schema=2, pages=[], warnings=[])
+    pixels = 0
+    with pdf.PdfDocument(source) as doc, pdfplumber.open(source) as textdoc:
+        if len(doc) != count or len(textdoc.pages) != count:
+            raise Rejected("PDF page structure needs review.")
+        for i in range(count):
+            if cancel and Path(cancel).exists():
+                raise Rejected("Conversion cancelled.")
+            with closing(doc[i]) as page:
                 width, height = page.get_size()
-                if not all(math.isfinite(v) and 72 <= v <= 1584 for v in (width, height)):
-                    raise Rejected('The PDF page size is unsupported.')
-                if page.get_rotation():
-                    raise Rejected('Rotated page layouts are not supported yet.')
-                crop = page.get_bbox()
-                lines = []
-                with closing(page.get_textpage()) as textpage:
-                    objects = 0
-                    for obj in page.get_objects(max_depth=0, textpage=textpage):
-                        objects += 1
-                        if objects > 10000:
-                            raise Rejected('This PDF is too complex to convert.')
-                        if obj.type != pdf.raw.FPDF_PAGEOBJ_TEXT:
-                            raise Rejected('Scans, graphics and complex layouts are not supported yet.')
-                        if pdf.raw.FPDFTextObj_GetTextRenderMode(obj) != 0:
-                            raise Rejected('The PDF contains text that needs visual review.')
-                        matrix = obj.get_matrix()
-                        rgba = [ctypes.c_uint() for _ in range(4)]
-                        color_ok = pdf.raw.FPDFPageObj_GetFillColor(obj, *(ctypes.byref(v) for v in rgba))
-                        if (not color_ok or rgba[3].value != 255 or min(v.value for v in rgba[:3]) > 240
-                                or abs(matrix.b) > .001 or abs(matrix.c) > .001
-                                or matrix.a <= 0 or matrix.d <= 0
-                                or pdf.raw.FPDFClipPath_CountPaths(pdf.raw.FPDFPageObj_GetClipPath(obj)) > 0):
-                            raise Rejected('The PDF contains styled or hidden text that needs visual review.')
-                        value = obj.extract().strip()
-                        if not value:
-                            continue
-                        if any(ord(c) < 32 and c not in '\n\r\t' for c in value) or '\ufffd' in value:
-                            raise Rejected('The PDF text could not be read reliably.')
-                        if any(unicodedata.category(c) in ('Co', 'Cn', 'Cs') or unicodedata.bidirectional(c) in ('R', 'AL') for c in value):
-                            raise Rejected('This text or writing direction is not supported yet.')
-                        left, bottom, right, top = obj.get_bounds()
-                        if not all(math.isfinite(v) for v in (left, bottom, right, top)):
-                            raise Rejected('The PDF text position needs review.')
-                        if left < crop[0] - 1 or bottom < crop[1] - 1 or right > crop[2] + 1 or top > crop[3] + 1:
-                            raise Rejected('The PDF contains clipped text that needs review.')
-                        total += len(value)
-                        if len(value) > 50000 or total > 1000000:
-                            raise Rejected('The PDF contains too much text to convert.')
-                        lines.append((top, bottom, left, right, value))
-                if not lines:
-                    raise Rejected('This PDF has a blank or scanned page. OCR is not available yet.')
-                lines.sort(key=lambda item: (-item[0], item[2]))
-                if any(a[1] < b[0] - 2 for a, b in zip(lines, lines[1:])):
-                    raise Rejected('Tables, columns and overlapping text are not supported yet.')
-                result['pages'].append({
-                    'index': index, 'width': width, 'height': height, 'rotation': 0,
-                    'blocks': [{'id': f'p{index}-b{order}', 'kind': 'paragraph',
-                                'bbox': [line[2] - crop[0], crop[3] - line[0],
-                                         line[3] - crop[0], crop[3] - line[1]],
-                                'source': 'native', 'reading_order': order,
-                                'text_raw': line[4]} for order, line in enumerate(lines)],
-                })
-    return result
+                if not all(
+                    math.isfinite(v) and 72 <= v <= 1584 for v in (width, height)
+                ):
+                    raise Rejected("Unsupported page dimensions.")
+                use_ocr, visible, images = needs_ocr(page)
+                full = work / f"page-{i}.png"
+                blocks = []
+                if not use_ocr:
+                    p = textdoc.pages[i]
+                    l, b, r, t = page.get_bbox()
+                    top = p.height - t
+                    if not page.get_rotation() and (
+                        abs(width - p.width) > 1 or abs(height - p.height) > 1
+                    ):
+                        p = p.crop((l, top, r, top + height))
+                    try:
+                        blocks = native_page(p)
+                    except Rejected as error:
+                        if str(error) not in (
+                            "Incomplete native table grid.",
+                            "Layout needs OCR.",
+                        ):
+                            raise
+                        use_ocr = True
+                    if l or top:
+                        for block in blocks:
+                            block["bbox"] = [
+                                v - (l if n % 2 == 0 else top)
+                                for n, v in enumerate(block["bbox"])
+                            ]
+                    use_ocr = use_ocr or any(
+                        b["kind"] == "image"
+                        and (b["bbox"][2] - b["bbox"][0])
+                        * (b["bbox"][3] - b["bbox"][1])
+                        > width * height * 0.65
+                        for b in blocks
+                    )
+                    # Outlined glyphs and image-only regions must be recognized, not silently omitted.
+                    use_ocr = use_ocr or (not visible and bool(blocks))
+                if use_ocr:
+                    pixels += math.ceil(width * 2.5) * math.ceil(height * 2.5)
+                    if pixels > 256000000:
+                        raise Rejected(
+                            "OCR page pixels exceed the task budget. Split the document."
+                        )
+                    render(page, full)
+                    if progress:
+                        progress(
+                            dict(
+                                state="converting",
+                                completedPages=i,
+                                totalPages=count,
+                                stage="recognizing",
+                            )
+                        )
+                    if ocr is None:
+                        raise Rejected(
+                            "This PDF needs OCR. The OCR worker is not configured."
+                        )
+                    blocks = ocr.recognize(
+                        full, width, height, complex_layout=bool(visible)
+                    )
+                    if not blocks:
+                        raise Rejected(f"Page {i+1} produced no recognized content.")
+                    model["warnings"].append(
+                        f"Page {i+1}: text was recognized with OCR; check names and numbers."
+                    )
+                for j, block in enumerate(blocks):
+                    block["bbox"] = box(block["bbox"], width, height)
+                    block["id"] = f"p{i}-b{j}"
+                    block["reading_order"] = j
+                    if re.search(r"\$[^$\n]+\$", block.get("text", "")):
+                        model["warnings"].append(
+                            f"Page {i+1}: inline formula markup needs manual formatting."
+                        )
+                    if block["kind"] in ("image", "formula"):
+                        if not full.exists():
+                            render(page, full)
+                        from PIL import Image
+
+                        with Image.open(full) as image:
+                            x0, y0, x1, y1 = block["bbox"]
+                            sx = image.width / width
+                            sy = image.height / height
+                            region = image.crop(
+                                (
+                                    int(x0 * sx),
+                                    int(y0 * sy),
+                                    math.ceil(x1 * sx),
+                                    math.ceil(y1 * sy),
+                                )
+                            )
+                            asset = f"p{i}-b{j}.png"
+                            region.save(work / asset)
+                            block["asset"] = asset
+                        if block["kind"] == "formula":
+                            model["warnings"].append(
+                                f"Page {i+1}: a formula is retained as an image."
+                            )
+                model["pages"].append(
+                    dict(
+                        index=i,
+                        width=width,
+                        height=height,
+                        rotation=page.get_rotation(),
+                        blocks=blocks,
+                    )
+                )
+                if progress:
+                    progress(
+                        dict(
+                            state="converting",
+                            completedPages=i + 1,
+                            totalPages=count,
+                            stage="reconstructing",
+                        )
+                    )
+                textdoc.pages[i].close()
+    repeated_margins(model["pages"])
+    link_tables(model["pages"])
+    if not any(
+        b.get("text") or b["kind"] == "table"
+        for p in model["pages"]
+        for b in p["blocks"]
+    ):
+        raise Rejected("No editable text was found. Try a clearer scan.")
+    model["warnings"] = list(dict.fromkeys(model["warnings"]))
+    return validate(model)
 
 
-def export_word(model, destination):
-    if destination.suffix.lower() != '.docx' or destination.exists():
-        raise Rejected('Choose a new Word output file.')
-    document = Document()
-    for key, relationship in list(document.part.package.rels.items()):
-        if relationship.reltype.endswith('/thumbnail'):
-            del document.part.package.rels[key]
-    document.core_properties.author = 'Smart PDF'
-    document.core_properties.last_modified_by = 'Smart PDF'
-    normal = document.styles['Normal']
-    normal.font.name = 'Arial'
-    normal.font.size = Pt(11)
-    normal.paragraph_format.space_after = Pt(6)
-    for index, page in enumerate(model['pages']):
-        section = document.add_section(WD_SECTION_START.NEW_PAGE) if index else document.sections[0]
-        section.page_width = Pt(page['width'])
-        section.page_height = Pt(page['height'])
-        margin = min(36, page['width'] / 10, page['height'] / 10)
-        section.left_margin = section.right_margin = Pt(margin)
-        section.top_margin = section.bottom_margin = Pt(margin)
-        for block in page['blocks']:
-            document.add_paragraph(block['text_raw'])
-    with tempfile.TemporaryDirectory(dir=destination.parent) as directory:
-        staged = Path(directory) / 'output.docx'
-        document.save(staged)
-        if staged.stat().st_size > 30 * 1024**2:
-            raise Rejected('The Word output exceeds the size limit.')
-        if os.name == 'nt':
-            os.rename(staged, destination)  # Windows rename refuses an existing destination.
-        else:
-            os.link(staged, destination)  # Atomic publish without replacing another result.
+def convert(source, destination, *, engine=None, cancel=None, progress=None):
+    source = Path(source)
+    destination = Path(destination)
+    if destination.exists():
+        raise Rejected("Choose a new Word output file.")
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temp:
+        model = parse_pdf(
+            source,
+            temp,
+            ocr=OCR(temp, cancel=cancel, engine=engine),
+            progress=progress,
+            cancel=cancel,
+        )
+        if cancel and Path(cancel).exists():
+            raise Rejected("Conversion cancelled.")
+        return export_word(model, destination, temp)
 
 
-def convert(source, destination):
-    model = parse_pdf(source)
-    export_word(model, destination)
-    return {'pages': len(model['pages'])}
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('source', type=Path)
-    parser.add_argument('destination', type=Path)
-    args = parser.parse_args()
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("source", type=Path)
+    p.add_argument("destination", type=Path)
+    p.add_argument("--engine", choices=["auto", "u2", "oxr", "paddle"])
+    p.add_argument("--cancel", type=Path)
+    args = p.parse_args()
     try:
-        print(json.dumps(convert(args.source, args.destination)))
+        print(
+            json.dumps(
+                convert(
+                    args.source,
+                    args.destination,
+                    engine=args.engine,
+                    cancel=args.cancel,
+                )
+            )
+        )
     except Rejected as error:
-        print(json.dumps({'error': str(error), 'code': 'INPUT_REJECTED'}))
+        print(json.dumps(dict(error=str(error), code="INPUT_REJECTED")))
         raise SystemExit(2)
     except Exception:
-        print(json.dumps({'error': 'The PDF could not be converted. Choose a valid simple text PDF.',
-                          'code': 'INPUT_REJECTED'}))
-        raise SystemExit(2)
+        print(
+            json.dumps(
+                dict(
+                    error="The PDF could not be converted safely.",
+                    code="CONVERSION_FAILED",
+                )
+            )
+        )
+        raise SystemExit(3)

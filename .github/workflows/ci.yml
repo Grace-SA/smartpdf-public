@@ -31,11 +31,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --target .local-python -r scripts/requirements-test.txt
-      - run: python -m pip install --target .local-python -r server/pdfword/requirements.txt
+      - run: python -m pip install --target .pdfword-python -r server/pdfword/requirements-v2.txt
       - name: PDF to Word importer and editable-output checks
         run: python -B -m unittest discover -s server/pdfword -p 'test_*.py'
         env:
-          PYTHONPATH: .local-python
+          PYTHONPATH: .pdfword-python
       - name: Repository privacy and asset check
         run: node scripts/check-repository.mjs
       - name: Test repository guard with synthetic index probes

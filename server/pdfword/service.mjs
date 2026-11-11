@@ -5,11 +5,24 @@ import { readFile } from "node:fs/promises";
 import { createWordService, runStirling } from "../word/service.mjs";
 import { checkDocx } from "./docx-check.mjs";
 
-const runner = fileURLToPath(new URL("./runner.py", import.meta.url));
+const runner = fileURLToPath(
+  new URL(
+    process.env.PDFWORD_LOCAL_V2 === "1" ? "./local_runner.py" : "./runner.py",
+    import.meta.url,
+  ),
+);
 export function createPdfWordService(options = {}) {
   return createWordService({
     ...options,
     format: "pdfword",
+    capabilities: {
+      reconstruction: process.env.PDFWORD_LOCAL_V2 === "1",
+      ocr:
+        process.env.PDFWORD_LOCAL_V2 === "1" &&
+        Boolean(
+          process.env.PDFWORD_OCR_PYTHON && process.env.PDFWORD_MODEL_ROOT,
+        ),
+    },
     root:
       options.root ||
       process.env.PDFWORD_DATA_DIR ||
@@ -23,7 +36,7 @@ export function createPdfWordService(options = {}) {
     validate:
       options.validate ||
       (async (file) => {
-        await checkDocx(file);
+        const actual = await checkDocx(file);
         const expected = JSON.parse(
           await readFile(
             path.join(path.dirname(file), "expected.json"),
@@ -36,6 +49,13 @@ export function createPdfWordService(options = {}) {
           expected.pages > 200
         )
           throw Error("Invalid source page count");
+        if (
+          expected.schema === 2 &&
+          (actual.sourceMarkers !== expected.pages ||
+            actual.images !== expected.images ||
+            actual.tables !== expected.tables)
+        )
+          throw Error("Word content does not match the conversion manifest");
         return { pages: expected.pages };
       }),
   });

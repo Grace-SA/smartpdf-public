@@ -171,7 +171,14 @@ it("refuses corrupt Word output and does not retain a partial download", async (
 it("refuses external relationships, macros, entities, duplicate parts and escaping ZIP names", async () => {
   const s = await setup();
   const file = path.join(s.root, "unsafe.docx");
-  for (const kind of ["external", "macro", "entity", "duplicate", "escape"]) {
+  for (const kind of [
+    "external",
+    "macro",
+    "entity",
+    "duplicate",
+    "escape",
+    "dangling",
+  ]) {
     const altered = execFileSync(
       process.env.PYTHON ||
         (process.platform === "win32" ? "python" : "python3"),
@@ -188,6 +195,7 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as source, zipfile.Zip
   if kind=='macro' and name=='[Content_Types].xml': data=data.replace(b'wordprocessingml.document.main+xml',b'wordprocessingml.document.macroEnabled.main+xml')
   if kind=='entity' and name=='word/document.xml': data=b'<!DOCTYPE x [<!ENTITY a "bad">]>'+data
   if kind=='external' and name=='_rels/.rels': data=data.replace(b'</Relationships>',b'<Relationship Id="unsafe" Type="https://example.invalid" Target="https://example.invalid" TargetMode="External"/></Relationships>')
+  if kind=='dangling' and name=='_rels/.rels': data=data.replace(b'word/document.xml',b'word/missing.xml')
   target.writestr(name,data)
  if kind=='duplicate': target.writestr('word/document.xml',source.read('word/document.xml'))
  if kind=='escape': target.writestr('../unsafe.xml',b'<x/>')
@@ -200,4 +208,51 @@ sys.stdout.buffer.write(output.getvalue())
     await writeFile(file, altered);
     await expect(checkDocx(file)).rejects.toThrow();
   }
+});
+
+it("rejects a v2 manifest claiming unverified source pages, tables or images", async () => {
+  const s = await setup(async (job) => {
+    await writeFile(path.join(job.directory, "output.docx"), bytes);
+    await writeFile(
+      path.join(job.directory, "expected.json"),
+      JSON.stringify({ schema: 2, pages: 2, images: 1, tables: 1 }),
+    );
+  });
+  const job = await (await s.api("/jobs", "POST")).json();
+  await s.api(`/jobs/${job.id}/input`, "PUT", "synthetic");
+  const result = await s.wait(job.id, "failed");
+  expect(result.failureCode).toBe("OUTPUT_INVALID");
+  expect((await s.api(`/jobs/${job.id}/result`)).status).not.toBe(200);
+});
+
+it("independently checks page bookmarks, editable tables and embedded PNGs", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "pdfword-opc-"));
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const file = path.join(root, "image.docx");
+  execFileSync(process.env.PYTHON || "python3", [
+    "-B",
+    "-c",
+    `
+import sys,io
+from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from PIL import Image
+d=Document()
+for k,r in list(d.part.package.rels.items()):
+ if r.reltype.endswith('/thumbnail'):del d.part.package.rels[k]
+p=d.add_paragraph('Editable text')
+m=OxmlElement('w:bookmarkStart');m.set(qn('w:id'),'0');m.set(qn('w:name'),'smartpdf_page_1');p._p.append(m)
+d.add_table(rows=2,cols=2).cell(0,0).text='123.45'
+b=io.BytesIO();Image.new('RGB',(20,20),'red').save(b,format='PNG');b.seek(0);d.add_picture(b)
+d.save(sys.argv[1])
+`,
+    file,
+  ]);
+  await expect(checkDocx(file)).resolves.toMatchObject({
+    pages: 1,
+    sourceMarkers: 1,
+    tables: 1,
+    images: 1,
+  });
 });

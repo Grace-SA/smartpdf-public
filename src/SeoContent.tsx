@@ -450,14 +450,20 @@ export function applySeo(tool: PublicTool | null) {
   set('link[rel="canonical"]', "href", absoluteUrl(path));
 }
 
-export function SeoContent({ tool }: { tool: PublicTool | null }) {
+export function SeoContent({
+  tool,
+  faq,
+}: {
+  tool: PublicTool | null;
+  faq?: [string, string][];
+}) {
   if (!tool) return null;
   const page = seoPages[tool];
   return (
     <div className="upload-support">
       <section className="tool-faq" aria-labelledby="frequently-asked">
         <h2 id="frequently-asked">Frequently asked questions</h2>
-        {page.faq.map(([question, answer]) => (
+        {(faq || page.faq).map(([question, answer]) => (
           <details key={question}>
             <summary>{question}</summary>
             <p>{answer}</p>

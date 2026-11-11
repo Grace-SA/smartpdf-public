@@ -144,6 +144,7 @@ private-samples/
 !/server/office/
 !/server/pdfword/
 !/docs/pdfword-report.md
+!/docs/pdfword-general-progress.md
 /server/ppt/__pycache__/
 !/docs/ux/ppt-to-pdf-research-2026-11-05.md
 !/docs/ppt-report.md

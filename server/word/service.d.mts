@@ -33,6 +33,7 @@ export function createWordService(options?: {
     signal: AbortSignal,
   ) => Promise<(healthy?: boolean) => Promise<void>>;
   available?: () => boolean;
+  capabilities?: Record<string, unknown>;
   onUnsafe?: () => void;
   execute?: (
     job: Task,

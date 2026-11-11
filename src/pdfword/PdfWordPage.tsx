@@ -14,6 +14,7 @@ type Job = {
   state: string;
   pages?: number;
   warnings: string[];
+  progress?: { completedPages: number; totalPages: number };
   error?: string;
   cleanupPending?: boolean;
 };
@@ -22,6 +23,7 @@ type Service = {
   region: string;
   retentionMinutes: number;
   mode?: string;
+  capabilities?: { reconstruction?: boolean; ocr?: boolean };
 };
 const mime = "application/pdf";
 const outputMime =
@@ -394,7 +396,11 @@ export function PdfWordPage() {
           </a>
           <div>
             <h1>PDF to Word</h1>
-            <p>Turn simple text PDFs into editable Word documents.</p>
+            <p>
+              {service?.capabilities?.reconstruction
+                ? "Convert PDF text, tables and supported scans into Word."
+                : "Turn simple text PDFs into editable Word documents."}
+            </p>
           </div>
         </div>
         <section
@@ -475,8 +481,9 @@ export function PdfWordPage() {
                   : "Connect to see processing details."}
               </p>
               <p>
-                Simple text PDFs only. Scans, tables, columns and graphics are
-                not supported yet. Word layout and fonts may change.
+                {service?.capabilities?.reconstruction
+                  ? `Editable paragraphs and tables, with pictures retained. ${service.capabilities.ocr ? "Scanned pages are recognized with OCR." : "OCR is unavailable on this server."} Word layout and fonts may change.`
+                  : "Simple text PDFs only. Scans, tables, columns and graphics are not supported yet. Word layout and fonts may change."}
               </p>
             </div>
           )}
@@ -486,7 +493,10 @@ export function PdfWordPage() {
                 ? "Deleting temporary files…"
                 : progress !== undefined
                   ? `Uploading PDF… ${progress}%`
-                  : stages[job?.state || "created"] || "Preparing conversion…"}
+                  : job?.progress
+                    ? `Processing page ${Math.min(job.progress.completedPages + 1, job.progress.totalPages)} of ${job.progress.totalPages}…`
+                    : stages[job?.state || "created"] ||
+                      "Preparing conversion…"}
             </p>
           )}
           {error && (
@@ -497,7 +507,9 @@ export function PdfWordPage() {
           {result && (
             <div className="word-result">
               <h2 tabIndex={-1} ref={complete}>
-                Your Word document is ready
+                {job?.warnings?.length
+                  ? "Your Word document is ready for review"
+                  : "Your Word document is ready"}
               </h2>
               <p className="word-filename">{result.name}</p>
               <p>{job?.pages} source pages · editable text</p>
@@ -550,18 +562,50 @@ export function PdfWordPage() {
           <details className="input-support">
             <summary>Supported PDFs</summary>
             <p>
-              Simple text PDFs with one column. The result contains editable
-              text, with page sizes retained; exact fonts and line wrapping may
-              change. Scans, tables, columns, pictures, passwords, annotations
-              and interactive content are not supported yet. Unsupported files
-              are refused in full. Check the Word document before sharing.
+              {service?.capabilities?.reconstruction
+                ? "Text PDFs and supported scans can produce editable paragraphs and tables. Pictures and formulas may be retained as images. Complex layouts, handwriting and poor scans need review. Check names, numbers, table cells and reading order before sharing. Password-protected and interactive PDFs must be unlocked or flattened first."
+                : "Simple text PDFs with one column. The result contains editable text, with page sizes retained; exact fonts and line wrapping may change. Scans, tables, columns, pictures, passwords, annotations and interactive content are not supported yet. Unsupported files are refused in full. Check the Word document before sharing."}
             </p>
           </details>
         </section>
-        <SeoContent tool="pdfword" />
+        <SeoContent
+          tool="pdfword"
+          faq={
+            service?.capabilities?.reconstruction
+              ? [
+                  [
+                    "Is my PDF uploaded?",
+                    "Only when you choose Upload and convert. The processing location is shown above. Temporary files expire within one hour and can be deleted sooner.",
+                  ],
+                  [
+                    "Which PDFs are supported?",
+                    "Text, tables, pictures and supported scanned pages, up to 30 MiB and 200 pages. OCR availability depends on this server. Complex or unclear pages can require review or exceed processing limits.",
+                  ],
+                  [
+                    "Will the Word layout match exactly?",
+                    "The result is designed for editing. Pictures and some formulas remain images. Fonts, line wrapping and pagination can change. Check OCR text, numbers, table cells and reading order before sharing.",
+                  ],
+                ]
+              : undefined
+          }
+        />
         <footer className="site-footer">
           <a href="/privacy/">Privacy and file handling</a>
           <a href="/notices/index.html">Third-party notices</a>
+          {service?.capabilities?.reconstruction && (
+            <span>
+              OCR technology:{" "}
+              <a href="https://github.com/SoMarkAI/OXR">
+                Powered by SoMark OXR
+              </a>
+              {" · "}
+              <a href="https://huggingface.co/baidu/Unlimited-OCR-2">
+                Unlimited-OCR-2
+              </a>
+              {" · "}
+              <a href="https://github.com/PaddlePaddle/PaddleOCR">PaddleOCR</a>
+            </span>
+          )}
         </footer>
       </main>
       {destination && (

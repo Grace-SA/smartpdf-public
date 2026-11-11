@@ -1,0 +1,276 @@
+"""V2 output invariants; v1 refusals remain frozen in test_worker.py."""
+
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+from docx import Document
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NameObject, ArrayObject, NumberObject
+from model import Rejected, table_from_html, validate
+from ocr import normalize, parse_u2
+from worker import convert, parse_pdf
+from exporter import export_word
+from layout import link_tables
+from test_worker import fixture
+
+
+class ReconstructionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.source = self.root / "source.pdf"
+        self.output = self.root / "output.docx"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_crop_and_edit(self):
+        fixture(self.source, crop=True)
+        report = convert(self.source, self.output)
+        self.assertEqual((report["schema"], report["pages"]), (2, 1))
+        doc = Document(self.output)
+        self.assertAlmostEqual(doc.sections[0].page_width.pt, 580, places=1)
+        doc.paragraphs[0].add_run(" edited")
+        doc.save(self.root / "edited.docx")
+        self.assertIn(
+            "Editable 123.45 edited",
+            Document(self.root / "edited.docx").paragraphs[0].text,
+        )
+
+    def test_columns_follow_reading_order(self):
+        fixture(
+            self.source,
+            content=b"BT /F1 12 Tf 48 740 Td (L1) Tj 0 -20 Td (L2) Tj ET BT /F1 12 Tf 330 740 Td (R1) Tj 0 -20 Td (R2) Tj ET",
+        )
+        convert(self.source, self.output)
+        text = " ".join(p.text for p in Document(self.output).paragraphs)
+        self.assertEqual(
+            sorted(["L1", "L2", "R1", "R2"], key=text.index), ["L1", "L2", "R1", "R2"]
+        )
+
+    def test_native_table_is_editable_cells(self):
+        commands = b"48 600 m 300 600 l S 48 630 m 300 630 l S 48 660 m 300 660 l S 48 600 m 48 660 l S 170 600 m 170 660 l S 300 600 m 300 660 l S "
+        for x, y, text in [
+            (55, 640, "A"),
+            (180, 640, "B"),
+            (55, 610, "12.34"),
+            (180, 610, "-56.78"),
+        ]:
+            commands += f"BT /F1 12 Tf {x} {y} Td ({text}) Tj ET ".encode()
+        fixture(self.source, content=commands)
+        report = convert(self.source, self.output)
+        self.assertEqual(report["tables"], 1)
+        doc = Document(self.output)
+        self.assertEqual(
+            [[c.text for c in r.cells] for r in doc.tables[0].rows],
+            [["A", "B"], ["12.34", "-56.78"]],
+        )
+        doc.tables[0].cell(1, 0).text = "99"
+        doc.save(self.root / "edited.docx")
+        self.assertEqual(
+            Document(self.root / "edited.docx").tables[0].cell(1, 0).text, "99"
+        )
+
+    def test_hidden_layer_is_replaced_by_ocr_once(self):
+        fixture(
+            self.source,
+            content=b"BT /F1 12 Tf 3 Tr 48 750 Td (STALE HIDDEN TEXT) Tj ET",
+        )
+        blocks = normalize(
+            [dict(label="text", bbox=[50, 50, 600, 100], content="VISIBLE OCR 123")],
+            612,
+            792,
+            "u2",
+        )
+        with patch("worker.OCR.recognize", return_value=blocks) as recognize:
+            report = convert(self.source, self.output)
+        recognize.assert_called_once()
+        self.assertEqual(len(report["warnings"]), 1)
+        text = " ".join(p.text for p in Document(self.output).paragraphs)
+        self.assertEqual(text, "VISIBLE OCR 123")
+        self.assertNotIn("HIDDEN", text)
+
+    def test_borderless_text_grid_requests_structured_recognition(self):
+        content = b""
+        for row, names in enumerate(
+            (("Alpha", "Beta", "Gamma"), ("One", "Two", "Three"))
+        ):
+            for col, name in enumerate(names):
+                content += f"BT /F1 12 Tf {48+col*150} {740-row*20} Td ({name}) Tj ET ".encode()
+        fixture(self.source, content=content)
+        table = normalize(
+            [
+                dict(
+                    label="table",
+                    bbox=[50, 50, 900, 200],
+                    content="<table><tr><td>Alpha</td><td>Beta</td><td>Gamma</td></tr><tr><td>One</td><td>Two</td><td>Three</td></tr></table>",
+                )
+            ],
+            612,
+            792,
+            "oxr",
+        )
+        with patch("worker.OCR.recognize", return_value=table) as recognize:
+            convert(self.source, self.output)
+        recognize.assert_called_once()
+        self.assertEqual(Document(self.output).tables[0].cell(1, 2).text, "Three")
+
+    def test_page_markers_and_empty_middle_page(self):
+        fixture(self.source, pages=2)
+        writer = PdfWriter()
+        source = PdfReader(self.source)
+        writer.add_page(source.pages[0])
+        writer.add_blank_page(612, 792)
+        writer.add_page(source.pages[1])
+        writer.write(self.root / "three.pdf")
+        self.assertEqual(convert(self.root / "three.pdf", self.output)["pages"], 3)
+        xml = Document(self.output)._element.xml
+        self.assertEqual(xml.count('w:name="smartpdf_page_'), 3)
+
+    def test_two_hundred_pages_preserve_body_and_markers(self):
+        fixture(self.source, pages=200)
+        report = convert(self.source, self.output)
+        doc = Document(self.output)
+        self.assertEqual(report["pages"], 200)
+        self.assertEqual(sum("Editable 123.45" in p.text for p in doc.paragraphs), 200)
+        self.assertEqual(doc._element.xml.count('w:name="smartpdf_page_'), 200)
+
+    def test_view_destination_is_not_an_action(self):
+        fixture(self.source)
+        writer = PdfWriter(clone_from=self.source)
+        writer._root_object[NameObject("/OpenAction")] = ArrayObject(
+            [NumberObject(0), NameObject("/Fit")]
+        )
+        writer.write(self.root / "view.pdf")
+        self.assertEqual(convert(self.root / "view.pdf", self.output)["pages"], 1)
+
+    def test_cancel_and_no_overwrite(self):
+        fixture(self.source)
+        cancel = self.root / "cancel"
+        cancel.touch()
+        with self.assertRaises(Rejected):
+            convert(self.source, self.output, cancel=cancel)
+        self.assertFalse(self.output.exists())
+        cancel.unlink()
+        convert(self.source, self.output)
+        before = self.output.read_bytes()
+        with self.assertRaises(Rejected):
+            convert(self.source, self.output)
+        self.assertEqual(before, self.output.read_bytes())
+
+    def test_html_spans_and_incomplete_refusals(self):
+        value = table_from_html(
+            '<table><tr><th colspan="2">Header</th></tr><tr><td>1.23</td><td>-4.56</td></tr></table>'
+        )
+        self.assertEqual((value["rows"], value["cols"]), (2, 2))
+        self.assertEqual(value["cells"][0]["colspan"], 2)
+        units = table_from_html(
+            "<table><tr><td>cm<sup>2</sup> / H<sub>2</sub>O / $m^{3}$</td></tr></table>"
+        )
+        self.assertEqual(units["cells"][0]["text"], "cm² / H₂O / m³")
+        for bad in [
+            "<table><tr><td>x",
+            "<table><tr><td>x</td><td>y</td></tr><tr><td>z</td></tr></table>",
+            '<table><tr><td rowspan="999">x</td></tr></table>',
+            "<table><tr><td><script>x</script></td></tr></table>",
+        ]:
+            with self.subTest(bad=bad), self.assertRaises(Rejected):
+                table_from_html(bad)
+
+    def test_ocr_contract_refuses_unstructured_and_invalid_positions(self):
+        with self.assertRaises(Rejected):
+            parse_u2("ordinary text with no region")
+        with self.assertRaises(Rejected):
+            normalize(
+                [dict(label="text", bbox=[0, 0, 1100, 100], content="x")],
+                612,
+                792,
+                "u2",
+            )
+        blocks = parse_u2("<PAGE><BLOCK>text[10,20,900,100]<FORK>Content 123")
+        self.assertEqual(normalize(blocks[0], 612, 792, "u2")[0]["text"], "Content 123")
+        self.assertEqual(
+            normalize(
+                [dict(label="page-footer", bbox=[10, 900, 900, 990], content="7")],
+                612,
+                792,
+                "oxr",
+            )[0]["kind"],
+            "footer",
+        )
+
+    def test_invalid_grid_rejected_before_export(self):
+        fixture(self.source)
+        model = parse_pdf(self.source, self.root)
+        model["pages"][0]["blocks"][0].update(
+            kind="table",
+            rows=2,
+            cols=2,
+            cells=[dict(row=0, col=0, rowspan=1, colspan=1, text="x")],
+        )
+        with self.assertRaises(Rejected):
+            export_word(model, self.output, self.root)
+        self.assertFalse(self.output.exists())
+
+    def test_release_gate_does_not_count_generation_as_accuracy(self):
+        from acceptance import evaluate
+
+        report = evaluate(
+            {
+                "documents": [
+                    {
+                        "family": "synthetic",
+                        "pages": 200,
+                        "status": "generated_needs_review",
+                        "categories": ["scans"],
+                    }
+                ]
+            }
+        )
+        self.assertFalse(report["ready"])
+        self.assertEqual(report["accepted"], 0)
+        self.assertTrue(any("95%" in s for s in report["failures"]))
+
+    def test_release_gate_refuses_missing_and_nonfinite_metrics(self):
+        from acceptance import evaluate
+
+        row = dict(
+            family="synthetic",
+            pages=10,
+            status="accepted",
+            independent_opc=True,
+            visual_review=True,
+            edit_reopen=True,
+            ground_truth_verified=True,
+            metrics={"cer": float("nan"), "reading_order": 1, "critical_errors": 0},
+        )
+        self.assertEqual(evaluate({"documents": [row]})["accepted"], 0)
+
+    def test_cross_page_table_preserves_rows_and_skips_only_repeated_header(self):
+        pages = []
+        for i, value in enumerate(("12.34", "56.78")):
+            table = table_from_html(
+                "<table><tr><th>Item</th><th>Amount</th></tr><tr><td>A</td><td>"
+                + value
+                + "</td></tr></table>"
+            )
+            table.update(
+                id=f"t{i}", kind="table", bbox=[40, 50, 570, 740], widths=[1, 1]
+            )
+            pages.append(dict(index=i, width=612, height=792, blocks=[table]))
+        link_tables(pages)
+        report = export_word(dict(schema=2, pages=pages), self.output, self.root)
+        self.assertEqual(report["tables"], 1)
+        table = Document(self.output).tables[0]
+        self.assertEqual(
+            [[c.text for c in r.cells] for r in table.rows],
+            [["Item", "Amount"], ["A", "12.34"], ["A", "56.78"]],
+        )
+        self.assertEqual(
+            Document(self.output)._element.xml.count('w:name="smartpdf_page_'), 2
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

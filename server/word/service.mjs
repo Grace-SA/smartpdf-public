@@ -327,6 +327,7 @@ export async function createWordService(options = {}) {
     state: job.state,
     pages: job.pages,
     warnings: job.warnings,
+    progress: job.progress,
     error: job.error,
     failureCode: job.failureCode,
     expiresAt: job.expiresAt,
@@ -384,6 +385,18 @@ export async function createWordService(options = {}) {
         )
           job.state = value.state;
         if (Array.isArray(value.warnings)) job.warnings = value.warnings;
+        if (
+          pdfword &&
+          Number.isInteger(value.completedPages) &&
+          Number.isInteger(value.totalPages) &&
+          value.completedPages >= 0 &&
+          value.completedPages <= value.totalPages &&
+          value.totalPages <= 200
+        )
+          job.progress = {
+            completedPages: value.completedPages,
+            totalPages: value.totalPages,
+          };
       });
       if (!terminal.has(job.state)) {
         job.state = "checking-result";
@@ -573,8 +586,9 @@ export async function createWordService(options = {}) {
               : "cloud",
           ready: pool?.ready() ?? true,
           available: !unhealthy && !stopped && options.available?.() !== false,
-          capabilities:
-            ppt || pdfword
+          capabilities: pdfword
+            ? options.capabilities || {}
+            : ppt
               ? {}
               : {
                   revisionViews: ["final", "original"],

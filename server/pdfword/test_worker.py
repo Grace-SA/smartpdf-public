@@ -5,7 +5,7 @@ from pathlib import Path
 from pypdf import PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject, NumberObject, ArrayObject
 from docx import Document
-from worker import convert, parse_pdf, export_word, Rejected
+from legacy_worker import convert, parse_pdf, export_word, Rejected
 
 
 def fixture(path, content=b'BT /F1 12 Tf 48 750 Td (Editable 123.45) Tj ET', *, rotation=0, pages=1, crop=False, protected=False):
