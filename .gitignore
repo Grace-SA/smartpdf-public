@@ -145,3 +145,4 @@ private-samples/
 /server/ppt/__pycache__/
 !/docs/ux/ppt-to-pdf-research-2026-11-05.md
 !/docs/ppt-report.md
+!/docs/pdf-to-ppt-stirling-evaluation.md
