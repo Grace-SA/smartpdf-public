@@ -7,6 +7,7 @@ export function prepareOfficeRuntime(
     typeof import("./word-release-manifest.mjs").prepareWordRuntime
   >;
   ppt: Record<string, unknown>;
+  pdfword: Record<string, unknown>;
   files: { path: string; bytes: number; sha256: string }[];
   archive: { path: string; bytes: number; sha256: string };
   install: string;

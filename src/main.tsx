@@ -5,6 +5,11 @@ import { lazy, Suspense } from "react";
 const PptPage = lazy(() =>
   import("./ppt/PptPage").then((module) => ({ default: module.PptPage })),
 );
+const PdfWordPage = lazy(() =>
+  import("./pdfword/PdfWordPage").then((module) => ({
+    default: module.PdfWordPage,
+  })),
+);
 import { WordEntry } from "./word/WordEntry";
 import { ExcelEntry } from "./excel/ExcelEntry";
 import "./style.css";
@@ -22,7 +27,13 @@ if (["smartpdf.com.au", "www.smartpdf.com.au"].includes(location.hostname)) {
 }
 
 createRoot(document.getElementById("root")!).render(
-  /^\/powerpoint-to-pdf\/?$/.test(location.pathname) ? (
+  /^\/pdf-to-word\/?$/.test(location.pathname) ? (
+    <WordBoundary title="PDF to Word">
+      <Suspense fallback={<main>Opening PDF to Word...</main>}>
+        <PdfWordPage />
+      </Suspense>
+    </WordBoundary>
+  ) : /^\/powerpoint-to-pdf\/?$/.test(location.pathname) ? (
     <WordBoundary title="PowerPoint to PDF">
       <Suspense fallback={<main>Opening PowerPoint to PDF...</main>}>
         <PptPage />

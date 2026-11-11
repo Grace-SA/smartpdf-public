@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "imageId": "sha256:951bd11488a644557b510bafcb7a27f2d974a6d02eb6efc8033613d87a743546",
+  "base": "python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
+  "dockerfileSha256": "34522ba3373d67088ac1b2a47cc493e74708ca9bc89dccca50cfba108c86bdc6",
+  "scope": "simple-native-text-only",
+  "ocr": false,
+  "requirementsSha256": "b7ae05a46adc329e1fcc2dc123b997599ccc9c7bde502048ebb40ddb3330fbb2"
+}

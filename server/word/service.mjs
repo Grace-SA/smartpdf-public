@@ -212,15 +212,32 @@ export function runStirling(job, update, adapter = runner) {
 
 export async function createWordService(options = {}) {
   const ppt = options.format === "ppt";
+  const pdfword = options.format === "pdfword";
+  const outputName = pdfword ? "output.docx" : "output.pdf";
+  const outputMime = pdfword
+    ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    : "application/pdf";
   const maxInputBytes = (ppt ? 60 : 30) * 1024 ** 2;
-  const api = ppt ? "/api/ppt" : "/api/word";
+  const api = pdfword ? "/api/pdfword" : ppt ? "/api/ppt" : "/api/word";
   const inputFor = (kind) =>
-    ppt ? "input.pptx" : kind === "excel" ? "input.xlsx" : "input.docx";
-  const inputMime = ppt
-    ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    pdfword
+      ? "input.pdf"
+      : ppt
+        ? "input.pptx"
+        : kind === "excel"
+          ? "input.xlsx"
+          : "input.docx";
+  const inputMime = pdfword
+    ? "application/pdf"
+    : ppt
+      ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (ppt && !options.execute)
     throw new Error("PPT requires its dedicated executor");
+  if (pdfword && (!options.execute || !options.validate))
+    throw new Error(
+      "PDF to Word requires its dedicated executor and validator",
+    );
   const root = path.resolve(
     options.root ||
       process.env.WORD_DATA_DIR ||
@@ -324,12 +341,20 @@ export async function createWordService(options = {}) {
         : undefined,
     cleanupPending:
       (job.state === "cancelled" || job.state === "expired") &&
-      !!(job.running || job.uploading),
+      !!(job.running || job.uploading || job.cancelWrite || job.erasing),
     options: job.options,
   });
   async function erase(job) {
     if (job.running || job.uploading) return;
-    await rm(job.directory, { recursive: true, force: true });
+    await job.cancelWrite;
+    if (job.erasing) return job.erasing;
+    const pending = rm(job.directory, { recursive: true, force: true });
+    job.erasing = pending;
+    try {
+      await pending;
+    } finally {
+      if (job.erasing === pending) delete job.erasing;
+    }
   }
   async function drain() {
     if (active || unhealthy || stopped) return;
@@ -365,11 +390,11 @@ export async function createWordService(options = {}) {
         let result;
         try {
           result = await validate(
-            path.join(job.directory, "output.pdf"),
+            path.join(job.directory, outputName),
             job.kind,
           );
         } catch {
-          throw Object.assign(new Error("Invalid PDF output"), {
+          throw Object.assign(new Error("Invalid conversion output"), {
             code: "OUTPUT_INVALID",
           });
         }
@@ -379,7 +404,7 @@ export async function createWordService(options = {}) {
         await rm(path.join(job.directory, "prepared.docx"), { force: true });
         await rm(path.join(job.directory, "sanitized.docx"), { force: true });
         await rm(path.join(job.directory, "options.json"), { force: true });
-        if (ppt)
+        if (ppt || pdfword)
           await rm(path.join(job.directory, "expected.json"), { force: true });
         if (!terminal.has(job.state)) {
           job.pages = result.pages;
@@ -396,12 +421,15 @@ export async function createWordService(options = {}) {
         job.error =
           error.code === "INPUT_REJECTED"
             ? error.message
-            : `Conversion could not finish. Try again, or export from ${ppt ? "PowerPoint" : job.kind === "excel" ? "Excel" : "Word"}.`;
+            : pdfword
+              ? "Conversion could not finish. Retry, or choose another PDF."
+              : `Conversion could not finish. Try again, or export from ${ppt ? "PowerPoint" : job.kind === "excel" ? "Excel" : "Word"}.`;
       }
     } finally {
       job.running = false;
       active = false;
       try {
+        await job.cancelWrite;
         await rm(path.join(job.directory, inputFor(job.kind)), { force: true });
         await rm(path.join(job.directory, "prepared.xlsx"), { force: true });
         if (job.state !== "succeeded") await erase(job);
@@ -425,9 +453,15 @@ export async function createWordService(options = {}) {
     if (state === "cancelled")
       job.expiresAt = Math.min(job.expiresAt, now() + 60000);
     job.error = undefined;
+    if (job.running) {
+      job.cancelWrite ??= writeFile(
+        path.join(job.directory, "cancel"),
+        "cancel",
+      );
+      await job.cancelWrite;
+      delete job.cancelWrite;
+    }
     job.admission?.abort();
-    if (job.running)
-      await writeFile(path.join(job.directory, "cancel"), "cancel");
     await pool?.cancel(job);
     job.uploadController?.abort();
     await erase(job);
@@ -461,16 +495,18 @@ export async function createWordService(options = {}) {
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, origin);
-      if (ppt) {
+      if (ppt || pdfword) {
         if (!url.pathname.startsWith(api + "/"))
           return json(res, 404, { error: "Unknown conversion endpoint." });
         url.pathname = "/api/word/" + url.pathname.slice(api.length + 1);
       }
-      const kind = ppt
-        ? "ppt"
-        : url.pathname.startsWith("/api/excel/")
-          ? "excel"
-          : "word";
+      const kind = pdfword
+        ? "pdfword"
+        : ppt
+          ? "ppt"
+          : url.pathname.startsWith("/api/excel/")
+            ? "excel"
+            : "word";
       if (
         kind === "excel" &&
         !(options.enableExcel ?? process.env.ENABLE_EXCEL === "true")
@@ -480,7 +516,13 @@ export async function createWordService(options = {}) {
         });
       if (kind === "excel")
         url.pathname = url.pathname.replace("/api/excel/", "/api/word/");
-      const format = ppt ? "PPTX" : kind === "excel" ? "XLSX" : "DOCX";
+      const format = pdfword
+        ? "PDF"
+        : ppt
+          ? "PPTX"
+          : kind === "excel"
+            ? "XLSX"
+            : "DOCX";
       if (url.pathname === "/api/word/health" && req.method === "GET")
         return json(
           res,
@@ -520,6 +562,7 @@ export async function createWordService(options = {}) {
       if (url.pathname === "/api/word/session" && req.method === "GET")
         return json(res, 200, {
           region:
+            options.region ||
             process.env.WORD_PROCESSING_LABEL ||
             "This self-hosted conversion server",
           maxBytes: maxInputBytes,
@@ -530,13 +573,14 @@ export async function createWordService(options = {}) {
               : "cloud",
           ready: pool?.ready() ?? true,
           available: !unhealthy && !stopped && options.available?.() !== false,
-          capabilities: ppt
-            ? {}
-            : {
-                revisionViews: ["final", "original"],
-                omitComments: true,
-                availableFonts: true,
-              },
+          capabilities:
+            ppt || pdfword
+              ? {}
+              : {
+                  revisionViews: ["final", "original"],
+                  omitComments: true,
+                  availableFonts: true,
+                },
         });
       if (!owner)
         return json(res, 401, {
@@ -547,7 +591,7 @@ export async function createWordService(options = {}) {
         try {
           settings = await outputOptions(req);
           if (
-            ppt &&
+            (ppt || pdfword) &&
             (settings.revisionView !== "unchanged" ||
               settings.omitComments ||
               settings.useAvailableFonts !== undefined)
@@ -619,7 +663,7 @@ export async function createWordService(options = {}) {
           return json(res, 409, { error: "This upload has already started." });
         if (
           req.headers["content-type"] !==
-          (ppt
+          (ppt || pdfword
             ? inputMime
             : kind === "excel"
               ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -720,12 +764,12 @@ export async function createWordService(options = {}) {
           return json(res, 409, {
             error: "The result is not ready or has been deleted.",
           });
-        const file = path.join(job.directory, "output.pdf");
+        const file = path.join(job.directory, outputName);
         const size = (await stat(file)).size;
         res.writeHead(200, {
-          "Content-Type": "application/pdf",
+          "Content-Type": outputMime,
           "Content-Length": size,
-          "Content-Disposition": 'attachment; filename="converted.pdf"',
+          "Content-Disposition": `attachment; filename="converted.${pdfword ? "docx" : "pdf"}"`,
           "Cache-Control": "no-store",
           "X-Content-Type-Options": "nosniff",
         });

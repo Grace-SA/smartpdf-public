@@ -9,6 +9,7 @@ const events = new Set([
   "download_failure",
 ]);
 const tools = new Set([
+  "pdfword",
   "ppt",
   "word",
   "excel",

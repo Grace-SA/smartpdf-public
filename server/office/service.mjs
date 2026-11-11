@@ -1,5 +1,6 @@
 import { createWordService, runStirling } from "../word/service.mjs";
 import { createPptService } from "../ppt/service.mjs";
+import { createPdfWordService } from "../pdfword/service.mjs";
 import { createOfficeAdmission } from "./admission.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -16,7 +17,7 @@ export async function createOfficeServices(options = {}) {
     available: admission.available,
     onUnsafe: admission.fail,
   });
-  let ppt;
+  let ppt, pdfword;
   try {
     ppt = await createPptService({
       ...options.ppt,
@@ -24,17 +25,26 @@ export async function createOfficeServices(options = {}) {
       available: admission.available,
       onUnsafe: admission.fail,
     });
+    if (options.pdfword || process.env.ENABLE_PDFWORD === "true")
+      pdfword = await createPdfWordService({
+        ...options.pdfword,
+        admit: (_job, signal) => admission.acquire("pdfword", signal),
+        available: admission.available,
+        onUnsafe: admission.fail,
+      });
   } catch (error) {
     admission.close();
     await word.close();
+    await ppt?.close();
     throw error;
   }
   return {
     word,
     ppt,
+    pdfword,
     async close() {
       admission.close();
-      await Promise.all([word.close(), ppt.close()]);
+      await Promise.all([word.close(), ppt.close(), pdfword?.close()]);
     },
   };
 }
@@ -49,11 +59,20 @@ if (
     () => {},
     fileURLToPath(new URL("../ppt/runner.py", import.meta.url)),
   );
+  if (process.env.ENABLE_PDFWORD === "true")
+    await runStirling(
+      { directory: "--reap" },
+      () => {},
+      fileURLToPath(new URL("../pdfword/runner.py", import.meta.url)),
+    );
   const services = await createOfficeServices();
   try {
     for (const [service, port] of [
       [services.word, Number(process.env.WORD_PORT || 4268)],
       [services.ppt, Number(process.env.PPT_PORT || 4281)],
+      ...(services.pdfword
+        ? [[services.pdfword, Number(process.env.PDFWORD_PORT || 4283)]]
+        : []),
     ]) {
       await new Promise((resolve, reject) => {
         service.server.once("error", reject);

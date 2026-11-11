@@ -111,6 +111,7 @@ fs.writeFileSync(
         word: true,
         ppt: true,
         excel: !!localProof || process.env.VITE_ENABLE_EXCEL === "true",
+        pdfword: true,
         unlock: true,
         protect: false,
       },

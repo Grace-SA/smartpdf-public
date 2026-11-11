@@ -18,6 +18,34 @@ type SeoPage = {
 };
 
 export const seoPages: Record<PublicTool, SeoPage> = {
+  pdfword: {
+    title: "PDF to Word - Editable Text | Smart PDF",
+    description:
+      "Convert simple text PDFs into editable Word documents with cloud processing. Upload only when you start. Scans and complex layouts are not supported yet.",
+    keywords: "pdf to word, pdf to docx, editable word document",
+    heading: "PDF to Word",
+    intro:
+      "Convert simple text PDFs, then download and check the editable Word document.",
+    steps: [
+      "Choose one simple text PDF.",
+      "Upload and convert.",
+      "Download Word and check the content.",
+    ],
+    faq: [
+      [
+        "Is my PDF uploaded?",
+        "Only when you choose Upload and convert. Temporary files expire within one hour and can be deleted sooner.",
+      ],
+      [
+        "Which PDFs are supported?",
+        "Simple text PDFs with one column, up to 30 MiB and 200 pages. Scans, tables, columns, images and interactive content are not supported yet. Unsupported files are refused in full.",
+      ],
+      [
+        "Will the Word layout match exactly?",
+        "The text is editable and page sizes are retained. Fonts, line wrapping and pagination may change. Check the document in Word before sharing.",
+      ],
+    ],
+  },
   ppt: {
     title: "PowerPoint to PDF - PPTX Conversion | Smart PDF",
     description:
@@ -399,9 +427,9 @@ export const seoPages: Record<PublicTool, SeoPage> = {
 };
 
 export const homeSeo = {
-  title: "Free Private PDF Tools – No Uploads | Smart PDF",
+  title: "Free PDF Tools and Cloud Conversion | Smart PDF",
   description:
-    "Use free PDF tools to merge, split, organize, convert, sign and compress files in your browser. Files and filenames stay on your device.",
+    "Use free PDF tools to merge, split, organize, sign and compress on your device. Office to PDF and PDF to Word use clearly marked cloud conversion, with upload only when you start.",
   keywords:
     "free pdf tools, free pdf merger, free pdf splitter, free pdf organizer, free images to pdf, free pdf signature, free pdf compressor, private pdf tools",
 };

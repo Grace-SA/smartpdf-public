@@ -7,6 +7,13 @@ const reviewProtect = process.env.VITE_ENABLE_PROTECT === "true";
 const reviewExcel = process.env.VITE_ENABLE_EXCEL === "true";
 const publicTools = enabledTools(reviewProtect, reviewExcel);
 const pages = {
+  "pdf-to-word": {
+    title: "PDF to Word - Editable Text | Smart PDF",
+    description:
+      "Convert simple text PDFs into editable Word documents with explicit cloud upload. Scans, tables, columns and graphics are not supported yet. Check the Word document before sharing.",
+    keywords: "pdf to word, pdf to docx, editable word document",
+    heading: "Convert simple text PDFs to Word",
+  },
   "powerpoint-to-pdf": {
     title: "PowerPoint to PDF – PPTX Conversion | Smart PDF",
     description:
@@ -81,12 +88,12 @@ const pages = {
     heading: "Rotate PDF pages privately in your browser",
   },
   "": {
-    title: "Free Private PDF Tools – No Uploads | Smart PDF",
+    title: "Free PDF Tools and Cloud Conversion | Smart PDF",
     description:
-      "Use free PDF tools to merge, split, organize, convert, sign and compress files in your browser. Files and filenames stay on your device.",
+      "Use free PDF tools to merge, split, organize, sign and compress on your device. Office to PDF and PDF to Word use clearly marked cloud conversion, with upload only when you start.",
     keywords:
       "free pdf tools, free pdf merger, free pdf splitter, free pdf organizer, free images to pdf, free pdf signature, free pdf compressor, private pdf tools",
-    heading: "Private PDF tools. No uploads.",
+    heading: "Simple PDF tools with clear file handling.",
   },
   "merge-pdf": {
     title: "Merge PDF Online Free & Privately | Smart PDF",
@@ -163,9 +170,16 @@ for (const [slug, page] of Object.entries(pages)) {
     offers: { "@type": "Offer", price: "0", priceCurrency: "AUD" },
     featureList: [
       "Local browser PDF processing",
-      ...(slug === "word-to-pdf" || slug === "powerpoint-to-pdf"
+      ...([
+        "word-to-pdf",
+        "powerpoint-to-pdf",
+        "excel-to-pdf",
+        "pdf-to-word",
+      ].includes(slug)
         ? ["Explicit cloud upload"]
-        : ["No document upload"]),
+        : slug
+          ? ["No document upload"]
+          : ["Clearly marked local and cloud tools"]),
       page.heading,
     ],
   }).replaceAll("<", "\\u003c");
@@ -231,7 +245,7 @@ for (const [slug, page] of Object.entries(pages)) {
     )
     .replace(
       '<div id="root"></div>',
-      `<div id="root"></div><noscript><main><h1>${page.heading}</h1><p>${page.description}</p><p>Smart PDF requires JavaScript to process files locally in your browser.</p><nav>${publicTools.map((id) => `<a href="${toolCatalog[id].path}">${toolCatalog[id].title}</a>`).join(" · ")}</nav></main></noscript>`,
+      `<div id="root"></div><noscript><main><h1>${page.heading}</h1><p>${page.description}</p><p>Smart PDF requires JavaScript. Each tool explains where its files are processed.</p><nav>${publicTools.map((id) => `<a href="${toolCatalog[id].path}">${toolCatalog[id].title}</a>`).join(" · ")}</nav></main></noscript>`,
     );
 
   const requiredOutput = [

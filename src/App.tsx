@@ -151,6 +151,7 @@ const toolTitles = {
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
   ppt: "Convert visible PPTX slides using cloud processing.",
+  pdfword: "Turn simple text PDFs into editable Word documents.",
   excel: "Choose worksheets and convert an XLSX using cloud processing.",
   word: "Convert a DOCX using cloud processing.",
   protect: "Add an opening password. Keep your PDF on your device.",
@@ -347,7 +348,12 @@ export function App() {
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
-      if (next === "word" || next === "ppt" || next === "excel") {
+      if (
+        next === "word" ||
+        next === "ppt" ||
+        next === "excel" ||
+        next === "pdfword"
+      ) {
         // React cleanup does not run when replacing this document. Stop pending
         // blob workers while their document and error handlers still exist.
         resourceController.current?.abort();
@@ -1400,8 +1406,8 @@ export function App() {
             <h1>Simple PDF tools. Clear choices for your files.</h1>
             <p className="hero-lede">
               Merge, split, organize, sign and compress in your browser. Word to
-              PDF and PowerPoint to PDF use cloud conversion and upload only
-              when you start.
+              PDF, PowerPoint to PDF and PDF to Word use cloud conversion and
+              upload only when you start.
             </p>
             <div className="tool-cards">
               {publicTools.map((t) => (
@@ -1646,6 +1652,7 @@ export function App() {
                 title={
                   {
                     ppt: "Your PDF is ready",
+                    pdfword: "Your Word document is ready",
                     word: "Your PDF is ready",
                     excel: "Your PDF is ready",
                     unlock: "Your unlocked PDF is ready",
@@ -2107,7 +2114,7 @@ export function App() {
             </a>
             <p>
               PDF tools on your device, plus clearly marked cloud Word and
-              PowerPoint conversion.
+              PowerPoint and PDF to Word conversion.
             </p>
             <span className="australia-badge">Proudly built in Australia</span>
           </div>

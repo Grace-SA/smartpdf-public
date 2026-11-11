@@ -39,6 +39,8 @@ it("packages both engines, scheduler, validation, frozen dependencies and servic
     "server/office/admission.mjs",
     "server/ppt/layout.py",
     "server/ppt/svg_check.py",
+    "server/pdfword/docx-check.mjs",
+    "server/pdfword/worker.py",
     "server/word/standby.mjs",
     "pnpm-workspace.yaml",
     "patches/pdf-lib@1.17.1.patch",
@@ -46,6 +48,8 @@ it("packages both engines, scheduler, validation, frozen dependencies and servic
   ])
     expect(list).toContain(file);
   expect(m.sharedAdmission).toBe(true);
+  expect(m.pdfword.scope).toBe("simple-native-text-only");
+  expect(m.pdfword.ocr).toBe(false);
   expect(m.archive.sha256).toMatch(/^[a-f0-9]{64}$/);
   expect(() => prepareOfficeRuntime(f.source, f.output)).toThrow(
     "already exists",

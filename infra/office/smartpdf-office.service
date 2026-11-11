@@ -17,8 +17,13 @@ Environment=PPT_PORT=4281
 Environment=PPT_DATA_DIR=/var/lib/smartpdf-ppt/tasks
 Environment=PPT_PUBLIC_ORIGIN=https://smartpdf.com.au
 Environment=OFFICE_SHARED_MODE=true
+Environment=ENABLE_PDFWORD=true
+Environment=PDFWORD_PORT=4283
+Environment=PDFWORD_DATA_DIR=/var/lib/smartpdf-pdfword/tasks
+Environment=PDFWORD_PUBLIC_ORIGIN=https://smartpdf.com.au
 ExecStartPre=/usr/bin/python3 server/word/doctor.py --production
 ExecStartPre=/usr/bin/python3 server/ppt/doctor.py --production
+ExecStartPre=/usr/bin/python3 server/pdfword/doctor.py --production
 # The legacy and combined processes cannot both hold this host lock.
 ExecStart=/usr/bin/flock --no-fork --nonblock /var/lib/smartpdf-word/service.lock /usr/local/bin/node server/office/service.mjs
 Restart=on-failure
@@ -32,7 +37,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/smartpdf-word /var/lib/smartpdf-ppt
+ReadWritePaths=/var/lib/smartpdf-word /var/lib/smartpdf-ppt /var/lib/smartpdf-pdfword
 
 [Install]
 WantedBy=multi-user.target

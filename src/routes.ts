@@ -8,6 +8,14 @@ export const toolGroups = [
 
 // All public tool discovery surfaces share this catalogue.
 export const toolCatalog = {
+  pdfword: {
+    path: "/pdf-to-word/",
+    title: "PDF to Word",
+    label: "PDF to Word",
+    summary:
+      "Turn simple text PDFs into editable Word documents using cloud processing.",
+    group: "Convert PDF",
+  },
   ppt: {
     path: "/powerpoint-to-pdf/",
     title: "PowerPoint to PDF",
