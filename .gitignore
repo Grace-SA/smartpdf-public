@@ -146,3 +146,5 @@ private-samples/
 !/docs/ux/ppt-to-pdf-research-2026-11-05.md
 !/docs/ppt-report.md
 !/docs/pdf-to-ppt-stirling-evaluation.md
+!/docs/pdf-to-ppt-ocr-improvement.md
+!/server/pdf-to-ppt/
