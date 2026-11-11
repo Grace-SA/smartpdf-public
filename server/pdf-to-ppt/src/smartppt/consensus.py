@@ -124,12 +124,18 @@ def region_agreement(record, verifier):
     return approved
 
 
+def erase_bounds(line):
+    """Integer pixel bounds shared by erasure and its overlap safety check."""
+    l, t, r, b = line_bounds(line)
+    return math.floor(l)-1, math.floor(t)-1, math.ceil(r)+1, math.ceil(b)+1
+
+
 def overlapping_lines(lines):
     """Any intersecting erase rectangles stay raster, including duplicate detections."""
-    blocked = set(); boxes = [line_bounds(line) for line in lines]
+    blocked = set(); boxes = [erase_bounds(line) for line in lines]
     for i, (l, t, r, b) in enumerate(boxes):
         for j in range(i):
             x, y, xx, yy = boxes[j]
-            if min(r+1, xx+1) > max(l-1, x-1) and min(b+1, yy+1) > max(t-1, y-1):
+            if min(r, xx) > max(l, x) and min(b, yy) > max(t, y):
                 blocked.update((i, j))
     return blocked

@@ -65,6 +65,21 @@ class Store:
                 c.execute("UPDATE jobs SET state='processing', updated=? WHERE id=?", (time.time(), row['id']))
                 return row['id']
 
+    def cancel(self, job_id):
+        """Cancel the current state atomically, including a concurrent claim.
+
+        Return the state observed under the write lock so the caller knows
+        whether a worker can still be using the task directory.
+        """
+        with self.connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            row = c.execute('SELECT state FROM jobs WHERE id=?', (job_id,)).fetchone()
+            if row is None:
+                return None
+            c.execute("UPDATE jobs SET state='cancelled',updated=? WHERE id=?",
+                      (time.time(), job_id))
+            return row['state']
+
     def cleanup(self):
         import shutil
         now = time.time()

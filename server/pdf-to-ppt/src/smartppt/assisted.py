@@ -17,7 +17,7 @@ from .config import ConversionError
 from .layout import add_background,add_text,font_family,native_slide
 from .pdf import render_page
 from .quality import normalized,numeric_tokens,shape_text,text_metrics
-from .consensus import region_agreement,overlapping_lines
+from .consensus import region_agreement,overlapping_lines,erase_bounds
 from .ocr_font import latin_font
 
 
@@ -39,6 +39,10 @@ def safe_table(slide,reference):
     text='\n'.join(shape_text(slide.shapes));metrics=text_metrics(reference,text)
     if metrics['character_recall']!=1 or metrics['character_precision']!=1:return False
     if numeric_tokens(reference)!=numeric_tokens(text):return False
+    # A character/number multiset cannot bind a value to its row or label.
+    # Ambiguous extraction order must use coordinate repair and render validation,
+    # not bypass those gates by preserving an unverified native table.
+    if normalized(reference)!=normalized(text):return False
     sw,sh=slide.part.package.presentation_part.presentation.slide_width,slide.part.package.presentation_part.presentation.slide_height
     return all(s.left>=0 and s.top>=0 and s.left+s.width<=sw+12700 and s.top+s.height<=sh+12700 for s in tables)
 
@@ -98,8 +102,8 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             warnings.append('ocr_models_disagree_kept_as_image');continue
         if index in overlaps:
             warnings.append('overlapping_ocr_kept_as_image');continue
-        box=np.array(line['polygon']);l=max(0,int(box[:,0].min())-1);t=max(0,int(box[:,1].min())-1)
-        r=min(image.width,int(math.ceil(box[:,0].max()))+1);b=min(image.height,int(math.ceil(box[:,1].max()))+1)
+        box=np.array(line['polygon']);l,t,r,b=erase_bounds(line)
+        l=max(0,l);t=max(0,t);r=min(image.width,r);b=min(image.height,b)
         if r-l<2 or b-t<2:continue
         if line['confidence']<.9:
             warnings.append('low_confidence_text_kept_as_image');continue

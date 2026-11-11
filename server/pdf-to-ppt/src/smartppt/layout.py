@@ -48,11 +48,15 @@ def add_text(slide,text,x,y,width,height,size,font='Arial',bold=False,color=(0,0
 
 def extract_native(page):
     """Resolve character boxes in page coordinates, retaining object provenance."""
-    raw=pdfium.raw;groups=defaultdict(list);objects={};unsupported=[]
+    raw=pdfium.raw;groups=defaultdict(list);objects={};unsupported=[];clipped=set()
     rotation=page.get_rotation();pw,ph=page.get_size()
+    # PDFium text coordinates are in the original page coordinate system;
+    # rendered pages start at the effective CropBox/MediaBox intersection.
+    origin_x,origin_y,_,_=page.get_bbox()
     def rotate_box(box):
         l,b,r,t=box
         def point(x,y):
+            x-=origin_x;y-=origin_y
             if rotation==90:return y,ph-x
             if rotation==180:return pw-x,ph-y
             if rotation==270:return pw-y,x
@@ -76,11 +80,18 @@ def extract_native(page):
             except Exception:
                 unsupported.append('unresolved_character');continue
             if not all(math.isfinite(n) for n in (*box,size,angle)) or not 0<size<500:continue
+            if not char.isspace() and (box[0]<0 or box[1]<0 or box[2]>pw or box[3]>ph):
+                clipped.add(pointer)
             objects[pointer]=obj
             groups[pointer].append({'text':char,'box':box,'size':size,'angle':angle,'index':i})
         runs=[];remove=[]
         for pointer,chars in groups.items():
             obj=objects[pointer]
+            # Removing an entire text object would also remove its clipped
+            # glyphs. Keep that object in the raster instead of reconstructing
+            # off-page text which was not visible in the source.
+            if pointer in clipped:
+                unsupported.append('clipped_text_kept_as_graphic');continue
             if any(abs(c['angle'])>.01 or (unicodedata.category(c['text'])=='Cc' and not c['text'].isspace()) for c in chars):
                 unsupported.append('rotated_text_kept_as_graphic');continue
             font=obj.get_font();name=font.get_family_name();bold=font.get_weight()>=600 or 'bold' in font.get_base_name().lower()

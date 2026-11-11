@@ -4,14 +4,16 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1')
 from u2_parser import parse_blocks
-from mlx_vlm import apply_chat_template,generate,load
-import mlx.core as mx
+from integrity import verify_u2_model
 from PIL import Image
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--out',type=Path,required=True);p.add_argument('images',type=Path,nargs='+');a=p.parse_args()
     model_path=Path(os.getenv('SMARTPPT_U2_MODEL',str(ROOT/'models/u2')))
     if not model_path.is_dir():raise ValueError('Set SMARTPPT_U2_MODEL to the verified offline model directory')
+    verify_u2_model(model_path,json.loads((ROOT/'u2-manifest.json').read_text()))
+    from mlx_vlm import apply_chat_template,generate,load
+    import mlx.core as mx
     start=time.monotonic();model,processor=load(str(model_path),trust_remote_code=False)
     print('loaded',round(time.monotonic()-start,3),flush=True);a.out.mkdir(parents=True,exist_ok=True)
     for image in a.images:

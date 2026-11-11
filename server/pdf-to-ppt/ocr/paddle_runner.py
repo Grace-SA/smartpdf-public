@@ -6,17 +6,12 @@ from PIL import Image
 import onnxruntime as ort
 ort.disable_telemetry_events()
 from rapidocr import RapidOCR
+from integrity import verify_paddle_models
 ROOT=Path(__file__).resolve().parent
 
 def engine(dictionary_dir):
     models=Path(os.getenv('SMARTPPT_OCR_MODELS',str(ROOT/'models')))
-    for name in ('PP-OCRv6_medium_det_onnx','PP-OCRv6_medium_rec_onnx'):
-        folder=models/name
-        provenance=json.loads((folder/'provenance.json').read_text())
-        for artifact in provenance['files']:
-            if artifact['file'] in ('inference.onnx','inference.yml'):
-                if hashlib.sha256((folder/artifact['file']).read_bytes()).hexdigest()!=artifact['sha256']:
-                    raise ValueError('OCR model integrity check failed')
+    verify_paddle_models(models,json.loads((ROOT/'model-manifest.json').read_text()))
     rec=models/'PP-OCRv6_medium_rec_onnx'
     cfg=yaml.safe_load((rec/'inference.yml').read_text())
     keys=Path(dictionary_dir)/'keys.txt';keys.write_text('\n'.join(cfg['PostProcess']['character_dict'])+'\n')

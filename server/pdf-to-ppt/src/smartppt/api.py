@@ -114,10 +114,14 @@ def create_app(settings=None):
 
     @app.delete('/api/jobs/{job_id}')
     def cancel(job_id: str, authorization: str|None=Header(default=None)):
-        row = authorized(job_id, authorization)
-        store.update(job_id, 'cancelled', (row['state'],))
+        authorized(job_id, authorization)
+        previous = store.cancel(job_id)
+        if previous is None:
+            raise HTTPException(404, 'job_not_found')
         # Supervisor terminates an active converter. Downloads are blocked immediately.
-        if row['state'] not in ('processing','validating'):
+        # Repeated DELETE must not remove files before an active worker has
+        # acknowledged the first cancellation and stopped writing.
+        if previous not in ('processing','validating','cancelled'):
             shutil.rmtree(settings.root/job_id, ignore_errors=True)
         return {'state':'cancelled'}
 

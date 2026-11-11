@@ -111,6 +111,47 @@ def test_erase_rectangle_overlap_includes_padding():
     assert overlapping_lines(record['lines']) == {0,2}
 
 
+@pytest.mark.parametrize('boxes,expected', [
+    ([(5, 5, 20.1, 20), (22.2, 5, 40, 20)], {0, 1}),
+    ([(5, 5, 20, 20.1), (5, 22.2, 20, 40)], {0, 1}),
+    ([(5, 5, 20.1, 20.1), (22.2, 22.2, 40, 40)], {0, 1}),
+    ([(5, 5, 20, 20), (22, 5, 40, 20)], set()),
+    ([(5, 5, 20, 20), (5, 22, 20, 40)], set()),
+])
+def test_overlap_uses_actual_integer_erase_rectangles(boxes, expected):
+    lines = [{'polygon': [[l, t], [r, t], [r, b], [l, b]]}
+             for l, t, r, b in boxes]
+    assert overlapping_lines(lines) == expected
+
+
+def test_fractional_overlap_preserves_original_raster(tmp_path, pdf_file):
+    image = Image.new('RGB', (100, 60), 'white')
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((10, 10, 18, 18), fill='black')
+    draw.rectangle((25, 10, 35, 18), fill='black')
+    path = tmp_path/'fractional.png'
+    image.save(path)
+    record = {
+        'input_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+        'image_size': [100, 60],
+        'lines': [
+            {'text': 'A', 'confidence': .99,
+             'polygon': [[5, 5], [20.1, 5], [20.1, 25], [5, 25]]},
+            {'text': 'B', 'confidence': .99,
+             'polygon': [[22.2, 5], [40, 5], [40, 25], [22.2, 25]]},
+        ],
+    }
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    with pdfium.PdfDocument(pdf_file) as doc:
+        report = ocr_slide(prs, slide, doc[0], path, record,
+                           line_approvals=[True, True])
+    assert report['editable_lines'] == 0
+    assert 'overlapping_ocr_kept_as_image' in report['warnings']
+    from io import BytesIO
+    assert Image.open(BytesIO(slide.shapes[0].image.blob)).tobytes() == image.tobytes()
+
+
 @pytest.mark.parametrize('background,foreground', [((255,255,210),(20,40,100)),((220,240,255),(40,40,40))])
 def test_tinted_paper_and_text_color_are_preserved(tmp_path,pdf_file,background,foreground):
     image = Image.new('RGB',(400,200),background); draw = ImageDraw.Draw(image)

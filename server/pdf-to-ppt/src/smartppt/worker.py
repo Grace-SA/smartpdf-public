@@ -34,7 +34,7 @@ def run_job(settings, job_id):
         assistance = None
         info = inspect_pdf(source, settings.max_bytes, settings.max_pages)
         if job['mode'] == 'editable':
-            if settings.editable_provider not in ('adobe', 'stirling'):
+            if not settings.editable_available:
                 raise ConversionError('provider_not_configured')
             provider = StirlingProvider(settings) if settings.editable_provider == 'stirling' else AdobeProvider(settings)
             try:
@@ -81,8 +81,13 @@ def work_once(settings):
         return False
     env = dict(os.environ, SMARTPPT_DATA=str(settings.root))
     # Do not inherit the upload request; no filename or PDF content in command lines.
-    child = subprocess.Popen([sys.executable, '-m', 'smartppt.worker', '--job', job_id], env=env,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,start_new_session=(os.name=='posix'))
+    try:
+        child = subprocess.Popen([sys.executable, '-m', 'smartppt.worker', '--job', job_id], env=env,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,start_new_session=(os.name=='posix'))
+    except OSError:
+        store.update(job_id, 'failed', ('processing',), error='worker_start_failed')
+        store.cleanup()
+        return True
     deadline = time.monotonic() + settings.job_timeout
     try:
         while child.poll() is None:
@@ -93,6 +98,9 @@ def work_once(settings):
             time.sleep(.25)
         if child.returncode:
             store.update(job_id, 'failed', ('processing','validating'), error='worker_crashed')
+        else:
+            # A process exit is not proof that it published a validated result.
+            store.update(job_id, 'failed', ('processing','validating'), error='worker_interrupted')
     finally:
         if child.poll() is None:
             stop_worker(child)

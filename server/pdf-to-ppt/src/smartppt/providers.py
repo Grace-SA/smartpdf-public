@@ -24,7 +24,9 @@ def trusted_url(url, storage=False):
 class AdobeProvider:
     def __init__(self, settings, client=None, sleep=time.sleep, clock=time.monotonic):
         self.settings = settings
-        self.client = client or httpx.Client(timeout=45, follow_redirects=False)
+        # The provider and storage origins are explicit operator configuration.
+        # Ambient proxy settings must not redirect document/credential traffic.
+        self.client = client or httpx.Client(timeout=45, follow_redirects=False, trust_env=False)
         self.sleep, self.clock = sleep, clock
 
     def request(self, method, url, **kwargs):

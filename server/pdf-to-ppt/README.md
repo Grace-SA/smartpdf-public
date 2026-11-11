@@ -40,7 +40,7 @@ PYTHONPATH=src .venv/bin/python -m uvicorn smartppt.api:app --host 127.0.0.1 --p
 PYTHONPATH=src .venv/bin/python -m smartppt.worker
 ```
 
-`SMARTPPT_STIRLING_KEY` 为可选的服务端 API key。HTTP 仅支持回环地址，远端引擎需 HTTPS。模型目录可通过 `SMARTPPT_OCR_MODELS` 改写。模型下载脚本固定 URL、版本、大小及 SHA-256；权重不进 Git，运行时无需模型 API。识别字典写入任务临时目录并在整批识别后清理，运行时不写模型目录，可将模型只读挂载。
+`SMARTPPT_STIRLING_KEY` 为可选的服务端 API key。HTTP 仅支持回环地址，远端引擎需 HTTPS。模型目录可通过 `SMARTPPT_OCR_MODELS` 改写。模型下载脚本固定 URL、版本、大小及 SHA-256；Paddle 启动时以源码中的 `ocr/model-manifest.json` 独立复核必需文件，不信任模型目录自报的 `provenance.json`。权重不进 Git，运行时无需模型 API。识别字典写入任务临时目录并在整批识别后清理，运行时不写模型目录，可将模型只读挂载。
 
 字体目录需提供实际字体。这里的 OCR 字号校准使用 Arial/Arial Bold 度量；其他字体/平台需重新验收，缺失度量会报告。Noto Sans SC 可使用仓库已有 OFL 字体；输出明确写入东亚字体，但没有嵌入字体，因此接收端也需字体或合适替代。不得默认复制受限系统字体到服务器。
 
@@ -51,6 +51,8 @@ PYTHONPATH=src .venv/bin/python -m smartppt.worker
 配置 `SMARTPPT_OCR_VERIFIER_PYTHON`、`SMARTPPT_OCR_VERIFIER_RUNNER`（本目录 `ocr/unlimited_runner.py`）和 `SMARTPPT_U2_MODEL`（离线模型目录）即可启用。脚本禁用在线模型访问和远程代码执行。不要在通用 Linux 环境安装 Mac MLX 包。
 
 固定模型：`mlx-community/Unlimited-OCR-2-bf16`，revision `850d1e483f5a82a0597f0a45aac31b07ba840df2`；官方底座 `baidu/Unlimited-OCR-2`，revision `0480966938291445591f69f08a13b041c073a96a`。模型许可及依赖见本目录 `THIRD_PARTY.md`。
+
+启动前使用源码中的 `ocr/u2-manifest.json` 校验权重、配置、模板与 tokenizer 的大小和 SHA-256；额外的可加载配置或权重也会拒绝。模型目录必须是已完整物化的独立目录，不能使用指向目录外部的 Hugging Face 缓存符号链接。新清单的权重哈希来自固定 revision 的 Git LFS 元数据，配置/tokenizer 字节另行下载并核对 Git blob；本轮未下载权重或重跑 MLX 推理，新增校验不能代替模型实测。
 
 ## 可选的 SoMark OXR
 
@@ -78,5 +80,7 @@ export SMARTPPT_OXR_RUNNER="$PWD/ocr/oxr_runner.py"
 ```
 
 测试全部使用程序生成的合成输入，不依赖真实用户文档或线上 OCR。公开样本、权重和真实渲染证据只保存在本机；批量实测结论见仓库 `docs/pdf-to-ppt-ocr-improvement.md`。
+
+本轮代码审查、独立渲染证据、通用上线质量目标及未完成门禁见 `docs/pdf-to-ppt-review-2026-11-11.md`。新增测试不替代主站累计回归和真实模型/生产运行时验收。
 
 这是实验模块，不接生产路由、不修改现有 Office→PDF 引擎、不部署。公开发布仍需网站鉴权/配额、Linux 固定镜像、并发负载、PowerPoint/WPS、字体交付、扫描质量与真实设备验收。OCR 脚本退出和取消本机 worker 不代表远端 Stirling 的任务也已取消；引擎临时文件清理需另外验收。
