@@ -2,20 +2,30 @@
 import tempfile
 import unittest
 from pathlib import Path
-from pypdf import PdfWriter
-from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject, NumberObject, ArrayObject
+from pypdf import PdfWriter, PdfReader
+from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject, NumberObject, ArrayObject, TextStringObject
 from docx import Document
 from worker import convert, parse_pdf, export_word, Rejected
 
 
-def fixture(path, content=b'BT /F1 12 Tf 48 750 Td (Editable 123.45) Tj ET', *, rotation=0, pages=1, crop=False, protected=False):
+def fixture(path, content=b'BT /F1 12 Tf 48 750 Td (Editable 123.45) Tj ET', *, rotation=0, pages=1, crop=False, protected=False, cjk=False):
     writer = PdfWriter()
     font = writer._add_object(DictionaryObject({NameObject('/Type'): NameObject('/Font'),
         NameObject('/Subtype'): NameObject('/Type1'), NameObject('/BaseFont'): NameObject('/Helvetica')}))
-    for _ in range(pages):
+    if cjk:
+        descendant = writer._add_object(DictionaryObject({
+            NameObject('/Type'): NameObject('/Font'), NameObject('/Subtype'): NameObject('/CIDFontType0'),
+            NameObject('/BaseFont'): NameObject('/STSong-Light'), NameObject('/DW'): NumberObject(1000),
+            NameObject('/CIDSystemInfo'): DictionaryObject({NameObject('/Registry'): TextStringObject('Adobe'),
+                NameObject('/Ordering'): TextStringObject('GB1'), NameObject('/Supplement'): NumberObject(4)})}))
+        font = writer._add_object(DictionaryObject({NameObject('/Type'): NameObject('/Font'),
+            NameObject('/Subtype'): NameObject('/Type0'), NameObject('/BaseFont'): NameObject('/STSong-Light'),
+            NameObject('/Encoding'): NameObject('/UniGB-UCS2-H'),
+            NameObject('/DescendantFonts'): ArrayObject([descendant])}))
+    for index in range(pages):
         page = writer.add_blank_page(612, 792)
         page[NameObject('/Resources')] = DictionaryObject({NameObject('/Font'): DictionaryObject({NameObject('/F1'): font})})
-        stream = DecodedStreamObject(); stream.set_data(content)
+        stream = DecodedStreamObject(); stream.set_data(content(index) if callable(content) else content)
         page[NameObject('/Contents')] = writer._add_object(stream)
         if rotation:
             page[NameObject('/Rotate')] = NumberObject(rotation)
@@ -81,11 +91,86 @@ class ImportTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
 
     def test_two_hundred_text_pages_keep_every_page_in_order(self):
-        fixture(self.source, pages=200)
+        fixture(self.source, pages=200,
+                content=lambda index: f'BT /F1 12 Tf 48 750 Td (Page {index + 1:03d} / 200) Tj ET'.encode())
         self.assertEqual(convert(self.source, self.output)['pages'], 200)
         document = Document(self.output)
         self.assertEqual(len(document.sections), 200)
-        self.assertEqual(sum(p.text == 'Editable 123.45' for p in document.paragraphs), 200)
+        self.assertEqual([p.text for p in document.paragraphs if p.text],
+                         [f'Page {index + 1:03d} / 200' for index in range(200)])
+
+    def test_adjacent_runs_preserve_words_spaces_and_numbers(self):
+        cases = [
+            (b'(Hello ) Tj (world) Tj', 'Hello world'),
+            (b'(Ed) Tj (it) Tj (able) Tj', 'Editable'),
+            (b'(Amount: ) Tj (123) Tj (.45) Tj', 'Amount: 123.45'),
+            (b'[(123) -100] TJ (.45) Tj', '123.45'),
+            (b'[(Hello) -300] TJ (world) Tj', 'Hello world'),
+            (b'(Hello ) Tj /F1 14 Tf (world) Tj', 'Hello world'),
+            (b'(Hello ) Tj 0.5 Ts (world) Tj', 'Hello world'),
+            (b'[(A) 80 (V) -250 (test)] TJ', 'AV test'),
+        ]
+        for content, expected in cases:
+            with self.subTest(expected=expected, content=content):
+                fixture(self.source, content=b'BT /F1 12 Tf 48 750 Td ' + content + b' ET')
+                model = parse_pdf(self.source)
+                self.assertEqual([block['text_raw'] for block in model['pages'][0]['blocks']], [expected])
+                output = self.root / f'editable-{cases.index((content, expected))}.docx'
+                export_word(model, output)
+                self.assertEqual([p.text for p in Document(output).paragraphs], [expected])
+
+    def test_glyph_positioning_and_staggered_columns_are_refused(self):
+        cases = [
+            b'BT /F1 12 Tf 48 750 Td [(Left) -20000 (Right)] TJ ET',
+            b'BT /F1 12 Tf -8 Tc 48 750 Td (SECRET OVERLAP) Tj ET',
+            b'BT /F1 12 Tf 48 750 Td [(First) 4000 (Second)] TJ ET',
+            (b'BT /F1 12 Tf 48 750 Td (left first) Tj ET '
+             b'BT /F1 12 Tf 300 730 Td (right first) Tj ET '
+             b'BT /F1 12 Tf 48 710 Td (left second) Tj ET '
+             b'BT /F1 12 Tf 300 690 Td (right second) Tj ET'),
+        ]
+        for index, content in enumerate(cases):
+            with self.subTest(content=content):
+                fixture(self.source, content=content)
+                output = self.root / f'refused-{index}.docx'
+                with self.assertRaises(Rejected):
+                    convert(self.source, output)
+                self.assertFalse(output.exists())
+
+    def test_numeric_fragments_match_independent_parser(self):
+        cases = ('123.45', '-0.25', '1,234.56', '2026-11-11', 'INV-001', '50%', 'USD 99.90')
+        for index, expected in enumerate(cases):
+            with self.subTest(expected=expected):
+                content = b'BT /F1 12 Tf 48 750 Td ' + b' '.join(
+                    b'(' + character.encode() + b') Tj' for character in expected) + b' ET'
+                fixture(self.source, content=content)
+                self.assertEqual(PdfReader(self.source).pages[0].extract_text().strip(), expected)
+                output = self.root / f'number-{index}.docx'
+                convert(self.source, output)
+                self.assertEqual([p.text for p in Document(output).paragraphs], [expected])
+
+    def test_late_unsupported_page_does_not_publish_partial_word(self):
+        fixture(self.source, pages=3, content=lambda index:
+                b'BT /F1 12 Tf 48 750 Td [(Left) -20000 (Right)] TJ ET' if index == 2 else
+                b'BT /F1 12 Tf 48 750 Td (Supported text) Tj ET')
+        with self.assertRaises(Rejected):
+            convert(self.source, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_chinese_runs_match_independent_pdf_reader_and_remain_editable(self):
+        text = '中文财务报告'
+        content = b'BT /F1 12 Tf 48 750 Td ' + b' '.join(
+            b'<' + part.encode('utf-16-be').hex().encode() + b'> Tj'
+            for part in ('中文', '财务', '报告')) + b' ET'
+        fixture(self.source, content=content, cjk=True)
+        self.assertEqual(PdfReader(self.source).pages[0].extract_text().strip(), text)
+        convert(self.source, self.output)
+        document = Document(self.output)
+        self.assertEqual([p.text for p in document.paragraphs], [text])
+        document.paragraphs[0].add_run(' 已编辑')
+        edited = self.root / 'chinese-edited.docx'
+        document.save(edited)
+        self.assertEqual(Document(edited).paragraphs[0].text, text + ' 已编辑')
 
 
 if __name__ == '__main__':

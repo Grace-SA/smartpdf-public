@@ -171,7 +171,16 @@ it("refuses corrupt Word output and does not retain a partial download", async (
 it("refuses external relationships, macros, entities, duplicate parts and escaping ZIP names", async () => {
   const s = await setup();
   const file = path.join(s.root, "unsafe.docx");
-  for (const kind of ["external", "macro", "entity", "duplicate", "escape"]) {
+  for (const kind of [
+    "external",
+    "external-escaped",
+    "external-prefixed",
+    "external-implicit",
+    "macro",
+    "entity",
+    "duplicate",
+    "escape",
+  ]) {
     const altered = execFileSync(
       process.env.PYTHON ||
         (process.platform === "win32" ? "python" : "python3"),
@@ -188,6 +197,9 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as source, zipfile.Zip
   if kind=='macro' and name=='[Content_Types].xml': data=data.replace(b'wordprocessingml.document.main+xml',b'wordprocessingml.document.macroEnabled.main+xml')
   if kind=='entity' and name=='word/document.xml': data=b'<!DOCTYPE x [<!ENTITY a "bad">]>'+data
   if kind=='external' and name=='_rels/.rels': data=data.replace(b'</Relationships>',b'<Relationship Id="unsafe" Type="https://example.invalid" Target="https://example.invalid" TargetMode="External"/></Relationships>')
+  if kind=='external-escaped' and name=='_rels/.rels': data=data.replace(b'</Relationships>',b'<Relationship Id="unsafe" Type="https://example.invalid" Target="https://example.invalid" TargetMode="Extern&#97;l"/></Relationships>')
+  if kind=='external-prefixed' and name=='_rels/.rels': data=data.replace(b'</Relationships>',b'<r:Relationship xmlns:r="http://schemas.openxmlformats.org/package/2006/relationships" Id="unsafe" Type="https://example.invalid" Target="https://example.invalid" TargetMode="Extern&#x61;l"/></Relationships>')
+  if kind=='external-implicit' and name=='_rels/.rels': data=data.replace(b'</Relationships>',b'<Relationship Id="unsafe" Type="https://example.invalid" Target="https://example.invalid"/></Relationships>')
   target.writestr(name,data)
  if kind=='duplicate': target.writestr('word/document.xml',source.read('word/document.xml'))
  if kind=='escape': target.writestr('../unsafe.xml',b'<x/>')

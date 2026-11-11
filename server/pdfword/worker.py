@@ -24,6 +24,101 @@ class Rejected(ValueError):
     pass
 
 
+def text_geometry(textpage):
+    """Validate glyph advances, including positioning hidden inside a TJ object.
+
+    Object bounds alone cannot distinguish one sentence from two table cells.
+    Generated separators are not glyphs and must not conceal abnormal advances.
+    """
+    count = textpage.count_chars()
+    if count > 1000000:
+        raise Rejected('The PDF contains too much text to convert.')
+    groups = {}
+    seams = {}
+    previous_identifier = None
+    separator = ''
+    for index in range(count):
+        if pdf.raw.FPDFText_HasUnicodeMapError(textpage, index):
+            raise Rejected('The PDF text could not be read reliably.')
+        code = pdf.raw.FPDFText_GetUnicode(textpage, index)
+        if not code or code > 0x10ffff:
+            raise Rejected('The PDF text could not be read reliably.')
+        character = chr(code)
+        if character.isspace():
+            separator += character
+            continue
+        if pdf.raw.FPDFText_IsGenerated(textpage, index):
+            raise Rejected('The PDF text structure needs review.')
+        identifier = ctypes.cast(pdf.raw.FPDFText_GetTextObject(textpage, index), ctypes.c_void_p).value
+        if identifier is None:
+            raise Rejected('The PDF text structure needs review.')
+        if previous_identifier is not None and previous_identifier != identifier:
+            seams[(previous_identifier, identifier)] = separator
+        previous_identifier, separator = identifier, ''
+        bounds = textpage.get_charbox(index, loose=True)
+        x, y = ctypes.c_double(), ctypes.c_double()
+        if not pdf.raw.FPDFText_GetCharOrigin(textpage, index, ctypes.byref(x), ctypes.byref(y)):
+            raise Rejected('The PDF text position needs review.')
+        if not all(math.isfinite(v) for v in (*bounds, x.value, y.value)):
+            raise Rejected('The PDF text position needs review.')
+        glyph = (x.value, y.value, bounds, unicodedata.category(character))
+        group = groups.setdefault(identifier, [])
+        if group:
+            previous = group[-1]
+            em = max(bounds[3] - bounds[1], previous[2][3] - previous[2][1])
+            if (abs(y.value - previous[1]) > 1
+                    or x.value - previous[2][2] > max(6, em)
+                    or (glyph[3] not in ('Mn', 'Mc', 'Me') and previous[3] not in ('Mn', 'Mc', 'Me')
+                        and x.value < previous[0] + max(.05, (previous[2][2] - previous[2][0]) * .35))):
+                raise Rejected('Tables, columns and overlapping text are not supported yet.')
+        group.append(glyph)
+    return groups, seams
+
+
+def readable_lines(runs, seams):
+    """Join adjacent horizontal runs without mistaking wide gaps for prose."""
+    runs.sort(key=lambda item: -item[5])
+    rows = []
+    for run in runs:
+        if rows and abs(rows[-1][0][5] - run[5]) <= 1:
+            rows[-1].append(run)
+        else:
+            rows.append([run])
+    lines = []
+    for row in rows:
+        row.sort(key=lambda item: item[2])
+        combined = row[0]
+        for run in row[1:]:
+            previous = combined
+            gap = run[6] - previous[7]
+            if gap < -1 or gap > max(3, min(previous[8], run[8]) * .5):
+                raise Rejected('Tables, columns and overlapping text are not supported yet.')
+            if previous[4][-1:].isspace() or run[4][:1].isspace():
+                separator = ''
+            elif (previous[9], run[9]) in seams:
+                separator = seams[(previous[9], run[9])]
+                if any(c in '\r\n\t' for c in separator):
+                    raise Rejected('The PDF text spacing needs review.')
+            elif gap <= 1:
+                separator = ''
+            else:
+                raise Rejected('The PDF text spacing needs review.')
+            combined = (max(previous[0], run[0]), min(previous[1], run[1]),
+                         min(previous[2], run[2]), max(previous[3], run[3]),
+                         previous[4] + separator + run[4], previous[5],
+                         previous[6], run[7], min(previous[8], run[8]), run[9])
+        lines.append(combined)
+    if any(a[1] < b[0] - 2 for a, b in zip(lines, lines[1:])):
+        raise Rejected('Tables, columns and overlapping text are not supported yet.')
+    # Disjoint horizontal text lanes with interleaved rows are not ordinary
+    # wrapping. Refuse rather than silently alternate a staggered two-column PDF.
+    for a, b, c in zip(lines, lines[1:], lines[2:]):
+        if ((a[3] + 24 < b[2] and c[3] + 24 < b[2])
+                or (b[3] + 24 < a[2] and b[3] + 24 < c[2])):
+            raise Rejected('Tables, columns and overlapping text are not supported yet.')
+    return lines
+
+
 def parse_pdf(source):
     if not 0 < source.stat().st_size <= 30 * 1024**2:
         raise Rejected('Choose a PDF under 30 MB.')
@@ -55,6 +150,7 @@ def parse_pdf(source):
                 crop = page.get_bbox()
                 lines = []
                 with closing(page.get_textpage()) as textpage:
+                    geometry, seams = text_geometry(textpage)
                     objects = 0
                     for obj in page.get_objects(max_depth=0, textpage=textpage):
                         objects += 1
@@ -72,8 +168,8 @@ def parse_pdf(source):
                                 or matrix.a <= 0 or matrix.d <= 0
                                 or pdf.raw.FPDFClipPath_CountPaths(pdf.raw.FPDFPageObj_GetClipPath(obj)) > 0):
                             raise Rejected('The PDF contains styled or hidden text that needs visual review.')
-                        value = obj.extract().strip()
-                        if not value:
+                        value = obj.extract()
+                        if not value.strip():
                             continue
                         if any(ord(c) < 32 and c not in '\n\r\t' for c in value) or '\ufffd' in value:
                             raise Rejected('The PDF text could not be read reliably.')
@@ -87,19 +183,23 @@ def parse_pdf(source):
                         total += len(value)
                         if len(value) > 50000 or total > 1000000:
                             raise Rejected('The PDF contains too much text to convert.')
-                        lines.append((top, bottom, left, right, value))
+                        identifier = ctypes.cast(obj.raw, ctypes.c_void_p).value
+                        glyphs = geometry.get(identifier)
+                        if not glyphs:
+                            raise Rejected('The PDF text structure needs review.')
+                        em = max(glyphs[0][2][3] - glyphs[0][2][1], 1)
+                        lines.append((top, bottom, left, right, value, glyphs[0][1],
+                                      glyphs[0][0], glyphs[-1][2][2], em, identifier))
                 if not lines:
                     raise Rejected('This PDF has a blank or scanned page. OCR is not available yet.')
-                lines.sort(key=lambda item: (-item[0], item[2]))
-                if any(a[1] < b[0] - 2 for a, b in zip(lines, lines[1:])):
-                    raise Rejected('Tables, columns and overlapping text are not supported yet.')
+                lines = readable_lines(lines, seams)
                 result['pages'].append({
                     'index': index, 'width': width, 'height': height, 'rotation': 0,
                     'blocks': [{'id': f'p{index}-b{order}', 'kind': 'paragraph',
                                 'bbox': [line[2] - crop[0], crop[3] - line[0],
                                          line[3] - crop[0], crop[3] - line[1]],
                                 'source': 'native', 'reading_order': order,
-                                'text_raw': line[4]} for order, line in enumerate(lines)],
+                                'text_raw': line[4].strip()} for order, line in enumerate(lines)],
                 })
     return result
 

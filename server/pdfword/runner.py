@@ -22,7 +22,7 @@ def run(directory):
     cancel = directory / 'cancel'
     name = 'smartpdf-pdfword-' + uuid.uuid4().hex
     done = threading.Event()
-    created = False
+    create_attempted = False
     timed_out = False
 
     def docker(*args, timeout=20, input=None):
@@ -56,11 +56,12 @@ def run(directory):
         if cancel.exists():
             return 0
         emit(state='starting')
+        # A timed-out Docker client may still have created the named container.
+        create_attempted = True
         docker('create', '--name', name, '--network', 'none', '--memory', '768m', '--memory-swap', '768m',
                '--cpus', '1', '--pids-limit', '64', '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL',
                '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=160m', '--user', '10001:10001',
                '--label', 'smartpdf.pdfword-service=pdfword-v1', '--entrypoint', 'sleep', IMAGE, 'infinity')
-        created = True
         if cancel.exists():
             return 0
         docker('start', name)
@@ -103,7 +104,7 @@ def run(directory):
     finally:
         done.set()
         watcher.join(timeout=25)
-        if created:
+        if create_attempted:
             try:
                 if docker('ps', '-aq', '--filter', 'name=^/' + name + '$').stdout.strip():
                     docker('rm', '-fv', name)

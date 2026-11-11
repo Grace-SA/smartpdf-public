@@ -11,7 +11,7 @@ import runner
 
 
 class RunnerTests(unittest.TestCase):
-    def execute(self, failure=None, cancel=False):
+    def execute(self, failure=None, cancel=False, cleanup_failure=None):
         commands = []
         alive = False
         with tempfile.TemporaryDirectory() as temporary:
@@ -21,9 +21,19 @@ class RunnerTests(unittest.TestCase):
                 nonlocal alive
                 commands.append(args)
                 stdout = b''
-                if args[1] == 'create': alive = True
-                if args[1] == 'ps': stdout = b'synthetic-id' if alive else b''
-                if args[1] == 'rm': alive = False
+                if args[1] == 'create':
+                    alive = failure != 'create-timeout-absent'
+                    if failure in ('create-timeout', 'create-timeout-absent'):
+                        raise subprocess.TimeoutExpired(args, 20)
+                if args[1] == 'ps':
+                    if cleanup_failure == 'inspect':
+                        raise subprocess.TimeoutExpired(args, 20)
+                    stdout = b'synthetic-id' if alive else b''
+                if args[1] == 'rm':
+                    if cleanup_failure == 'remove':
+                        raise subprocess.CalledProcessError(1, args, stderr=b'synthetic removal failure')
+                    if cleanup_failure != 'still-present':
+                        alive = False
                 if '/tmp/worker.py' in args and '/tmp/output.docx' in args:
                     if failure == 'rejected':
                         raise subprocess.CalledProcessError(2, args, output=b'{"error":"Scans unsupported","code":"INPUT_REJECTED"}')
@@ -62,6 +72,39 @@ class RunnerTests(unittest.TestCase):
                 self.assertFalse(alive)
                 if failure == 'rejected':
                     self.assertEqual(messages[-1]['code'], 'INPUT_REJECTED')
+
+    def test_create_timeout_reconciles_exact_container_name(self):
+        status, exists, alive, commands, messages = self.execute('create-timeout')
+        self.assertEqual(status, 3)
+        self.assertFalse(exists)
+        self.assertFalse(alive)
+        self.assertEqual([command[1] for command in commands], ['create', 'ps', 'rm', 'ps'])
+        create = commands[0]
+        name = create[create.index('--name') + 1]
+        self.assertEqual(commands[1], ['docker', 'ps', '-aq', '--filter', 'name=^/' + name + '$'])
+        self.assertEqual(commands[2], ['docker', 'rm', '-fv', name])
+        self.assertEqual(commands[3], commands[1])
+        self.assertFalse(any(message.get('cleanupFailed') for message in messages))
+
+    def test_create_timeout_without_container_checks_absence(self):
+        status, exists, alive, commands, messages = self.execute('create-timeout-absent')
+        self.assertEqual(status, 3)
+        self.assertFalse(exists)
+        self.assertFalse(alive)
+        self.assertEqual([command[1] for command in commands], ['create', 'ps', 'ps'])
+        self.assertFalse(any(message.get('cleanupFailed') for message in messages))
+
+    def test_create_timeout_reports_uncertain_cleanup(self):
+        for failure in ('inspect', 'remove', 'still-present'):
+            with self.subTest(cleanup_failure=failure):
+                status, exists, alive, commands, messages = self.execute(
+                    'create-timeout', cleanup_failure=failure)
+                self.assertEqual(status, 3)
+                self.assertFalse(exists)
+                self.assertTrue(alive)
+                self.assertEqual(sum(bool(message.get('cleanupFailed')) for message in messages), 1)
+                self.assertEqual(messages[-1], {'cleanupFailed': True})
+                self.assertTrue(any(command[1] == 'ps' for command in commands))
 
     def test_cancellation_discards_result_and_removes_container(self):
         _, exists, alive, _, _ = self.execute(cancel=True)

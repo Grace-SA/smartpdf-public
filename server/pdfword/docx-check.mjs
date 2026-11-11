@@ -88,11 +88,26 @@ export async function checkDocx(file) {
     const xml = value.toString("utf8");
     if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true)
       fail();
-    if (
-      name.endsWith(".rels") &&
-      /TargetMode\s*=\s*["']External["']/i.test(xml)
-    )
-      fail();
+    if (name.endsWith(".rels")) {
+      // Inspect decoded XML attributes, not source spelling: character
+      // references such as Extern&#97;l have the same OPC meaning as External.
+      const relationships = new XMLParser({
+        ignoreAttributes: false,
+        removeNSPrefix: true,
+        isArray: (tag) => tag === "Relationship",
+      }).parse(xml).Relationships;
+      if (!relationships) fail();
+      for (const relationship of relationships.Relationship || []) {
+        const mode = relationship["@_TargetMode"];
+        const target = relationship["@_Target"];
+        if (
+          (mode !== undefined && mode !== "Internal") ||
+          typeof target !== "string" ||
+          /^[a-z][a-z0-9+.-]*:|^\/\//i.test(target)
+        )
+          fail();
+      }
+    }
     entries.set(name, xml);
     offset += 46 + nameSize + extra + comment;
     localEnd = data + packed;

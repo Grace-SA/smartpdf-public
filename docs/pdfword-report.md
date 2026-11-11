@@ -151,3 +151,53 @@ configuration. Record artifact hashes and an annotated release tag only after
 successful production smoke checks. Publication is currently deferred by the
 user; neither earlier authorization nor local checks waive that hold or the
 release gates.
+
+## 2026-11-11 quality follow-up
+
+The user's updated goal is broad common-file conversion quality, with code review,
+fixes and GitHub submission only. The broader gate is defined in
+[the quality standard](pdfword-quality-standard.md). This follow-up improves the
+native-text milestone; it does **not** establish general-purpose readiness.
+Earlier counts above belong to the earlier revision and were not rerun here.
+
+Review and fixes:
+
+- Inspect glyph advances inside each PDF text object. Large TJ positioning gaps,
+  reversed/overlapping advances and an interleaved staggered-column case no longer
+  silently become ordinary paragraphs. Preserve whole-file refusal, including
+  when an unsupported page appears after supported pages.
+- Reconstruct adjacent horizontal text runs, including split words, mixed sizes,
+  Chinese runs and source spaces. Group compatible baselines before x-ordering.
+  Follow the parser's inter-object separators rather than inventing spaces from
+  a geometric threshold, which could change `123.45` to `123 .45`.
+- Reconcile a uniquely named Docker container whenever creation was attempted,
+  including when the client times out after a daemon-side creation. Report
+  uncertain cleanup instead of treating the timeout as proof that nothing exists.
+- Validate decoded OPC relationship attributes so character references and
+  namespace prefixes cannot hide External relationships. Reject implicit absolute
+  external targets as well.
+- Strengthen the 200-page test with distinct ordered markers. Add an independent
+  pypdf-versus-DOCX Chinese text check and edit/save/reopen regression.
+
+Verified in the follow-up environment with the repository's pinned Python runtime
+packages: 16 Python tests and 5 focused HTTP/service tests passed. Scoped JavaScript
+format validation passed. Seven synthetic DOCX outputs passed independent OPC
+validation and LibreOffice rendering, with exact text and one-page counts checked
+by pypdf; Chinese and decimal-number page images were visually inspected. The
+three encoded/prefixed/implicit external-target variants pass the old DOCX
+validator and are rejected by the corrected validator. The new importer tests fail against the old worker:
+four supported adjacent-run cases are wrongly refused, and five unsafe/partial
+conversion assertions fail. Runner fault injection detects four failures against
+the old implementation. Follow-up review found the small baseline-offset case; its fix is included. Numeric-spacing review found an invented-space case; its fix and
+regression are included. Only original synthetic source generators are added.
+
+Verification limits: this environment has no Docker engine or authenticated Git
+clone. GitHub source reads produced a sparse materialization; large baseline
+binary assets were unavailable through that route. The unchanged full repository
+privacy/asset check therefore cannot pass here, and the cumulative frontend build,
+browser suites and real-container pipeline were not rerun. Focused service tests
+use the real HTTP service with synthetic worker output; runner tests fault-inject
+Docker. These are not substitutes for the missing gates. No new Microsoft Word,
+physical-phone or production-host acceptance is claimed. All unchanged remote
+files and assets must retain their original blob IDs when this text-only update
+is submitted. Production remains deferred.
