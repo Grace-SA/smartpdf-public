@@ -7,9 +7,13 @@
 - 固定 Stirling 3.2.2 Java API 适配；不自动重试转换 POST，不自动切换云服务。
 - PDFium 原生文字和坐标修复，包含字体矩阵缩放、页面旋转、字重和东亚字体标记。
 - 内容检查保留有可信文字/数字的原生表格；复杂图形采用原稿栅格，不把图片冒充可编辑图表。
-- PP-OCRv6 medium 官方 ONNX 检测/识别；Unlimited OCR 2 可选离线交叉校验。分歧、低置信度、非均匀背景、倾斜区域保留原图并提示复核。
+- PP-OCRv6 medium 官方 ONNX 检测/识别；Unlimited OCR 2 与 OXR 可配置为离线区域复核。至少一个复核器确认位置和有序文字后才替换文字；配置两者时取共同通过的区域。无独立复核时保留扫描原图。
+- 简单网格逐行逐列核对文字与数字，生成定位文本框；不宣称恢复原生 PowerPoint 表格。合并、空白、多行单元格或重叠/分歧区域保留图像。
+- 支持均匀浅色纸张、估计文字颜色，并从已安装字体中比较拉丁文字的衬线、无衬线、等宽及粗体字形。字体为估计和替代，不嵌入、不保证接收端完全一致。
 - LibreOffice 独立渲染原结果与候选结果，逐页拒绝会使视觉差异明显增大的坐标修复。像素分数仅为筛查，不是正确率。
 - 上传限制、独立 worker、下载令牌、取消、过期清理；POSIX 取消会终止 worker 的 OCR 子进程组。
+- OCR、OXR 图块、独立渲染临时文件都置于任务目录，取消/过期清理包含这些派生文件。
+- 原生文字恢复出现已知数字/字符缺失时逐页退回原稿图片；保留失败诊断，并在下载前列出不可编辑的页。兜底不是恢复成功。
 
 ## 配置和运行
 
@@ -47,6 +51,25 @@ PYTHONPATH=src .venv/bin/python -m smartppt.worker
 配置 `SMARTPPT_OCR_VERIFIER_PYTHON`、`SMARTPPT_OCR_VERIFIER_RUNNER`（本目录 `ocr/unlimited_runner.py`）和 `SMARTPPT_U2_MODEL`（离线模型目录）即可启用。脚本禁用在线模型访问和远程代码执行。不要在通用 Linux 环境安装 Mac MLX 包。
 
 固定模型：`mlx-community/Unlimited-OCR-2-bf16`，revision `850d1e483f5a82a0597f0a45aac31b07ba840df2`；官方底座 `baidu/Unlimited-OCR-2`，revision `0480966938291445591f69f08a13b041c073a96a`。模型许可及依赖见本目录 `THIRD_PARTY.md`。
+
+## 可选的 SoMark OXR
+
+项目方已确认满足当前免费使用门槛。页面底部包含 PaddleOCR、Unlimited OCR 2 来源与 OXR 指定引用。当前实测适配器为 Mac MLX BF16 识别 + 本机 CPU D-FINE，**不是已经验证的 Linux 生产镜像**。只接受回环检测服务，不调用公共演示站或免费托管 API。
+
+预先准备 `ocr/oxr-manifest.json` 固定的源代码/权重及此前研究使用的独立 MLX、Torch CPU 环境。启动器和识别器会验证所用文件大小及 SHA-256，不会自动下载。模型目录不可由上传请求指定。
+
+```sh
+export SMARTPPT_OXR_SOURCE=/absolute/path/to/OXR-b2ee4ac12ed220bf7fefa74951babf0d3b05e766
+export SMARTPPT_OXR_MODEL=/absolute/path/to/oxr-mlx-model
+export SMARTPPT_OXR_LAYOUT_MODEL=/absolute/path/to/oxr-layout-model
+export SMARTPPT_OXR_LAYOUT_PYTHON=/absolute/path/to/torch-cpu-env/bin/python
+export SMARTPPT_OXR_PYTHON=/absolute/path/to/mlx-env/bin/python
+export SMARTPPT_OXR_RUNNER="$PWD/ocr/oxr_runner.py"
+# 单独监督这个常驻检测进程；默认端口 18081，仅监听 127.0.0.1。
+.venv/bin/python ocr/start_oxr_layout.py
+```
+
+当前上游源代码 revision 为 `b2ee4ac12ed220bf7fefa74951babf0d3b05e766`；MLX 模型 revision 为 `bdbec15bad81efe04ff0e66f20d36931cce2340a`；官方检测权重 revision 为 `c708407f9d2b4df658f2543d9132b62bb7221df4`。不要把 MLX 实测当作通用 CPU/Linux 支持。生产部署仍需建立独立锁定镜像并重跑验收。
 
 ## 验证与边界
 

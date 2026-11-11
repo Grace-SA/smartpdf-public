@@ -21,6 +21,8 @@ class Settings:
     ocr_runner: str = field(default_factory=lambda: os.getenv('SMARTPPT_OCR_RUNNER', ''))
     ocr_verifier_python: str = field(default_factory=lambda: os.getenv('SMARTPPT_OCR_VERIFIER_PYTHON', ''))
     ocr_verifier_runner: str = field(default_factory=lambda: os.getenv('SMARTPPT_OCR_VERIFIER_RUNNER', ''))
+    oxr_python: str = field(default_factory=lambda: os.getenv('SMARTPPT_OXR_PYTHON', ''))
+    oxr_runner: str = field(default_factory=lambda: os.getenv('SMARTPPT_OXR_RUNNER', ''))
     renderer_path: str = field(default_factory=lambda: os.getenv('SMARTPPT_RENDERER', ''))
 
     @property

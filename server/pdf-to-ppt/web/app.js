@@ -34,9 +34,17 @@ async function poll(epoch) {
     busy=false; $('cancel').hidden=true; $('progress-area').hidden=true;
     if (['ready','needs_review'].includes(data.state)) {
       $('result').hidden=false;
+      $('page-review').replaceChildren();
       $('status').textContent=data.mode==='preserve' ? 'Ready. Each slide contains a page image; its text and objects are not editable.' : 'Converted — review required. Check the layout, numbers and scanned text before using this file.';
       if (data.report?.assistance) {
         $('status').textContent += ' Graphics remain images.';
+        for (const page of data.report.assistance.pages) {
+          let detail = '';
+          if (page.route === 'source-image-fallback') detail = 'Kept as a page image because text or numbers could not be recovered reliably. This page is not editable.';
+          else if (page.route === 'paddle-ocr') detail = `${page.editable_lines} of ${page.detected_lines} detected text lines are editable. Check scanned text against the source.`;
+          else if (page.route === 'stirling-table') detail = 'Check table rows, columns and merged cells.';
+          if (detail) { const item = document.createElement('li'); item.textContent = `Page ${page.page}: ${detail}`; $('page-review').append(item); }
+        }
         if (data.report.assistance.pages.some(p => p.route === 'paddle-ocr' && p.editable_lines < p.detected_lines)) {
           $('status').textContent += ' Some scanned text remains an image because recognition or placement could not be verified.';
         }

@@ -51,7 +51,7 @@ def compare_and_restore(original,target,source,report,baseline_pdf,candidate_pdf
 def run_gate(original,target,source,report,settings):
     if not any(p['route']=='native-coordinate' for p in report['pages']):return report
     if not settings.renderer_path or not Path(settings.renderer_path).is_file():raise ConversionError('layout_renderer_not_configured')
-    with tempfile.TemporaryDirectory(prefix='smartppt-render-gate-') as folder:
+    with tempfile.TemporaryDirectory(prefix='smartppt-render-gate-',dir=Path(source).parent) as folder:
         folder=Path(folder);config=folder/'fonts.conf'
         font_dirs=[Path('/System/Library/Fonts'),Path('/usr/share/fonts')]
         if os.getenv('SMARTPPT_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_FONT_DIR']))
