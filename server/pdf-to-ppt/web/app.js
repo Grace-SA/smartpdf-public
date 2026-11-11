@@ -41,6 +41,7 @@ async function poll(epoch) {
         for (const page of data.report.assistance.pages) {
           let detail = '';
           if (page.route === 'source-image-fallback') detail = 'Kept as a page image because text or numbers could not be recovered reliably. This page is not editable.';
+          else if (page.route === 'native-regions') detail = `${page.editable_runs} text runs are editable. Other text and graphics remain images. Review fonts, numbers and reading order.`;
           else if (page.route === 'paddle-ocr') detail = `${page.editable_lines} of ${page.detected_lines} detected text lines are editable. Check scanned text against the source.`;
           else if (page.route === 'stirling-table') detail = 'Check table rows, columns and merged cells.';
           if (detail) { const item = document.createElement('li'); item.textContent = `Page ${page.page}: ${detail}`; $('page-review').append(item); }

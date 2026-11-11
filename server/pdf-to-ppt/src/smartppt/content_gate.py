@@ -10,7 +10,7 @@ from .pdf import render_page
 from .quality import inspect_pptx
 
 
-def enforce_content_safety(source, target, info, assistance):
+def enforce_content_safety(source, target, info, assistance, settings=None):
     before = inspect_pptx(target, info, 'editable')
     severe = {'text_mismatch', 'numeric_mismatch', 'replacement_character'}
     problems = {}
@@ -38,6 +38,18 @@ def enforce_content_safety(source, target, info, assistance):
         changed = True
     if changed:
         prs.save(target)
+    if changed and settings is not None:
+        from .regional import recover_regions
+        from .config import ConversionError
+        try:
+            recovered=recover_regions(source,target,[p['page'] for p in assistance['pages'] if p['route']=='source-image-fallback'],settings)
+        except ConversionError as error:
+            recovered={}
+            assistance['regional_recovery_error']=error.code
+        for item in assistance['pages']:
+            if item['page'] in recovered:
+                item.update(recovered[item['page']])
     assistance['source_image_pages'] = [p['page'] for p in assistance['pages'] if p['route']=='source-image-fallback']
-    assistance['content_gate'] = 'fallback is appearance-only; original recovery failures retained'
+    assistance['partial_native_pages'] = [p['page'] for p in assistance['pages'] if p['route']=='native-regions']
+    assistance['content_gate'] = 'unrecovered regions remain images; original recovery failures retained'
     return assistance

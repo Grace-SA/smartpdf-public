@@ -54,7 +54,7 @@ def run_job(settings, job_id):
                 assistance = assist(source, target, settings)
                 assistance = run_gate(original,target,source,assistance,settings)
                 from .content_gate import enforce_content_safety
-                assistance = enforce_content_safety(source,target,info,assistance)
+                assistance = enforce_content_safety(source,target,info,assistance,settings)
                 original.unlink(missing_ok=True)
         else:
             convert_preserve(source, target, info)

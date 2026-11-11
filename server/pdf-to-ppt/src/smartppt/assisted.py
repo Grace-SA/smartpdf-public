@@ -10,7 +10,7 @@ from copy import deepcopy
 from collections import Counter
 from pathlib import Path
 import numpy as np
-from PIL import Image,ImageFont
+from PIL import Image,ImageFont,ImageDraw
 import pypdfium2 as pdfium
 from pptx import Presentation
 from .config import ConversionError
@@ -19,6 +19,7 @@ from .pdf import render_page
 from .quality import normalized,numeric_tokens,shape_text,text_metrics
 from .consensus import region_agreement,overlapping_lines,erase_bounds
 from .ocr_font import latin_font
+from .deskew import rectified_line,mapped_point
 
 
 def scan_page(page):
@@ -102,19 +103,27 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             warnings.append('ocr_models_disagree_kept_as_image');continue
         if index in overlaps:
             warnings.append('overlapping_ocr_kept_as_image');continue
-        box=np.array(line['polygon']);l,t,r,b=erase_bounds(line)
-        l=max(0,l);t=max(0,t);r=min(image.width,r);b=min(image.height,b)
+        box=np.array(line['polygon']);working=image;mapping=None
+        edge=box[1]-box[0];height=np.linalg.norm(box[3]-box[0]);width=np.linalg.norm(edge)
+        if abs(math.degrees(math.atan2(edge[1],edge[0])))>8 or (height>width*2 and len(normalized(line['text']))>1):
+            warnings.append('rotated_ocr_kept_as_image');continue
+        if abs(box[0,1]-box[1,1])>max(3,np.linalg.norm(box[3]-box[0])*.12):
+            rectified=rectified_line(image,line['polygon'])
+            if rectified is None:
+                warnings.append('rotated_ocr_kept_as_image');continue
+            working,mapping,polygon=rectified;box=np.asarray(polygon)
+        pixels=np.asarray(working)
+        l,t,r,b=erase_bounds({'polygon':box.tolist()})
+        l=max(0,l);t=max(0,t);r=min(working.width,r);b=min(working.height,b)
         if r-l<2 or b-t<2:continue
         if line['confidence']<.9:
             warnings.append('low_confidence_text_kept_as_image');continue
         # Uniform light backgrounds, including tinted paper. Compare each RGB channel
         # to its median; a uniformly colored border is not inherently nonuniform.
-        crop=a[t:b,l:r];border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]))
+        crop=pixels[t:b,l:r];border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]))
         background=np.median(border,axis=0)
         if background.min()<180 or np.quantile(np.abs(border.astype(float)-background),.95)>12:
             warnings.append('nonuniform_background_kept_as_image');continue
-        if abs(box[0,1]-box[1,1])>max(3,(b-t)*.12):
-            warnings.append('rotated_ocr_kept_as_image');continue
         ink_mask=np.max(background-crop.astype(float),axis=2)>65
         ink=np.argwhere(coherent_ink(ink_mask))
         if not len(ink):
@@ -122,18 +131,27 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         bounds=(l,t,r,b)
         if len(ink):bounds=(l+int(ink[:,1].min()),t+int(ink[:,0].min()),l+int(ink[:,1].max())+1,t+int(ink[:,0].max())+1)
         color=tuple(int(x) for x in np.quantile(crop[ink_mask],.2,axis=0))
-        a[t:b,l:r]=background.astype(np.uint8)
-        accepted.append((line,*bounds,color,background))
+        if mapping is None:a[t:b,l:r]=background.astype(np.uint8)
+        else:
+            mask=Image.new('1',image.size)
+            ImageDraw.Draw(mask).polygon([tuple(mapped_point(mapping,x,y)) for x,y in [(l,t),(r,t),(r,b),(l,b)]],fill=1)
+            # Rotation can expand padding by a fraction of a pixel. Clip the
+            # actual erase mask to the same integer bounds used by overlap checks.
+            ml,mt,mr,mb=erase_bounds(line)
+            ml=max(0,ml);mt=max(0,mt);mr=min(image.width,mr);mb=min(image.height,mb)
+            patch=a[mt:mb,ml:mr]
+            patch[np.asarray(mask,dtype=bool)[mt:mb,ml:mr]]=background.astype(np.uint8)
+        accepted.append((line,*bounds,color,background,working,mapping))
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
     clear_shapes(slide);add_background(slide,Image.fromarray(a),w*scale,h*scale,(ox,oy))
     font_choices=[]
-    for line,l,t,r,b,color,background in accepted:
+    for line,l,t,r,b,color,background,working,mapping in accepted:
         sx=w*scale/image.width;sy=h*scale/image.height;size=(b-t)*sy/0.75
         family,_=font_family('Arial',line['text'])
         # Glyph height alone is not evidence of bold (especially mixed CJK/Latin).
         bold=False
-        choice=latin_font(line['text'],image.crop((l,t,r,b)),background,os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))
+        choice=latin_font(line['text'],working.crop((l,t,r,b)),background,os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))
         if choice:
             family=choice['family'];bold=choice['bold']
             font_choices.append(family+(' Bold' if bold else ''))
@@ -145,13 +163,20 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             font=ImageFont.truetype(str(metric_path),100)
             size=min(size,(r-l)*sx/max(1,font.getlength(line['text']))*100)
         else:warnings.append('font_metrics_unavailable')
-        add_text(slide,line['text'],ox+l*sx,oy+t*sy-size*.18,(r-l)*sx+size*.3,size*1.5,size,family,bold,color)
+        shape=add_text(slide,line['text'],ox+l*sx,oy+t*sy-size*.18,(r-l)*sx+size*.3,size*1.5,size,family,bold,color)
+        if mapping is not None:
+            width,height=shape.width/12700,shape.height/12700
+            center=mapped_point(mapping,l+width/(2*sx),t-size*.18/sy+height/(2*sy))
+            from pptx.util import Pt
+            shape.left=Pt(ox+center[0]*sx-width/2);shape.top=Pt(oy+center[1]*sy-height/2)
+            shape.rotation=mapping['angle']%360
+            warnings.append('deskewed_ocr_requires_review')
     if not record['lines']:warnings.append('no_ocr_text_detected')
     if len(accepted)<len(record['lines']):warnings.append('partial_ocr_editability')
     return {'route':'paddle-ocr','detected_lines':len(record['lines']),'editable_lines':len(accepted),
         'independent_model_agreement':verified,
         'region_verified_lines':sum(line_approvals) if line_approvals is not None else None,
-        'estimated_fonts':sorted(set(font_choices)),
+        'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),
         'warnings':sorted(set(warnings+['ocr_requires_review'])),'graphics':'raster; not editable'}
 
 

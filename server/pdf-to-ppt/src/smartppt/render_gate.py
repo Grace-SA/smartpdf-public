@@ -48,24 +48,35 @@ def compare_and_restore(original,target,source,report,baseline_pdf,candidate_pdf
     return report
 
 
+def render_presentations(files, folder, settings):
+    """Render in a job-owned directory; callers validate the resulting pages."""
+    if not settings.renderer_path or not Path(settings.renderer_path).is_file():
+        raise ConversionError('layout_renderer_not_configured')
+    folder=Path(folder);config=folder/'fonts.conf'
+    font_dirs=[Path('/System/Library/Fonts'),Path('/usr/share/fonts')]
+    if os.getenv('SMARTPPT_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_FONT_DIR']))
+    if os.getenv('SMARTPPT_CJK_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_FONT']).parent)
+    dirs=''.join('<dir>'+escape(str(p))+'</dir>' for p in font_dirs if p.exists())
+    config.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'+dirs+
+        '<cachedir>'+escape(str(folder/'cache'))+'</cachedir><alias><family>SimSun</family><prefer><family>Noto Sans SC</family></prefer></alias></fontconfig>')
+    env=dict(os.environ,FONTCONFIG_FILE=str(config),XDG_CACHE_HOME=str(folder/'cache'),TMPDIR=str(folder))
+    try:
+        subprocess.run([settings.renderer_path,'-env:UserInstallation='+(folder/'profile').as_uri(),
+            '--headless','--convert-to','pdf','--outdir',str(folder),*[str(p) for p in files]],
+            capture_output=True,check=True,timeout=min(settings.job_timeout,180),env=env)
+    except (subprocess.TimeoutExpired,subprocess.CalledProcessError) as error:
+        raise ConversionError('layout_render_failed') from error
+    outputs=[folder/(Path(p).stem+'.pdf') for p in files]
+    if not all(p.is_file() for p in outputs):raise ConversionError('layout_render_failed')
+    return outputs
+
+
 def run_gate(original,target,source,report,settings):
     if not any(p['route']=='native-coordinate' for p in report['pages']):return report
     if not settings.renderer_path or not Path(settings.renderer_path).is_file():raise ConversionError('layout_renderer_not_configured')
     with tempfile.TemporaryDirectory(prefix='smartppt-render-gate-',dir=Path(source).parent) as folder:
-        folder=Path(folder);config=folder/'fonts.conf'
-        font_dirs=[Path('/System/Library/Fonts'),Path('/usr/share/fonts')]
-        if os.getenv('SMARTPPT_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_FONT_DIR']))
-        if os.getenv('SMARTPPT_CJK_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_FONT']).parent)
-        dirs=''.join('<dir>'+escape(str(p))+'</dir>' for p in font_dirs if p.exists())
-        config.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'+dirs+
-            '<cachedir>'+escape(str(folder/'cache'))+'</cachedir><alias><family>SimSun</family><prefer><family>Noto Sans SC</family></prefer></alias></fontconfig>')
         import shutil
+        folder=Path(folder)
         a=folder/'baseline.pptx';b=folder/'candidate.pptx';shutil.copyfile(original,a);shutil.copyfile(target,b)
-        env=dict(os.environ,FONTCONFIG_FILE=str(config),XDG_CACHE_HOME=str(folder/'cache'),TMPDIR=str(folder))
-        try:
-            subprocess.run([settings.renderer_path,'-env:UserInstallation='+(folder/'profile').as_uri(),
-                '--headless','--convert-to','pdf','--outdir',str(folder),str(a),str(b)],
-                capture_output=True,check=True,timeout=min(settings.job_timeout,180),env=env)
-        except (subprocess.TimeoutExpired,subprocess.CalledProcessError) as error:raise ConversionError('layout_render_failed') from error
-        if not a.with_suffix('.pdf').is_file() or not b.with_suffix('.pdf').is_file():raise ConversionError('layout_render_failed')
-        return compare_and_restore(original,target,source,report,a.with_suffix('.pdf'),b.with_suffix('.pdf'))
+        ap,bp=render_presentations([a,b],folder,settings)
+        return compare_and_restore(original,target,source,report,ap,bp)
