@@ -37,6 +37,7 @@ export SMARTPPT_RENDERER=/absolute/path/to/soffice
 export SMARTPPT_FONT_DIR=/absolute/path/to/fonts
 export SMARTPPT_CJK_FONT=/absolute/path/to/NotoSansSC-variable.ttf
 export SMARTPPT_CJK_SERIF_FONT=/absolute/path/to/NotoSerifSC-variable.ttf
+export SMARTPPT_CMU_FONT_DIR=/absolute/path/to/cm-unicode-0.7.0
 
 # 在分别继承以上环境的两个终端中运行：
 PYTHONPATH=src .venv/bin/python -m uvicorn smartppt.api:app --host 127.0.0.1 --port 8765
@@ -49,7 +50,7 @@ PYTHONPATH=src .venv/bin/python -m smartppt.worker
 
 可选的 `SMARTPPT_CJK_SERIF_FONT` 用于明确标识的宋体/明体及其拉丁字符，指向 [Noto 官方固定版本](https://github.com/notofonts/noto-cjk/blob/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/google-fonts/NotoSerifSC%5Bwght%5D.ttf)，文件 25,125,512 字节，SHA-256 `050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9`。部署准备阶段下载并校验，服务运行时不联网下载；未配置或文件缺失时保留原字体策略。仅固定哈希的字体允许嵌入，完整版权/OFL 随字体元数据保留。字体名称仍标明替代关系，不承诺宋体字形完全相同。
 
-最新验证及未通过项见 [本轮质量报告](../../docs/pdf-to-ppt-quality-round3-2026-11-12.md)。本模块仍是独立验收服务，尚未达到通用上线标准。
+最新验证及未通过项见 [本轮质量报告](../../docs/pdf-to-ppt-quality-round4-2026-11-12.md)。本模块仍是独立验收服务，尚未达到通用上线标准。
 
 ## 可选的 Unlimited OCR 2
 
@@ -79,6 +80,8 @@ export SMARTPPT_OXR_RUNNER="$PWD/ocr/oxr_runner.py"
 ```
 
 当前上游源代码 revision 为 `b2ee4ac12ed220bf7fefa74951babf0d3b05e766`；MLX 模型 revision 为 `bdbec15bad81efe04ff0e66f20d36931cce2340a`；官方检测权重 revision 为 `c708407f9d2b4df658f2543d9132b62bb7221df4`。不要把 MLX 实测当作通用 CPU/Linux 支持。生产部署仍需建立独立锁定镜像并重跑验收。
+
+可选 `SMARTPPT_CMU_FONT_DIR` 用于明确标识的 Computer Modern 正文，提供 CMU Serif、Sans Serif、Typewriter Text 的普通、粗体、斜体和粗斜体。使用 [CMU 官方 0.7.0 发布](https://sourceforge.net/projects/cm-unicode/files/cm-unicode/0.7.0/)，归档 SHA-256 为 `2609c14450f42d0bcd40203900afcb1d693521a9b24a18c65e14b6b0585ff150`，逐字体哈希见 `src/smartppt/cmu-fonts.json`。仅嵌入通过固定哈希与权限检查的完整字体，保留完整 OFL；不联网自动下载。数学/符号字体和无法可靠映射的私用区字符保留原图，CMU 正文字体不代表公式可编辑。
 
 ## 局部恢复、字体与倾斜扫描（本地验收版）
 
@@ -125,3 +128,5 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 输入结构为 `documents` 数组，每份包含 `eligible`、`generated` 和 `pages`；每页包含 `truth`、`predictions`、`truth_verified`。参考区域含 `id/text/bbox`，预测含 `text/bbox`，bbox 使用同一页坐标的 `[left,top,right,bottom]`。可提供唯一整数 `reading_order` 表示独立渲染器的字符顺序，区域分配始终使用几何。默认位置阈值 2pt。`structure_verified`、`render_verified` 未完成时，文档级完整成功率仍为未知；已验证成功数量的下限单独提供。不要把数据集的自动提取参考文本称为人工 OCR 真值。
 
 这是实验模块，不接生产路由、不修改现有 Office→PDF 引擎、不部署。公开发布仍需网站鉴权/配额、Linux 固定镜像、并发负载、PowerPoint/WPS、字体交付、扫描质量与真实设备验收。OCR 脚本退出和取消本机 worker 不代表远端 Stirling 的任务也已取消；引擎临时文件清理需另外验收。
+
+局部文字恢复会继续尝试对象、合并字形和词语策略。后续策略只有在保留每个已验证源字符位置、增加覆盖范围且再次通过区域及整页渲染检查时才会替换前一结果；同样的页脚文字出现在正文中不能代替原页脚。数字校验区分日期逗号与千位分组，并保留 Unicode 负号和前导小数点的数值意义。

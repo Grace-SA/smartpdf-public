@@ -1,4 +1,4 @@
-"""Embed only the pinned, openly licensed Noto face as a complete EOT font.
+"""Embed only pinned, openly licensed font faces as complete EOT fonts.
 
 System fonts and arbitrary fonts from uploaded PDFs are never redistributed.
 The whole static face is retained so recipients can type new characters.
@@ -10,6 +10,7 @@ from pathlib import Path
 from collections import defaultdict
 from copy import deepcopy
 import os
+import json
 import struct
 import unicodedata
 import zipfile
@@ -20,6 +21,9 @@ NOTO_SHA256='a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da'
 SERIF_SHA256='050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9'
 FAMILIES={'Noto Sans SC':('SMARTPPT_CJK_FONT','NotoSansSC-variable.ttf',NOTO_SHA256,'OFL-NotoSansSC.txt'),
           'Noto Serif SC':('SMARTPPT_CJK_SERIF_FONT','NotoSerifSC-variable.ttf',SERIF_SHA256,'OFL-NotoSerifSC.txt')}
+CMU_FACES=json.loads(Path(__file__).with_name('cmu-fonts.json').read_text())['families']
+PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)
+STYLES=('regular','bold','italic','boldItalic')
 P='http://schemas.openxmlformats.org/presentationml/2006/main'
 R='http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 REL='http://schemas.openxmlformats.org/package/2006/relationships'
@@ -87,7 +91,29 @@ def noto_payload(data,bold=False,family='Noto Sans SC'):
         return eot_payload(font,output.getvalue())
 
 
-def bundled_payloads(bold=False,family='Noto Sans SC'):
+@lru_cache(maxsize=12)
+def cmu_payload(data,family,style):
+    expected=CMU_FACES.get(family,{}).get(style,{})
+    if sha256(data).hexdigest()!=expected.get('sha256'):raise ConversionError('portable_font_integrity_failed')
+    from fontTools.ttLib import TTFont
+    with TTFont(BytesIO(data)) as font:
+        separate_unicode_aliases(font)
+        font['name'].setName(Path(__file__).with_name('OFL-CMU.txt').read_text(),13,3,1,0x409)
+        output=BytesIO();font.save(output)
+        return eot_payload(font,output.getvalue())
+
+
+def bundled_payloads(bold=False,family='Noto Sans SC',styles=None):
+    if family in CMU_FACES:
+        root=Path(os.getenv('SMARTPPT_CMU_FONT_DIR','cmu-fonts'))
+        required=set(styles or ())|{'regular'}|({'bold'} if bold else set());result={}
+        if required-set(STYLES):raise ConversionError('portable_font_integrity_failed')
+        for style in STYLES:
+            if style not in required:continue
+            path=root/CMU_FACES[family][style]['file']
+            if not path.is_file() or path.stat().st_size>4*1024*1024:raise ConversionError('portable_font_unavailable')
+            result[style]=cmu_payload(path.read_bytes(),family,style)
+        return result
     if family not in FAMILIES:raise ConversionError('portable_font_integrity_failed')
     env,filename,_,_=FAMILIES[family];path=Path(os.getenv(env,filename))
     if not path.is_file() or path.stat().st_size>32*1024*1024:raise ConversionError('portable_font_unavailable')
@@ -101,7 +127,7 @@ def embed_noto(source,target,payloads,family='Noto Sans SC'):
     with zipfile.ZipFile(source) as package:parts={n:package.read(n) for n in package.namelist()}
     parser=ET.XMLParser(resolve_entities=False,no_network=True)
     root=ET.fromstring(parts['ppt/presentation.xml'],parser)
-    if family not in FAMILIES:raise ConversionError('portable_font_integrity_failed')
+    if family not in PORTABLE_FAMILIES:raise ConversionError('portable_font_integrity_failed')
     if not any(family.encode() in data for name,data in parts.items() if name.startswith('ppt/slides/') and name.endswith('.xml')):
         raise ConversionError('portable_font_not_used')
     fonts=root.find('{'+P+'}embeddedFontLst')
@@ -115,7 +141,7 @@ def embed_noto(source,target,payloads,family='Noto Sans SC'):
     entry=ET.SubElement(fonts,'{'+P+'}embeddedFont');ET.SubElement(entry,'{'+P+'}font',typeface=family)
     rels=ET.fromstring(parts['ppt/_rels/presentation.xml.rels'],parser);types=ET.fromstring(parts['[Content_Types].xml'],parser)
     ids={r.get('Id') for r in rels};index=1
-    for style in ('regular','bold'):
+    for style in STYLES:
         if style not in payloads:continue
         while f'rIdSmartFont{index}' in ids or f'ppt/fonts/smart-noto-{index}.fntdata' in parts:index+=1
         rid=f'rIdSmartFont{index}';name=f'ppt/fonts/smart-noto-{index}.fntdata';ids.add(rid)

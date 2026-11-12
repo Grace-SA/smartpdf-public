@@ -20,14 +20,54 @@ from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Pt
 
 
-def font_family(name,text,flags=0):
+def modern_face(name):
+    """Resolve named TeX/CMU faces without guessing unknown symbol fonts."""
+    name=re.sub(r'^[A-Z]{6}\+','',name).lower().replace(' ','')
+    for pattern,family in ((r'cmuserif(?:[-,](?:roman|regular|bold|italic|bolditalic))?','CMU Serif'),
+                           (r'cmusansserif(?:[-,](?:medium|regular|bold|oblique|boldoblique))?','CMU Sans Serif'),
+                           (r'cmutypewritertext(?:[-,](?:regular|bold|italic|bolditalic))?','CMU Typewriter Text'),
+                           (r'cm(?:r|bx|b|ti|sl)\d+(?:[-,].*)?','CMU Serif'),
+                           (r'cmss(?:bx|i)?\d+(?:[-,].*)?','CMU Sans Serif'),
+                           (r'cmtt\d+(?:[-,].*)?','CMU Typewriter Text')):
+        if re.fullmatch(pattern,name):return family
+    return None
+
+
+def graphical_font(name):
+    """Preserve formula/symbol glyphs instead of trusting their text encoding."""
+    name=re.sub(r'^[A-Z]{6}\+','',name).lower().replace(' ','')
+    return (bool(re.fullmatch(r'(?:cmmi|cmsy|cmex|msam|msbm|rsfs|eufm|eufb|eurm|eusb|eusm|euex)\d+',name))
+            or any(k in name for k in ('wingdings','zapfdingbats','cambria-math','cambriamath','stixmath'))
+            or name in ('symbol','symbolmt'))
+
+
+def graphical_text(name,text):
+    # Unicode bullets and basic unit symbols have ordinary text equivalents.
+    # Do not turn a correct paragraph into a raster because its bullets use
+    # Symbol. Arbitrary formula glyphs and private-use encodings stay graphic.
+    return graphical_font(name) and any(c not in ' •µμ×.\t\r\n' for c in text)
+
+
+def cjk_text(text):
+    # Latin ligatures (FB00-FB06) and private-use glyphs are not Chinese.
+    ranges=((0x2E80,0x2FFF),(0x3000,0x312F),(0x31A0,0x31BF),(0x31F0,0x31FF),
+            (0x3400,0x4DBF),(0x4E00,0x9FFF),(0xF900,0xFAFF),(0xFE10,0xFE1F),
+            (0xFE30,0xFE4F),(0xFF00,0xFFEF),(0x20000,0x323AF))
+    return any(any(a<=ord(c)<=b for a,b in ranges) for c in text)
+
+
+def font_family(name,text,flags=0,base_name=None):
+    modern=modern_face(base_name or name);directory=os.getenv('SMARTPPT_CMU_FONT_DIR')
+    if modern and directory and not cjk_text(text):
+        files={'CMU Serif':'cmunrm.ttf','CMU Sans Serif':'cmunss.ttf','CMU Typewriter Text':'cmuntt.ttf'}
+        if (Path(directory)/files[modern]).is_file():return modern,name!=modern
     # Keep the Latin letters of a named CJK serif face in that same family.
     # Opt in only when the operator actually provides the optional font.
     lower=re.sub(r'^[A-Z]{6}\+','',name).lower().replace(' ','')
     serif_path=os.getenv('SMARTPPT_CJK_SERIF_FONT')
     if serif_path and Path(serif_path).is_file() and any(k in lower for k in ('songti','simsun','nsimsun','sung','mingliu','notoserifsc','宋体','明體')):
         return 'Noto Serif SC',name!='Noto Serif SC'
-    if any('\u2e80'<=c<='\uffef' for c in text):
+    if cjk_text(text):
         return 'Noto Sans SC',True
     name=re.sub(r'^[A-Z]{6}\+','',name)
     # Known families take precedence over unreliable descriptor flags. In
@@ -47,6 +87,9 @@ def font_family(name,text,flags=0):
 def font_style(base_name,weight,flags=0):
     """Prefer explicit face names over PDFium's stem-width weight estimate."""
     name=re.sub(r'^[A-Z]{6}\+','',base_name).lower().replace(' ','')
+    if modern_face(base_name):
+        if name.startswith('cmu'):return 'bold' in name,any(s in name for s in ('italic','oblique'))
+        return name.startswith(('cmb','cmssbx')),name.startswith(('cmti','cmsl','cmmi','cmssi'))
     italic=bool(flags & 64) or any(x in name for x in ('italic','oblique'))
     if any(x in name for x in ('bold','semibold','demi','heavy','black')):return True,italic
     regular_faces={'helvetica','helvetica-oblique','times-roman','times-italic','courier','courier-oblique',
@@ -128,6 +171,8 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
         runs=[];remove=[]
         for pointer,chars in groups.items():
             obj=objects[pointer]
+            if graphical_text(obj.get_font().get_base_name(),''.join(c['text'] for c in chars)):
+                unsupported.append('formula_or_symbol_font_kept_as_graphic');continue
             # Removing an entire text object would also remove its clipped
             # glyphs. Keep that object in the raster instead of reconstructing
             # off-page text which was not visible in the source.
@@ -141,7 +186,7 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 return abs(angle-round(angle/(math.pi/2))*(math.pi/2))>.01 if allow_quarter_turns else abs(angle)>.01
             if any(unsupported_angle(c['angle']) for c in chars):
                 unsupported.append('rotated_text_kept_as_graphic');continue
-            ambiguous=[c for c in chars if unicodedata.category(c['text'])=='Cc' and not c['text'].isspace()]
+            ambiguous=[c for c in chars if unicodedata.category(c['text']) in ('Cc','Co') and not c['text'].isspace()]
             if ambiguous:
                 unsupported.append('unmapped_glyph_kept_as_graphic')
                 # Full-object reconstruction is still forbidden. The regional
@@ -164,7 +209,7 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 if not visible:return
                 l=min(c['box'][0] for c in visible);b=min(c['box'][1] for c in visible)
                 r=max(c['box'][2] for c in visible);t=max(c['box'][3] for c in visible)
-                size=pending[0]['size'];family,substituted=font_family(name,text,flags)
+                size=pending[0]['size'];family,substituted=font_family(name,text,flags,base_name=font.get_base_name())
                 runs.append({'text':text,'box':[l,b,r,t],'size':size,'font':family,
                     'substituted':substituted,'source_font':name,'bold':bold,'color':rgb,'index':pending[0]['index'],
                     'end_index':pending[-1]['index']+1,'source_base_font':font.get_base_name(),
@@ -172,7 +217,7 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                     'blocked_boxes':blocked_boxes,
                     'rotation':(round(math.degrees(pending[0]['angle'])/90)*90)%360})
             for char in chars:
-                if unicodedata.category(char['text'])=='Cc' and not char['text'].isspace():
+                if unicodedata.category(char['text']) in ('Cc','Co') and not char['text'].isspace():
                     flush();pending=[];continue
                 if split_words and char['text'].isspace():
                     pending.append(char);flush();pending=[];continue

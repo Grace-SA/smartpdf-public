@@ -87,15 +87,15 @@ def test_partial_extraction_cannot_be_used_for_full_object_removal():
         extract_native(None,partial_regions=True)
 
 
-def test_word_retry_only_visits_pages_without_verified_results(monkeypatch):
+def test_word_retry_receives_verified_coverage_for_all_pages(monkeypatch):
     import smartppt.regional as regional
     calls=[]
-    def recover(source,target,pages,settings,grouped=False,word_regions=False):
-        calls.append((pages,grouped,word_regions))
+    def recover(source,target,pages,settings,grouped=False,word_regions=False,minimum_coverage=None):
+        calls.append((pages,grouped,word_regions,set(minimum_coverage or {})))
         return {3:{'route':'native-regions'}} if word_regions else {2:{'route':'native-regions'}} if grouped else {1:{'route':'native-regions'}}
     monkeypatch.setattr(regional,'_recover_regions',recover)
     assert set(regional.recover_regions(None,None,[1,2,3],None))=={1,2,3}
-    assert calls==[([1,2,3],False,False),([2,3],True,False),([3],False,True)]
+    assert calls==[([1,2,3],False,False,set()),([1,2,3],True,False,{1}),([1,2,3],False,True,{1,2})]
 
 
 @pytest.mark.skipif(not __import__('os').getenv('SMARTPPT_TEST_RENDERER'),reason='real Office renderer required')

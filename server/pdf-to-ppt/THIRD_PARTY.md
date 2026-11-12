@@ -1,6 +1,6 @@
 # 第三方组件与模型
 
-本模块源码不打包模型、字体二进制或第三方可执行文件。输出 PPT 可以包含经过校验的 Noto Sans SC 完整字体，字体元数据内保留完整版权和 OFL 许可。以下是本轮核对的主要组件；部署镜像仍需保留完整传递许可及通知。
+本模块源码不打包模型、字体二进制或第三方可执行文件。输出 PPT 可以包含经过校验的 Noto Sans SC、Noto Serif SC 和 CMU 完整字体，字体元数据内保留完整版权和 OFL 许可。以下是本轮核对的主要组件；部署镜像仍需保留完整传递许可及通知。
 
 | 组件 | 本轮用途 | 上游许可/来源 |
 | --- | --- | --- |
@@ -16,6 +16,7 @@
 | pypdf / python-pptx | 预检 / OOXML | BSD-3-Clause / MIT |
 | Noto Sans SC | 中文替代字体及完整字体嵌入 | SIL OFL 1.1，仓库 `vendor-fonts/NotoSansSC-OFL.txt`；运行包保留 `src/smartppt/OFL-NotoSansSC.txt` |
 | Noto Serif SC | 可选宋体/明体替代及完整字体嵌入 | SIL OFL 1.1，[固定上游许可](https://github.com/notofonts/noto-cjk/blob/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/Serif/LICENSE)；字体内 Adobe 版权及完整许可保留于 `src/smartppt/OFL-NotoSerifSC.txt`，文件与哈希见 README |
+| CMU 0.7.0 | 可选 Computer Modern 正文替代及四种字形完整嵌入 | SIL OFL 1.1，[官方发布](https://sourceforge.net/projects/cm-unicode/files/cm-unicode/0.7.0/)；完整版权与许可见 `src/smartppt/OFL-CMU.txt`，逐文件哈希见 `cmu-fonts.json`。不替换数学符号字体 |
 | FontTools 4.68.0 | 将固定可变字体实例化为静态字体，保留 Unicode 字形、许可和完整字符集 | MIT，[官方项目](https://github.com/fonttools/fonttools) |
 | LibreOffice | 独立渲染检查 | 按实际发行版许可及第三方通知部署，未捆绑 |
 

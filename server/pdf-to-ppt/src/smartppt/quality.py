@@ -14,7 +14,11 @@ def normalized(text):
 
 
 def numeric_tokens(text):
-    return Counter(re.findall(r'[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?', unicodedata.normalize('NFKC',text)))
+    # A grouped number must end at a valid group boundary. In a date such as
+    # "January 1,1990", 1,199 is not a valid prefix of the following year.
+    # Keep leading decimal points and Unicode minus signs significant too.
+    pattern=r'[-+−]?(?:(?:\d{1,3}(?:,\d{3})+(?!\d|,\d)|\d+)(?:\.\d+)?|\.\d+)%?'
+    return Counter(token.replace('−','-') for token in re.findall(pattern,unicodedata.normalize('NFKC',text)))
 
 
 def text_metrics(expected, actual):

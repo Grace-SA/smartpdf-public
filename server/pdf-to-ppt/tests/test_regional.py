@@ -198,13 +198,13 @@ def test_grouped_retry_never_replaces_verified_object_recovery(monkeypatch):
     import smartppt.regional as regional
     from smartppt.config import ConversionError
     calls=[];verified={'route':'native-regions','warnings':[]}
-    def recover(source,target,pages,settings,grouped=False):
+    def recover(source,target,pages,settings,grouped=False,minimum_coverage=None):
         calls.append((pages,grouped))
         if grouped:raise ConversionError('layout_render_failed')
         return {1:verified}
     monkeypatch.setattr(regional,'_recover_regions',recover)
     result=regional.recover_regions(None,None,[1,2],None)
-    assert result[1] is verified and calls==[([1,2],False),([2],True)]
+    assert result[1] is verified and calls==[([1,2],False),([1,2],True)]
     assert 'additional_grouped_recovery_unavailable' in verified['warnings']
 
 

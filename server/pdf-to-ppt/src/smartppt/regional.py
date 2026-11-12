@@ -283,10 +283,34 @@ def calibrate_runs(prs, number, page, objects, rendered):
                     'width':dw+size,'height':size*1.8,'size':size,'spacing':round(spacing*100)}
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False):
+def covered_source_indices(page, objects):
+    """Bind editability to actual source glyph occurrences, not a text multiset."""
+    with closing(page.get_textpage()) as tp:
+        indices=set()
+        for _,runs in objects:
+            for run in runs:
+                owners=set(run.get('object_ids',[run['object_id']]))
+                for i in range(run['index'],run['end_index']):
+                    code=pdfium.raw.FPDFText_GetUnicode(tp,i)
+                    if not code or chr(code).isspace():continue
+                    obj=tp.get_textobj(i)
+                    if obj is not None and ctypes.cast(obj.raw,ctypes.c_void_p).value in owners:indices.add(i)
+        return indices
+
+
+def compact_source_ranges(indices):
+    ranges=[]
+    for index in sorted(indices):
+        if ranges and ranges[-1][1]==index:ranges[-1][1]=index+1
+        else:ranges.append([index,index+1])
+    return ranges
+
+
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
-    reports={}
+    reports={};minimum_coverage=minimum_coverage or {}
+    prior={n:{i for a,b in report['source_ranges'] for i in range(a,b)} for n,report in minimum_coverage.items()}
     with tempfile.TemporaryDirectory(prefix='smartppt-regions-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
         folder=Path(tmp);prs=Presentation(target);pages={};candidates={};regions={}
         # Keep page handles alive: PDF object identities must not cross a reopen.
@@ -294,6 +318,9 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
                 objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions)
+                if number in prior:
+                    potential=covered_source_indices(page,objects)
+                    if not prior[number]<potential:continue
                 if objects:
                     candidates[number]=objects
                     regions[number]=draw_objects(prs,prs.slides[number-1],page,objects)
@@ -351,6 +378,8 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             # A second whole-page check catches interactions between text objects,
             # clipping, shared resources and pixels outside their measured boxes.
             for number,objects in selected.items():
+                coverage=covered_source_indices(pages[number],objects)
+                improves=number not in prior or prior[number]<coverage
                 actual=render_page(final_pdf,number-1,max_side=1800)
                 expected=aligned_source(pages[number],actual.size)
                 score=pixel_score(expected,actual)
@@ -361,7 +390,7 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                         measured=score_regions(expected,actual,boxes,final) if boxes else None
                         if measured:final_scores.extend(measured)
                         else:regions_valid=False
-                if not regions_valid or not acceptable_page(baseline_score,score):
+                if not improves or not regions_valid or not acceptable_page(baseline_score,score):
                     slide=final.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
                     for shape in fallback.slides[number-1].shapes:
@@ -373,6 +402,8 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                 reports[number]={'route':'native-regions','editable_runs':len(runs),'editable_objects':object_count(objects),
                     'candidate_objects':object_count(candidates[number]),'candidate_regions':len(candidates[number]),'source_text_characters':sum(len(r['text']) for r in runs),
                     'regional_strategy':'source-words' if word_regions else 'joined-glyphs' if grouped else 'source-objects',
+                    'source_ranges':compact_source_ranges(coverage),
+                    'covered_source_glyphs':len(coverage),
                     'font_substitutions':sorted({r['source_font']+' → '+r['font'] for r in runs if r['substituted']}),
                     'region_scores':scores[number],'final_render':score,'baseline_render':baseline_score,
                     'warnings':['partial_native_editability','unrecovered_content_kept_as_graphic'],
@@ -384,22 +415,17 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
 
 
 def recover_regions(source,target,page_numbers,settings):
-    """Keep verified object recovery; try joined glyphs only on remaining pages."""
+    """Improve partial pages without losing any previously verified source glyph.
+
+    A footer alone must not stop the finer-grained body recovery attempts.
+    Each pass still checks its regions, its final render and source coverage.
+    """
     from .config import ConversionError
     reports=_recover_regions(source,target,page_numbers,settings,grouped=False)
-    remaining=[n for n in page_numbers if n not in reports]
-    if remaining:
-        try:reports.update(_recover_regions(source,target,remaining,settings,grouped=True))
+    for option,label in [('grouped','grouped'),('word_regions','word')]:
+        try:reports.update(_recover_regions(source,target,page_numbers,settings,minimum_coverage=reports,**{option:True}))
         except ConversionError:
             if not reports:raise
-            # The first pass already saved verified shapes. Do not discard its
-            # metadata or claim those pages are still whole-page images.
-            for report in reports.values():report['warnings'].append('additional_grouped_recovery_unavailable')
-            return reports
-    remaining=[n for n in page_numbers if n not in reports]
-    if remaining:
-        try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True))
-        except ConversionError:
-            if not reports:raise
-            for report in reports.values():report['warnings'].append('additional_word_recovery_unavailable')
+            for report in reports.values():report['warnings'].append(f'additional_{label}_recovery_unavailable')
+            break
     return reports

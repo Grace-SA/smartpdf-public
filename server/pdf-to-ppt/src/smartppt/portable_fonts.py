@@ -15,7 +15,8 @@ import pypdfium2 as pdfium
 from pptx import Presentation
 from pptx.util import Pt
 from .config import ConversionError
-from .font_embedding import bundled_payloads,embed_noto,FAMILIES
+from .font_embedding import bundled_payloads,embed_noto,PORTABLE_FAMILIES,STYLES
+FAMILIES=PORTABLE_FAMILIES
 from .ocr_fit import observed_boxes,fit_shape
 from .quality import normalized,shape_text
 from .render_gate import render_presentations,metric,accept_candidate
@@ -52,7 +53,7 @@ def split_script_shapes(prs,rendered,small_text_pages=()):
                     if not shape.has_text_frame or shape.rotation or len(shape.text_frame.paragraphs)!=1:continue
                     runs=shape.text_frame.paragraphs[0].runs
                     if len(runs)!=1 or runs[0].font.size is None:continue
-                    if runs[0].font.name in FAMILIES:
+                    if runs[0].font.name in ('Noto Sans SC','Noto Serif SC'):
                         chunks=script_segments(shape.text);kind='mixed-script'
                     elif index in small_text_pages and runs[0].font.size.pt<12 and runs[0].font.name in ('Arial','Times New Roman','Courier New'):
                         chunks=re.findall(r'\s*\S+\s*',shape.text);kind='small-words'
@@ -99,7 +100,9 @@ def finalize_portable_fonts(source,target,report,settings):
     payloads={}
     for family in families:
         bold=any(r.font.bold for _,s in font_runs for p in s.text_frame.paragraphs for r in p.runs if r.font.name==family)
-        payloads[family]=bundled_payloads(bold,family)
+        styles={('boldItalic' if r.font.bold else 'italic') if r.font.italic else ('bold' if r.font.bold else 'regular')
+                for _,s in font_runs for p in s.text_frame.paragraphs for r in p.runs if r.font.name==family}
+        payloads[family]=bundled_payloads(bold,family,styles)
     font_pages={i for i,_ in font_runs}|small_pages
     with tempfile.TemporaryDirectory(prefix='smartppt-portable-font-',dir=Path(source).parent) as tmp:
         folder=Path(tmp);before=folder/'before.pptx';embedded=folder/'embedded.pptx';shutil.copyfile(target,before)
@@ -141,7 +144,7 @@ def finalize_portable_fonts(source,target,report,settings):
                 page['ink_targets_before_font_portability']=page.pop('ink_targets')
         report['font_portability']={'embedded':bool(payloads),'validated':True,'family':families[0] if len(families)==1 else None,
             'families':{family:list(faces) for family,faces in payloads.items()},
-            'faces':sorted({style for faces in payloads.values() for style in faces},key=lambda s:('regular','bold').index(s)),
+            'faces':sorted({style for faces in payloads.values() for style in faces},key=STYLES.index),
             'whole_font':bool(payloads),'positioned_script_pages':[i+1 for i in sorted(changed) if any(r['kind']=='mixed-script' for r in targets[i])],
             'positioned_small_text_pages':[i+1 for i in sorted(changed) if any(r['kind']=='small-words' for r in targets[i])],
             'script_layout_rejected_pages':[i+1 for i in restored],
