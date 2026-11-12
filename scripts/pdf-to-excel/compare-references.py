@@ -16,7 +16,7 @@ def fetch_json(url):
         return json.load(response)
 
 
-def main(root):
+def main(root, offline=False):
     manifest = json.loads((root / "corpus/manifest.json").read_text())
     results = {
         r["id"]: r for r in json.loads((root / "benchmark.json").read_text())["results"]
@@ -25,26 +25,34 @@ def main(root):
     references = root / "references"
     references.mkdir(exist_ok=True)
     paths = set()
-    for commit in {r["commit"] for r in candidates}:
-        tree = fetch_json(
-            f"https://api.github.com/repos/camelot-dev/camelot/git/trees/{commit}?recursive=1"
-        )
-        paths.update((commit, r["path"]) for r in tree["tree"])
-    candidates = [
-        r for r in candidates if (r["commit"], r["path"][:-4] + ".json") in paths
-    ]
+    if offline:
+        candidates = [
+            r for r in candidates if (references / (r["id"] + ".json")).exists()
+        ]
+    else:
+        for commit in {r["commit"] for r in candidates}:
+            tree = fetch_json(
+                f"https://api.github.com/repos/camelot-dev/camelot/git/trees/{commit}?recursive=1"
+            )
+            paths.update((commit, r["path"]) for r in tree["tree"])
+        candidates = [
+            r for r in candidates if (r["commit"], r["path"][:-4] + ".json") in paths
+        ]
 
     def compare(item):
         path = item["path"][:-4] + ".json"
         url = f"https://raw.githubusercontent.com/{item['repository']}/{item['commit']}/{path}"
-        data = fetch_json(url)
-        (references / (item["id"] + ".json")).write_text(json.dumps(data, indent=2))
-        for kind in ("str", "reg"):
-            xml_url = url.removesuffix(".json") + "-" + kind + ".xml"
-            with urllib.request.urlopen(xml_url, timeout=30) as response:
-                (references / (item["id"] + "-" + kind + ".xml")).write_bytes(
-                    response.read()
-                )
+        if offline:
+            data = json.loads((references / (item["id"] + ".json")).read_text())
+        else:
+            data = fetch_json(url)
+            (references / (item["id"] + ".json")).write_text(json.dumps(data, indent=2))
+            for kind in ("str", "reg"):
+                xml_url = url.removesuffix(".json") + "-" + kind + ".xml"
+                with urllib.request.urlopen(xml_url, timeout=30) as response:
+                    (references / (item["id"] + "-" + kind + ".xml")).write_bytes(
+                        response.read()
+                    )
         actual = results[item["id"]]
         expected = data["numExpectedTables"]
         return {
@@ -83,4 +91,4 @@ def main(root):
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main(Path(sys.argv[1]), offline="--offline" in sys.argv[2:])

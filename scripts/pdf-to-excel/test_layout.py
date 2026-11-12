@@ -102,6 +102,192 @@ class LayoutTests(unittest.TestCase):
         native["bbox"] = [500, 0, 900, 200]
         self.assertIs(prefer_native(model, [native]), model)
 
+    def test_pdf_glyphs_restore_punctuation_without_guessing_numbers(self):
+        from layout_tables import source_cell_text
+
+        def page_for(text):
+            chars = [
+                dict(
+                    text=c,
+                    x0=i * 6,
+                    x1=i * 6 + 6,
+                    top=10,
+                    bottom=20,
+                    doctop=10,
+                    upright=True,
+                    height=10,
+                    width=6,
+                )
+                for i, c in enumerate(text)
+            ]
+            return SimpleNamespace(height=800, chars=chars)
+
+        box = dict(l=0, t=8, r=150, b=22, coord_origin="TOPLEFT")
+        self.assertEqual(
+            source_cell_text("10-20 'a'", box, page_for("10–20 ‘A’")), "10–20 ‘A’"
+        )
+        self.assertEqual(source_cell_text("00123", box, page_for("00124")), "00123")
+        self.assertEqual(source_cell_text("10-20", box, page_for("10–20 30")), "10-20")
+
+    def test_pdf_soft_wrap_does_not_double_excel_line_breaks(self):
+        from layout_tables import source_cell_text
+
+        chars = []
+        for row, value in enumerate(("Alpha", "– Beta")):
+            for i, char in enumerate(value):
+                chars.append(
+                    dict(
+                        text=char,
+                        x0=i * 6,
+                        x1=i * 6 + 6,
+                        top=10 + row * 20,
+                        bottom=20 + row * 20,
+                        doctop=10 + row * 20,
+                        upright=True,
+                        height=10,
+                        width=6,
+                    )
+                )
+        page = SimpleNamespace(height=800, chars=chars)
+        box = dict(l=0, t=8, r=150, b=45, coord_origin="TOPLEFT")
+        self.assertEqual(source_cell_text("Alpha - Beta", box, page), "Alpha – Beta")
+
+    def test_stacked_numeric_values_are_not_a_recovered_grid(self):
+        from layout_tables import independent_grid
+
+        table = dict(
+            closedGrid=True,
+            widths=[50, 50],
+            heights=[20, 20],
+            cells=[
+                dict(r=0, c=0, text="Code"),
+                dict(r=0, c=1, text="Amount"),
+                dict(r=1, c=0, text="A"),
+                dict(r=1, c=1, text="100\n200"),
+            ],
+        )
+        self.assertFalse(independent_grid(table))
+        table["cells"][-1]["text"] = "00123"
+        self.assertTrue(independent_grid(table))
+
+    @staticmethod
+    def prediction_cell(row, col, text, *, span=1, header=False, top=None):
+        top = row * 15 if top is None else top
+        return dict(
+            start_row_offset_idx=row,
+            end_row_offset_idx=row + 1,
+            start_col_offset_idx=col,
+            end_col_offset_idx=col + span,
+            row_span=1,
+            col_span=span,
+            text=text,
+            column_header=header,
+            bbox=dict(
+                l=col * 80,
+                t=top,
+                r=(col + span) * 80,
+                b=top + 8,
+                coord_origin="TOPLEFT",
+            ),
+        )
+
+    def test_repeated_header_splits_tables_without_losing_values(self):
+        from layout_tables import refine_predictions
+
+        c = self.prediction_cell
+        item = dict(
+            prov=[dict(bbox=dict(l=0, t=0, r=240, b=200, coord_origin="TOPLEFT"))],
+            data=dict(num_rows=10, num_cols=3, table_cells=[]),
+        )
+        for start in (0, 5):
+            item["data"]["table_cells"].append(
+                c(start, 1, "Measures", span=2, header=True)
+            )
+            for col, text in enumerate(("Code", "2024", "2025")):
+                item["data"]["table_cells"].append(c(start + 1, col, text, header=True))
+            for r in range(start + 2, start + 5):
+                for col, text in enumerate(
+                    (f"ID-{r}", "00123", "99999999999999999999")
+                ):
+                    item["data"]["table_cells"].append(c(r, col, text))
+        parts = refine_predictions(item, SimpleNamespace(height=800, edges=[]))
+        self.assertEqual(len(parts), 2)
+        self.assertEqual([p["data"]["num_rows"] for p in parts], [5, 5])
+        for p in parts:
+            table = adapt_table(p, self.page)
+            code = next(c for c in table["cells"] if c["text"] == "Code")
+            self.assertEqual((code["r"], code["rs"]), (0, 2))
+            self.assertEqual(sum(c["text"] == "00123" for c in table["cells"]), 3)
+        self.assertEqual(item["data"]["num_rows"], 10)  # input is not mutated
+
+    def test_header_merge_respects_a_visible_separator(self):
+        from layout_tables import restore_stub_header
+
+        c = self.prediction_cell
+        data = dict(
+            table_cells=[
+                c(0, 1, "Group", span=2, header=True),
+                c(1, 0, "Code", header=True),
+                c(1, 1, "A", header=True),
+                c(1, 2, "B", header=True),
+            ]
+        )
+        original = copy.deepcopy(data)
+        restore_stub_header(
+            data,
+            SimpleNamespace(
+                height=800, edges=[dict(orientation="h", top=12, x0=0, x1=80)]
+            ),
+        )
+        self.assertEqual(data, original)
+
+    def test_physical_recovery_requires_complete_grid_and_unchanged_digits(self):
+        from layout_tables import recover_ruled_prediction
+
+        item = copy.deepcopy(self.item)
+        model = adapt_table(item, self.page)
+        model["closedGrid"] = True
+        recovered = recover_ruled_prediction(item, self.page, [model])
+        self.assertEqual(recovered["method"], "ruled-recovery")
+        altered = copy.deepcopy(model)
+        altered["cells"][1]["text"] = "00124"
+        self.assertIsNone(recover_ruled_prediction(item, self.page, [altered]))
+        model["closedGrid"] = False
+        self.assertIsNone(recover_ruled_prediction(item, self.page, [model]))
+
+    def test_native_heading_extension_cannot_change_an_identifier(self):
+        model = adapt_table(self.item, self.page)
+        native = copy.deepcopy(model)
+        native["cells"][0]["text"] = "Complete Heading"
+        self.assertIs(prefer_native(model, [native]), native)
+        native["cells"][1]["text"] = "001230"
+        self.assertIs(prefer_native(model, [native]), model)
+
+    def test_dot_leaders_do_not_create_a_column_but_real_values_do(self):
+        from layout_tables import refine_predictions
+
+        c = self.prediction_cell
+        entries = [
+            c(0, 0, "Label", span=2, header=True),
+            c(0, 2, "Amount", header=True),
+        ]
+        for row in range(1, 5):
+            entries += [
+                c(row, 0, f"Key{row}"),
+                c(row, 1, "............"),
+                c(row, 2, "00123"),
+            ]
+        item = dict(
+            prov=[dict(bbox=dict(l=0, t=0, r=240, b=80, coord_origin="TOPLEFT"))],
+            data=dict(num_rows=5, num_cols=3, table_cells=entries),
+        )
+        result = refine_predictions(item, self.page)[0]
+        self.assertEqual(result["data"]["num_cols"], 2)
+        table = adapt_table(result, self.page)
+        self.assertEqual(sum(c["text"] == "00123" for c in table["cells"]), 4)
+        entries[-2]["text"] = "Pending..."
+        self.assertEqual(refine_predictions(item, self.page)[0]["data"]["num_cols"], 3)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

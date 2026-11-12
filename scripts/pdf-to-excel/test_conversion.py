@@ -19,6 +19,90 @@ from text_tables import aligned_tables
 
 
 class ConversionTests(unittest.TestCase):
+    def test_visible_crop_and_offset_origin_do_not_export_hidden_tables(self):
+        from reportlab.pdfgen import canvas
+        from pypdf.generic import RectangleObject
+
+        original = self.root / "viewport-source.pdf"
+        canvas_pdf = canvas.Canvas(str(original), pagesize=(1000, 500))
+        canvas_pdf.setFont("FixtureCJK", 10)
+        for left, label, code in ((40, "LEFT", "00123"), (540, "RIGHT", "00456")):
+            for x in (left, left + 120, left + 240):
+                canvas_pdf.line(x, 300, x, 420)
+            for y in (300, 340, 380, 420):
+                canvas_pdf.line(left, y, left + 240, y)
+            for row, values in enumerate(
+                (("Side", "Value"), (label, code), ("Range", "10–20"))
+            ):
+                for col, text in enumerate(values):
+                    canvas_pdf.drawString(left + 5 + col * 120, 395 - row * 40, text)
+        canvas_pdf.save()
+        cases = (
+            ("crop-left", None, (0, 0, 500, 500), {"LEFT"}, {"RIGHT", "00456"}),
+            (
+                "offset-right",
+                (500, 0, 1000, 500),
+                (500, 0, 1000, 500),
+                {"RIGHT"},
+                {"LEFT", "00123"},
+            ),
+            (
+                "negative-origin",
+                (-20, -30, 980, 470),
+                (-20, -30, 980, 470),
+                {"LEFT", "RIGHT"},
+                set(),
+            ),
+        )
+        for name, media, crop, visible, hidden in cases:
+            with self.subTest(name=name):
+                reader = PdfReader(original)
+                page = reader.pages[0]
+                if media:
+                    page.mediabox = RectangleObject(media)
+                page.cropbox = RectangleObject(crop)
+                writer = PdfWriter()
+                writer.add_page(page)
+                writer.write(self.root / (name + ".pdf"))
+                result, book, _ = self.run_case(name)
+                values = {
+                    c.value for sheet in book for row in sheet for c in row if c.value
+                }
+                self.assertEqual(result["tables"], len(visible))
+                self.assertTrue(visible <= values)
+                self.assertFalse(hidden & values)
+                self.assertIn("10–20", values)
+
+    def test_visible_grid_survives_an_empty_model_detection(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import pdfplumber
+        from docling.datamodel.base_models import ConversionStatus
+        from layout_tables import extract_layout_tables
+        from convert import ruled_tables
+
+        detector = SimpleNamespace(
+            convert=lambda *args, **kwargs: SimpleNamespace(
+                status=ConversionStatus.SUCCESS, document=SimpleNamespace(tables=[])
+            )
+        )
+        source = self.root / "ruled.pdf"
+        with pdfplumber.open(source) as document, patch(
+            "layout_tables.converter_for", return_value=detector
+        ):
+            tables = extract_layout_tables(
+                source, [0], "unused", document.pages, ruled_tables
+            )[0]
+        self.assertEqual(len(tables), 1)
+        self.assertEqual(tables[0]["method"], "ruled-recovery")
+        tables[0].update(page=1, index=1)
+        output = self.root / "missed-detection.xlsx"
+        write_workbook(tables, output, "tables")
+        expected = next(x["cells"] for x in self.expected if x["id"] == "ruled")
+        self.assertEqual(
+            [list(row) for row in load_workbook(output).active.values], expected
+        )
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
@@ -289,6 +373,56 @@ class ConversionTests(unittest.TestCase):
         )
         _, book, _ = self.run_case("scan-rowspan")
         self.assertEqual([str(m) for m in book.active.merged_cells], ["A2:A3"])
+
+    def test_original_typographic_glyphs_and_identifiers(self):
+        from reportlab.pdfgen import canvas
+
+        file = self.root / "typography.pdf"
+        c = canvas.Canvas(str(file), pagesize=(595, 842))
+        values = [
+            ["Range", "Quote", "Code"],
+            ["10–20", "‘Alpha’", "00123"],
+            ["30—40", "“Beta”", "99999999999999999999"],
+        ]
+        for x in (50, 200, 350, 550):
+            c.line(x, 600, x, 720)
+        for y in (600, 640, 680, 720):
+            c.line(50, y, 550, y)
+        c.setFont("FixtureCJK", 10)
+        for r, row in enumerate(values):
+            for col, value in enumerate(row):
+                c.drawString((55, 205, 355)[col], 695 - r * 40, value)
+        c.save()
+        _, book, _ = self.run_case("typography")
+        self.assertEqual([list(row) for row in book.active.values], values)
+
+    def test_two_tables_with_vertical_and_horizontal_header_merges(self):
+        from reportlab.pdfgen import canvas
+
+        file = self.root / "complex-headers.pdf"
+        c = canvas.Canvas(str(file), pagesize=(595, 842))
+        for top in (720, 440):
+            c.setFont("Helvetica", 10)
+            for x in (50, 200, 500):
+                c.line(x, top - 180, x, top)
+            c.line(350, top - 180, 350, top - 30)
+            c.line(200, top - 30, 500, top - 30)
+            for offset in (0, 60, 100, 140, 180):
+                c.line(50, top - offset, 500, top - offset)
+            c.drawString(65, top - 35, "Identifier")
+            c.drawString(290, top - 20, "Measures")
+            c.drawString(235, top - 50, "2024")
+            c.drawString(395, top - 50, "2025")
+            for row in range(3):
+                for x, value in ((65, f"ID-{row}"), (235, "00123"), (395, "12,345.67")):
+                    c.drawString(x, top - 85 - row * 40, value)
+        c.save()
+        result, book, _ = self.run_case("complex-headers")
+        self.assertEqual(result["tables"], 2)
+        for sheet in book:
+            self.assertEqual({str(m) for m in sheet.merged_cells}, {"A1:A2", "B1:C1"})
+            self.assertEqual(sheet["B3"].value, "00123")
+            self.assertEqual(sheet["C5"].value, "12,345.67")
 
 
 if __name__ == "__main__":

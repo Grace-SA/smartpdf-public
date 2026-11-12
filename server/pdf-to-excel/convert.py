@@ -12,7 +12,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from text_tables import aligned_tables, conservative_aligned_tables
-from layout_tables import extract_layout_tables, LayoutError
+from layout_tables import extract_layout_tables, LayoutError, visible_box
 
 MAX_BYTES = 30 * 1024 * 1024
 MAX_CELLS = 250000
@@ -103,13 +103,28 @@ def table_from_pdf(table):
         "heights": heights,
         "cells": entries,
         "method": "text",
+        "closedGrid": len(occupied) == (len(xs) - 1) * (len(ys) - 1),
         "bbox": list(table.bbox),
     }
 
 
 def ruled_tables(page):
+    # PDF objects outside the displayed media/crop intersection are not content
+    # visible to the user. Clip before finding borders or extracting cell text.
+    page = page.crop(tuple(visible_box(page)))
     found = page.find_tables()
-    return [t for t in (table_from_pdf(t) for t in found) if t]
+    tables = []
+    for candidate in found:
+        try:
+            table = table_from_pdf(candidate)
+        except ConversionError as error:
+            # One chart or malformed grid must not suppress other sound tables.
+            if not str(error).startswith("Overlapping table cells"):
+                raise
+            continue
+        if table:
+            tables.append(table)
+    return tables
 
 
 def native_tables(page):
@@ -118,7 +133,7 @@ def native_tables(page):
         return tables
     # Shared word starts in prose do not establish table columns. Require
     # repeated rows separated by actual horizontal whitespace instead.
-    return aligned_tables(page)
+    return aligned_tables(page.crop(tuple(visible_box(page))))
 
 
 def stirling_tables(source, page_index):
@@ -584,7 +599,9 @@ def convert(source, output, options):
                 if model_tables is not None and not found:
                     # Small, clearly aligned numeric tables can be below the
                     # layout model's detection threshold. Never recover prose.
-                    found = conservative_aligned_tables(page)
+                    found = conservative_aligned_tables(
+                        page.crop(tuple(visible_box(page)))
+                    )
             if not found:
                 missing.append(index + 1)
             if any(t["method"] == "aligned" for t in found):
@@ -633,6 +650,10 @@ def convert(source, output, options):
     if any(t["method"] == "layout" for t in tables):
         warnings.append(
             "Table structure was reconstructed. Check merged cells and column alignment against the original PDF."
+        )
+    if any(t["method"] == "ruled-recovery" for t in tables):
+        warnings.append(
+            "Additional table structure was recovered from visible cell borders. Check the recovered table and merged cells against the original PDF."
         )
     warnings.append(
         "Only detected tables are included. Text and numbers are stored as text to preserve spelling, leading zeros and precision."

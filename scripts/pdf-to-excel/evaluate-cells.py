@@ -85,6 +85,11 @@ def aligned_cell_scores(reference, prediction):
                     cell["rs"],
                     cell["cs"],
                 )
+                if cell["rs"] > 1 or cell["cs"] > 1:
+                    result["alignedMergedTextAndSpan"] += matched and (
+                        got["rs"],
+                        got["cs"],
+                    ) == (cell["rs"], cell["cs"])
     return result
 
 
@@ -99,41 +104,60 @@ def evaluate(root):
     for file in sorted((root / "references").glob("*-str.xml")):
         sample = file.name.removesuffix("-str.xml")
         expected = collections.defaultdict(list)
-        for region in ET.parse(file).findall(".//region"):
-            cells = region.findall("cell")
-            if not cells:
-                continue
-            boxes = []
-            for cell in cells:
-                box = cell.find("bounding-box")
-                try:
-                    boxes.append({key: float(box.get(key)) for key in ("x1", "y2")})
-                except (ValueError, TypeError, AttributeError):
-                    # Known upstream coordinate typos must not become guessed data.
-                    invalid_boxes += 1
-            if not boxes:
-                raise ValueError("No valid coordinates for reference table ordering")
-            min_row = min(int(c.get("start-row")) for c in cells)
-            min_col = min(int(c.get("start-col")) for c in cells)
-            table = {
-                "top": -max(b["y2"] for b in boxes),
-                "left": min(b["x1"] for b in boxes),
-                "cells": [
+        for table in ET.parse(file).findall(".//table"):
+            by_page = collections.defaultdict(list)
+            for region in table.findall("region"):
+                by_page[int(region.get("page"))].append(region)
+            for page, regions in by_page.items():
+                boxes, cells = [], []
+                for region in regions:
+                    raw = region.findall("cell")
+                    if not raw:
+                        continue
+                    min_row = min(int(c.get("start-row")) for c in raw)
+                    min_col = min(int(c.get("start-col")) for c in raw)
+                    for cell in raw:
+                        box = cell.find("bounding-box")
+                        try:
+                            boxes.append(
+                                {key: float(box.get(key)) for key in ("x1", "x2", "y2")}
+                            )
+                        except (ValueError, TypeError, AttributeError):
+                            invalid_boxes += 1
+                        cells.append(
+                            {
+                                "r": int(cell.get("start-row"))
+                                - min_row
+                                + int(region.get("row-increment", "0")),
+                                "c": int(cell.get("start-col"))
+                                - min_col
+                                + int(region.get("col-increment", "0")),
+                                "rs": int(cell.get("end-row", cell.get("start-row")))
+                                - int(cell.get("start-row"))
+                                + 1,
+                                "cs": int(cell.get("end-col", cell.get("start-col")))
+                                - int(cell.get("start-col"))
+                                + 1,
+                                "text": cell.findtext("content", ""),
+                            }
+                        )
+                if not boxes or not cells:
+                    raise ValueError(
+                        "No valid coordinates for reference table ordering"
+                    )
+                first_row = min(c["r"] for c in cells)
+                first_col = min(c["c"] for c in cells)
+                for cell in cells:
+                    cell["r"] -= first_row
+                    cell["c"] -= first_col
+                expected[page].append(
                     {
-                        "r": int(c.get("start-row")) - min_row,
-                        "c": int(c.get("start-col")) - min_col,
-                        "rs": int(c.get("end-row", c.get("start-row")))
-                        - int(c.get("start-row"))
-                        + 1,
-                        "cs": int(c.get("end-col", c.get("start-col")))
-                        - int(c.get("start-col"))
-                        + 1,
-                        "text": c.findtext("content", ""),
+                        "top": -max(b["y2"] for b in boxes),
+                        "left": min(b["x1"] for b in boxes),
+                        "right": max(b["x2"] for b in boxes),
+                        "cells": cells,
                     }
-                    for c in cells
-                ],
-            }
-            expected[int(region.get("page"))].append(table)
+                )
         actual = collections.defaultdict(list)
         if statuses.get(sample) == "converted":
             book = load_workbook(root / "outputs" / (sample + ".xlsx"))
@@ -173,6 +197,8 @@ def evaluate(root):
                     if not cell["text"].strip():
                         continue
                     scores["annotatedNonemptyCells"] += 1
+                    merged = cell["rs"] > 1 or cell["cs"] > 1
+                    scores["annotatedMergedCells"] += merged
                     got = prediction.get((cell["r"], cell["c"]))
                     if not got:
                         continue
@@ -182,6 +208,9 @@ def evaluate(root):
                     scores["exactTextAtPosition"] += exact
                     scores["whitespaceNormalizedTextAtPosition"] += text_match
                     scores["textAndSpanAtPosition"] += text_match and span_match
+                    scores["mergedTextAndSpanAtPosition"] += (
+                        merged and text_match and span_match
+                    )
         # Text recall independent of positions helps separate content from layout loss.
         expected_text = collections.Counter(
             normalized(c["text"])
@@ -199,10 +228,17 @@ def evaluate(root):
         )
         scores["textMultisetIntersection"] = sum((expected_text & actual_text).values())
         scores["outputNonemptyCells"] = sum(actual_text.values())
+        scores["outputMergedNonemptyCells"] = sum(
+            bool(c["text"].strip()) and (c["rs"] > 1 or c["cs"] > 1)
+            for ts in actual.values()
+            for _, cells in ts
+            for c in cells.values()
+        )
         totals.update(scores)
         rows.append({"id": sample, "status": statuses.get(sample), **scores})
     report = {
-        "scope": "Page-ordered annotated cells: raw position plus order-preserving row alignment for blank rows/captions; no column reordering; not official ICDAR score or population accuracy",
+        "evaluationVersion": 2,
+        "scope": "Table/page regions combined using annotation increments; annotated cells: raw position plus order-preserving row alignment for blank rows/captions; no column reordering; not official ICDAR score or population accuracy",
         "files": len(rows),
         "invalidReferenceBoxesIgnoredForOrdering": invalid_boxes,
         "totals": dict(totals),

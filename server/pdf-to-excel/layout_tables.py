@@ -6,6 +6,8 @@ from statistics import median
 from functools import lru_cache
 import io
 import os
+import re
+import unicodedata
 from pathlib import Path
 
 
@@ -19,6 +21,40 @@ def top_box(box, height):
     return [box["l"], box["t"], box["r"], box["b"]]
 
 
+def visible_box(page):
+    """PDF object coordinates can have non-zero origins and hidden margins."""
+    media = getattr(page, "bbox", (0, 0, getattr(page, "width", math.inf), page.height))
+    crop = getattr(page, "cropbox", None) or media
+    return [
+        max(media[0], crop[0]),
+        max(media[1], crop[1]),
+        min(media[2], crop[2]),
+        min(media[3], crop[3]),
+    ]
+
+
+def model_box(box, page):
+    view = visible_box(page)
+    local = top_box(box, view[3] - view[1])
+    return [
+        local[0] + view[0],
+        local[1] + view[1],
+        local[2] + view[0],
+        local[3] + view[1],
+    ]
+
+
+def local_box(box, page):
+    view = visible_box(page)
+    return dict(
+        l=box[0] - view[0],
+        t=box[1] - view[1],
+        r=box[2] - view[0],
+        b=box[3] - view[1],
+        coord_origin="TOPLEFT",
+    )
+
+
 def overlap(a, b):
     intersection = max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(
         0, min(a[3], b[3]) - max(a[1], b[1])
@@ -27,12 +63,72 @@ def overlap(a, b):
     return intersection / union if union > 0 else 0
 
 
+def source_cell_text(text, box, page):
+    """Restore original glyphs only when a second extractor agrees on content.
+
+    Docling's parser normalizes dashes/quotes and can change case. Canonical
+    comparison is an admission check only; the workbook receives PDF glyphs,
+    never the canonicalized string. Numeric or word differences are not guessed.
+    """
+    if not hasattr(page, "chars") or not box:
+        return text
+    from pdfplumber.utils import extract_text
+
+    b = model_box(box, page)
+    view = visible_box(page)
+    if not all(math.isfinite(v) for v in b) or b[3] < b[1]:
+        return text
+    bands = getattr(page, "_excel_glyph_bands", None)
+    if bands is None:
+        bands = defaultdict(list)
+        for char in page.chars:
+            bands[math.floor((char["top"] + char["bottom"]) / 32)].append(char)
+        page._excel_glyph_bands = bands
+    chars = [
+        c
+        for band in bands
+        if math.floor((b[1] - 0.5) / 16) <= band <= math.floor((b[3] + 0.5) / 16)
+        for c in bands[band]
+        if b[0] - 0.5 <= (c["x0"] + c["x1"]) / 2 <= b[2] + 0.5
+        and b[1] - 0.5 <= (c["top"] + c["bottom"]) / 2 <= b[3] + 0.5
+        and view[0] <= (c["x0"] + c["x1"]) / 2 <= view[2]
+        and view[1] <= (c["top"] + c["bottom"]) / 2 <= view[3]
+    ]
+    original = extract_text(chars, x_tolerance=2, y_tolerance=3) if chars else ""
+
+    def canonical(value):
+        value = unicodedata.normalize("NFKC", value)
+        value = value.translate(
+            str.maketrans(
+                {
+                    "–": "-",
+                    "—": "-",
+                    "−": "-",
+                    "‐": "-",
+                    "‑": "-",
+                    "‘": "'",
+                    "’": "'",
+                    "“": '"',
+                    "”": '"',
+                    "•": "·",
+                }
+            )
+        )
+        return "".join(value.split()).casefold()
+
+    if original and canonical(text) == canonical(original):
+        # A PDF's visual soft wraps must not become extra hard Excel breaks;
+        # combining those with Excel wrapping can double the required row height.
+        return original if "\n" in text else original.replace("\n", " ")
+    return text
+
+
 def adapt_table(item, page):
     data = item["data"]
     rows, columns = data["num_rows"], data["num_cols"]
     if not rows or not columns or rows * columns > 250000:
         raise LayoutError("The detected table exceeds the cell budget.")
-    box = top_box(item["prov"][0]["bbox"], page.height)
+    box = model_box(item["prov"][0]["bbox"], page)
     if not all(math.isfinite(v) for v in box) or box[2] <= box[0] or box[3] <= box[1]:
         raise LayoutError("The detected table has invalid dimensions.")
     occupied = set()
@@ -47,9 +143,17 @@ def adapt_table(item, page):
         if region & occupied:
             raise LayoutError("The detected table has overlapping cells.")
         occupied.update(region)
-        cells.append({"r": r, "c": c, "rs": rs, "cs": cs, "text": cell["text"]})
+        cells.append(
+            {
+                "r": r,
+                "c": c,
+                "rs": rs,
+                "cs": cs,
+                "text": source_cell_text(cell["text"], cell.get("bbox"), page),
+            }
+        )
         if cell.get("bbox") and cell["text"].strip():
-            cb = top_box(cell["bbox"], page.height)
+            cb = model_box(cell["bbox"], page)
             if cs == 1:
                 x_centers[c].append((cb[0] + cb[2]) / 2)
             if rs == 1:
@@ -92,15 +196,276 @@ def prefer_native(model, native):
             "".join(c["text"].split()) for c in table["cells"] if c["text"].strip()
         )
 
+    def preserves_values(candidate):
+        before = texts(model)
+        after = texts(candidate)
+        if before == after:
+            return True
+        # A complete physical grid can recover clipped headings. Every old
+        # cell must still occur in its own corresponding cell, and numerical
+        # tokens must be identical: extra prose cannot hide a changed amount.
+        indexed = {(c["r"], c["c"]): c for c in candidate["cells"]}
+        for cell in model["cells"]:
+            if not cell["text"].strip():
+                continue
+            other = indexed.get((cell["r"], cell["c"]))
+            if not other or (cell["rs"], cell["cs"]) != (other["rs"], other["cs"]):
+                return False
+            old = "".join(cell["text"].split())
+            new = "".join(other["text"].split())
+            if old not in new:
+                return False
+            if re.findall(r"\d[\d.,]*", old) != re.findall(r"\d[\d.,]*", new):
+                return False
+        return True
+
     for candidate in native:
         if (
-            len(candidate["widths"]) == len(model["widths"])
+            overlap(candidate["bbox"], model["bbox"]) >= 0.7
+            and len(candidate["widths"]) == len(model["widths"])
             and len(candidate["heights"]) == len(model["heights"])
-            and overlap(candidate["bbox"], model["bbox"]) >= 0.7
-            and texts(candidate) == texts(model)
+            and preserves_values(candidate)
         ):
             return candidate
     return model
+
+
+def recover_ruled_prediction(item, page, native):
+    """Use a complete physical grid only when all predicted characters survive.
+
+    This route is limited to conflicting model spans. Digit counts must agree
+    exactly; source-extracted extra prose is limited to 5%. It cannot recover a
+    corrupt PDF, an oversized table or an invalid model coordinate budget.
+    """
+    before = Counter("".join(c["text"] for c in item["data"]["table_cells"]))
+    before = Counter({k: v for k, v in before.items() if not k.isspace()})
+    box = model_box(item["prov"][0]["bbox"], page)
+    for table in native:
+        if not table.get("closedGrid") or overlap(box, table["bbox"]) < 0.85:
+            continue
+        after = Counter("".join(c["text"] for c in table["cells"]))
+        after = Counter({k: v for k, v in after.items() if not k.isspace()})
+        if (
+            not before
+            or before - after
+            or sum(after.values()) > sum(before.values()) * 1.05
+        ):
+            continue
+        if any(after[k] != before[k] for k in set(before) | set(after) if k.isdigit()):
+            continue
+        return dict(table, method="ruled-recovery")
+    return None
+
+
+def independent_grid(table):
+    """A model-missed grid needs compact rows, not stacked numeric paragraphs."""
+    content = [c for c in table["cells"] if c["text"].strip()]
+    area = len(table["widths"]) * len(table["heights"])
+    if not table.get("closedGrid") or len(content) < area * 0.7:
+        return False
+    if not any(c["r"] == 0 and any(ch.isalpha() for ch in c["text"]) for c in content):
+        return False
+    compact = sum(
+        len(c["text"]) <= 120 and len(c["text"].splitlines()) <= 3 for c in content
+    )
+    if compact < len(content) * 0.9:
+        return False
+    for cell in content:
+        lines = cell["text"].splitlines()
+        if len(lines) > 1 and all(
+            re.fullmatch(r"[\d.,%() +−-]+", line.strip()) for line in lines
+        ):
+            return False
+    return True
+
+
+def refine_predictions(item, page):
+    """Separate repeated table headers and retain source-backed header spans.
+
+    No sample IDs, reference annotations or generated text are used here.
+    """
+    from copy import deepcopy
+
+    item = deepcopy(item)
+    data = item["data"]
+    if not 0 < data["num_rows"] * data["num_cols"] <= 250000:
+        raise LayoutError("The detected table exceeds the cell budget.")
+    cells = data["table_cells"]
+    box = model_box(item["prov"][0]["bbox"], page)
+    # A full-width typographic rule is decoration, not a numeric cell prefix.
+    if hasattr(page, "extract_words"):
+        rules = {
+            word["text"]
+            for word in page.extract_words(x_tolerance=2, y_tolerance=3)
+            if re.fullmatch(r"[-_=]{10,}", word["text"])
+            and word["x1"] - word["x0"] >= (box[2] - box[0]) * 0.6
+            and box[1] <= word["top"] <= box[3]
+        }
+        for cell in cells:
+            for rule in rules:
+                if cell["text"].startswith(rule + " "):
+                    cell["text"] = cell["text"][len(rule) :].lstrip()
+
+    by_row = defaultdict(list)
+    for cell in cells:
+        by_row[cell["start_row_offset_idx"]].append(cell)
+    header_signatures = {}
+    boundaries = [0]
+    for row, entries in sorted(by_row.items()):
+        signature = tuple(
+            sorted(
+                (c["start_col_offset_idx"], c["col_span"], "".join(c["text"].split()))
+                for c in entries
+                if c.get("column_header")
+                and c["col_span"] > 1
+                and any(ch.isalpha() for ch in c["text"])
+            )
+        )
+        if not signature:
+            continue
+        if signature in header_signatures and row - boundaries[-1] >= 4:
+            prior = [
+                model_box(c["bbox"], page)[3] for c in by_row[row - 1] if c.get("bbox")
+            ]
+            current = [model_box(c["bbox"], page)[1] for c in entries if c.get("bbox")]
+            crossing = any(
+                c["start_row_offset_idx"]
+                < row
+                < c["start_row_offset_idx"] + c["row_span"]
+                for c in cells
+            )
+            if prior and current and min(current) - max(prior) >= 5 and not crossing:
+                boundaries.append(row)
+        elif row <= 2:
+            header_signatures[signature] = row
+    boundaries.append(data["num_rows"])
+    result = []
+    for start, end in zip(boundaries, boundaries[1:]):
+        part = deepcopy(item)
+        pcells = [
+            deepcopy(c) for c in cells if start <= c["start_row_offset_idx"] < end
+        ]
+        for cell in pcells:
+            cell["start_row_offset_idx"] -= start
+            cell["end_row_offset_idx"] -= start
+        pdata = part["data"]
+        pdata["table_cells"] = pcells
+        pdata["num_rows"] = end - start
+        if len(boundaries) > 2:
+            bounds = [model_box(c["bbox"], page) for c in pcells if c.get("bbox")]
+            part["prov"][0]["bbox"] = local_box(
+                [
+                    box[0],
+                    max(box[1], min(b[1] for b in bounds) - 1),
+                    box[2],
+                    min(box[3], max(b[3] for b in bounds) + 1),
+                ],
+                page,
+            )
+
+        # Repeated dot leaders beside row labels are not an independent field.
+        # Never collapse an ellipsis-containing value or a column with real data.
+        for col in reversed(range(1, pdata["num_cols"])):
+            entries = [
+                c
+                for c in pcells
+                if c["start_col_offset_idx"] == col
+                and c["col_span"] == 1
+                and c["text"].strip()
+            ]
+            leaders = [c for c in entries if re.fullmatch(r"\.{8,}", c["text"].strip())]
+            other = [c for c in entries if c not in leaders]
+            if len(leaders) < 3 or len(leaders) < pdata["num_rows"] * 0.5:
+                continue
+            if any(
+                not c.get("column_header") or any(ch.isdigit() for ch in c["text"])
+                for c in other
+            ):
+                continue
+            if any(
+                any(
+                    o["start_row_offset_idx"] == c["start_row_offset_idx"]
+                    and o["start_col_offset_idx"] == col - 1
+                    and o["text"].strip()
+                    for o in pcells
+                )
+                for c in other
+            ):
+                continue
+            updated = []
+            for c in pcells:
+                left = c["start_col_offset_idx"]
+                right = left + c["col_span"]
+                if left == col and c["col_span"] == 1:
+                    if c in leaders or not c["text"].strip():
+                        continue
+                    c["start_col_offset_idx"] -= 1
+                elif left > col:
+                    c["start_col_offset_idx"] -= 1
+                elif left <= col < right:
+                    c["col_span"] -= 1
+                c["end_col_offset_idx"] = c["start_col_offset_idx"] + c["col_span"]
+                updated.append(c)
+            pcells = updated
+            pdata["table_cells"] = pcells
+            pdata["num_cols"] -= 1
+        restore_stub_header(pdata, page)
+        result.append(part)
+    return result
+
+
+def restore_stub_header(data, page):
+    """Merge a stub under a multi-level header only across unruled gaps."""
+    cells = data["table_cells"]
+    rows = defaultdict(list)
+    for c in cells:
+        rows[c["start_row_offset_idx"]].append(c)
+    header_end = 0
+    while header_end in rows and any(c.get("column_header") for c in rows[header_end]):
+        header_end += 1
+    if not 2 <= header_end <= 4:
+        return
+    if not any(c["col_span"] > 1 for c in rows[0]):
+        return
+    stub = [
+        c
+        for c in cells
+        if c["start_col_offset_idx"] == 0 and c["start_row_offset_idx"] < header_end
+    ]
+    nonempty = [c for c in stub if c["text"].strip()]
+    if not nonempty or any(
+        c["col_span"] != 1 or c["start_row_offset_idx"] + c["row_span"] > header_end
+        for c in stub
+    ):
+        return
+    if any(any(ch.isdigit() for ch in c["text"]) for c in nonempty):
+        return
+    # Only a header with a vacant top-left area is inferred, not an already
+    # specified sequence of row labels.
+    if any(c["start_row_offset_idx"] == 0 for c in nonempty):
+        return
+    bounds = [model_box(c["bbox"], page) for c in nonempty if c.get("bbox")]
+    top_bounds = [model_box(c["bbox"], page) for c in rows[0] if c.get("bbox")]
+    if not bounds or not top_bounds:
+        return
+    left, right = min(b[0] for b in bounds), max(b[2] for b in bounds)
+    top, bottom = min(b[1] for b in top_bounds), max(b[3] for b in bounds)
+    for edge in getattr(page, "edges", []):
+        if edge.get("orientation") == "h" and top < edge["top"] < bottom:
+            if min(right, edge["x1"]) - max(left, edge["x0"]) >= 0.8 * (right - left):
+                return
+    merged = dict(nonempty[0])
+    merged.update(
+        start_row_offset_idx=0,
+        end_row_offset_idx=header_end,
+        row_span=header_end,
+        text="\n".join(
+            c["text"] for c in sorted(nonempty, key=lambda c: c["start_row_offset_idx"])
+        ),
+    )
+    # Its original text bbox is the union, not the full inferred merged area.
+    merged["bbox"] = local_box([left, min(b[1] for b in bounds), right, bottom], page)
+    data["table_cells"] = [c for c in cells if c not in stub] + [merged]
 
 
 @lru_cache(maxsize=1)
@@ -176,17 +541,48 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
         if not 0 <= position < len(indices):
             raise LayoutError("A detected table has an invalid source page.")
         index = indices[position]
-        model = adapt_table(item.model_dump(), pages[index])
+        predictions = refine_predictions(item.model_dump(), pages[index])
         if index not in native:
             try:
                 native[index] = native_extractor(pages[index])
             except Exception:
                 native[index] = []
-        table = prefer_native(model, native[index])
-        cell_count += len(table["widths"]) * len(table["heights"])
-        if cell_count > 250000:
-            raise LayoutError("The extracted tables exceed the cell budget.")
-        grouped[index].append(table)
+        for prediction in predictions:
+            try:
+                model = adapt_table(prediction, pages[index])
+                table = prefer_native(model, native[index])
+            except LayoutError as error:
+                table = (
+                    recover_ruled_prediction(prediction, pages[index], native[index])
+                    if "overlapping cells" in str(error)
+                    else None
+                )
+                if table is None:
+                    raise
+            cell_count += len(table["widths"]) * len(table["heights"])
+            if cell_count > 250000:
+                raise LayoutError("The extracted tables exceed the cell budget.")
+            grouped[index].append(table)
+    # Recover additional physical tables even when a page already has a model
+    # table. Require a dense closed grid, a textual first row and no overlap.
+    for index in indices:
+        if index not in native:
+            native[index] = native_extractor(pages[index])
+        for table in native[index]:
+            occupied = len(table["widths"]) * len(table["heights"])
+            if not independent_grid(table):
+                continue
+            b = table["bbox"]
+            if any(
+                min(b[2], t["bbox"][2]) > max(b[0], t["bbox"][0])
+                and min(b[3], t["bbox"][3]) > max(b[1], t["bbox"][1])
+                for t in grouped[index]
+            ):
+                continue
+            cell_count += occupied
+            if cell_count > 250000:
+                raise LayoutError("The extracted tables exceed the cell budget.")
+            grouped[index].append(dict(table, method="ruled-recovery"))
     for tables in grouped.values():
         tables.sort(key=lambda t: (t["bbox"][1], t["bbox"][0]))
     return dict(grouped)
