@@ -72,11 +72,13 @@ def render_presentations(files, folder, settings):
 
 
 def run_gate(original,target,source,report,settings):
-    if not any(p['route']=='native-coordinate' for p in report['pages']):return report
-    if not settings.renderer_path or not Path(settings.renderer_path).is_file():raise ConversionError('layout_renderer_not_configured')
-    with tempfile.TemporaryDirectory(prefix='smartppt-render-gate-',dir=Path(source).parent) as folder:
-        import shutil
-        folder=Path(folder)
-        a=folder/'baseline.pptx';b=folder/'candidate.pptx';shutil.copyfile(original,a);shutil.copyfile(target,b)
-        ap,bp=render_presentations([a,b],folder,settings)
-        return compare_and_restore(original,target,source,report,ap,bp)
+    if any(p['route']=='native-coordinate' for p in report['pages']):
+        if not settings.renderer_path or not Path(settings.renderer_path).is_file():raise ConversionError('layout_renderer_not_configured')
+        with tempfile.TemporaryDirectory(prefix='smartppt-render-gate-',dir=Path(source).parent) as folder:
+            import shutil
+            folder=Path(folder)
+            a=folder/'baseline.pptx';b=folder/'candidate.pptx';shutil.copyfile(original,a);shutil.copyfile(target,b)
+            ap,bp=render_presentations([a,b],folder,settings)
+            compare_and_restore(original,target,source,report,ap,bp)
+    from .native_words import try_native_words
+    return try_native_words(source,target,report,settings)

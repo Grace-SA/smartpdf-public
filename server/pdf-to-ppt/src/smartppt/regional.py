@@ -74,8 +74,19 @@ def score_regions(expected, actual, boxes, prs):
     return scores or None
 
 
-def objects_for_page(page,grouped=True):
-    runs,objects,warnings=extract_native(page);groups=defaultdict(list)
+def word_pixel_box(box,page_size):
+    """Use the same bounded raster grid for selection and background editing."""
+    w,h=page_size;scale=min(2.0,2200/max(w,h));width,height=math.ceil(w*scale),math.ceil(h*scale)
+    l,b,r,t=box
+    return max(0,math.floor(l*scale)-2),max(0,math.floor((h-t)*scale)-2),min(width,math.ceil(r*scale)+2),min(height,math.ceil((h-b)*scale)+2)
+
+
+def intersects(a,b):
+    return a[0]<b[2] and b[0]<a[2] and a[1]<b[3] and b[1]<a[3]
+
+
+def objects_for_page(page,grouped=True,word_regions=False):
+    runs,objects,warnings=extract_native(page,split_words=word_regions,allow_quarter_turns=word_regions,partial_regions=word_regions);groups=defaultdict(list)
     for run in runs:groups[run['object_id']].append(run)
     safe=[]
     for obj in objects:
@@ -90,6 +101,25 @@ def objects_for_page(page,grouped=True):
             any('\ufffd' in r['text'] or any(0xD800<=ord(c)<=0xDFFF for c in r['text']) for r in parts)):
             continue
         if parts:safe.append((obj,parts))
+    if word_regions:
+        # Recover words independently while retaining all unselected glyphs of
+        # the same PDF object in the raster. Touching padded boxes are ambiguous.
+        regions=[];parts=[(obj,run) for obj,runs in safe for run in runs]
+        blocked={tuple(box) for _,run in parts for box in run.get('blocked_boxes',[])}
+        blocked_pixels=[word_pixel_box(box,page.get_size()) for box in blocked]
+        boxes=[word_pixel_box(r['box'],page.get_size()) for _,r in parts];cells=defaultdict(set)
+        memberships=[]
+        for i,(l,t,r,b) in enumerate(boxes):
+            keys=[(x,y) for x in range(l//64,(r-1)//64+1) for y in range(t//64,(b-1)//64+1)]
+            memberships.append(keys)
+            for key in keys:cells[key].add(i)
+        for i,(obj,run) in enumerate(parts):
+            if any(intersects(boxes[i],box) for box in blocked_pixels):continue
+            neighbors=set().union(*(cells[key] for key in memberships[i]))
+            if any(i!=j and intersects(boxes[i],boxes[j]) for j in neighbors):continue
+            regions.append(([obj],[dict(run,source_region=True)]))
+        regions.sort(key=lambda item:item[1][0]['index'])
+        return regions,warnings
     if not grouped:return [([obj],parts) for obj,parts in safe],warnings
     # A single glyph per PDF object is common in browser-generated reports.
     # Verify a complete line as one candidate, while retaining every underlying
@@ -102,11 +132,29 @@ def objects_for_page(page,grouped=True):
     return grouped,warnings
 
 
+def regional_background(page,objects):
+    unique={ctypes.cast(obj.raw,ctypes.c_void_p).value:obj for group,_ in objects for obj in group}
+    removed=page_background(page,list(unique.values()),max_side=2200,scale_limit=2.0)
+    if not any(run.get('source_region') for _,runs in objects for run in runs):return removed
+    # Removing a source text object in a scratch render supplies the real
+    # underlying graphics. Copy only verified, nonoverlapping word regions;
+    # outside those rectangles the original raster remains pixel-identical.
+    original=page_background(page,[],max_side=2200,scale_limit=2.0)
+    for _,runs in objects:
+        for run in runs:
+            if not run.get('source_region'):raise ValueError('mixed regional removal modes')
+            box=word_pixel_box(run['box'],page.get_size())
+            original.paste(removed.crop(box),box[:2])
+    return original
+
+
 def draw_objects(prs,slide,page,objects):
     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
-    add_background(slide,page_background(page,[obj for group,_ in objects for obj in group]),w*scale,h*scale,(ox,oy))
+    # Match the content gate's source-image sampling. Otherwise untouched parts
+    # of the page acquire new antialiasing and fail the whole-page comparison.
+    add_background(slide,regional_background(page,objects),w*scale,h*scale,(ox,oy))
     regions=[]
     for _,runs in objects:
         boxes=[]
@@ -114,6 +162,11 @@ def draw_objects(prs,slide,page,objects):
             l,b,r,t=run['box'];fs=run['size']
             shape=add_text(slide,run['text'],ox+l*scale,oy+(h-t-fs*.18)*scale,
                 (r-l+fs*.3)*scale,fs*1.5*scale,fs*scale,run['font'],run['bold'],run['color'],italic=run['italic'])
+            angle=run.get('rotation',0)
+            if angle:
+                width=((t-b) if angle in (90,270) else (r-l))*scale+fs*.3*scale
+                height=fs*1.5*scale;cx=ox+(l+r)*scale/2;cy=oy+(h-(t+b)/2)*scale
+                shape.left=Pt(cx-width/2);shape.top=Pt(cy-height/2);shape.width=Pt(width);shape.height=Pt(height);shape.rotation=angle
             if 'fit' in run:
                 fit=run['fit'];shape.left=Pt(fit['x']);shape.top=Pt(fit['y'])
                 shape.width=Pt(fit['width']);shape.height=Pt(fit['height'])
@@ -135,6 +188,33 @@ def region_box(box, size, prs):
     return max(0,math.floor(l*sx)-2),max(0,math.floor(t*sy)-2),min(size[0],math.ceil(r*sx)+2),min(size[1],math.ceil(b*sy)+2)
 
 
+def rendered_word_regions(prs,number,page,objects,rendered):
+    """Bound actual rendered glyphs, not the textbox's empty line-height area.
+
+    Text must be found once near its source location, and every edge must be
+    within 2pt. Including both source and output ink catches displacement.
+    """
+    from .ocr_fit import observed_boxes
+    w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
+    scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
+    targets=[]
+    for _,runs in objects:
+        for run in runs:
+            l,b,r,t=run['box'];targets.append({'shape':len(targets)+1,'bbox':(ox+l*scale,oy+(h-t)*scale,ox+r*scale,oy+(h-b)*scale)})
+    with pdfium.PdfDocument(rendered) as doc,closing(doc[number-1]) as actual:
+        found=observed_boxes(actual,prs.slides[number-1],targets)
+    regions=[];index=0
+    for _,runs in objects:
+        boxes=[]
+        for run in runs:
+            row=targets[index];index+=1;desired=row['bbox'];observed=found.get(row['shape'])
+            if observed is None or max(abs(a-b) for a,b in zip(desired,observed))>2:
+                boxes.append(None);continue
+            boxes.append((min(desired[0],observed[0]),min(desired[1],observed[1]),max(desired[2],observed[2]),max(desired[3],observed[3])))
+        regions.append(boxes if all(b is not None for b in boxes) else None)
+    return regions
+
+
 def calibrate_runs(prs, number, page, objects, rendered):
     """Measure the office renderer's glyph placement, then fit source ink bounds.
 
@@ -144,6 +224,12 @@ def calibrate_runs(prs, number, page, objects, rendered):
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
     with pdfium.PdfDocument(rendered) as doc,closing(doc[number-1]) as actual,closing(actual.get_textpage()) as tp:
+        from .ocr_fit import observed_boxes,fit_shape
+        flat=[r for _,runs in objects for r in runs];targets=[]
+        for i,run in enumerate(flat,1):
+            if not run.get('rotation'):continue
+            l,b,r,t=run['box'];targets.append({'shape':i,'bbox':(ox+l*scale,oy+(h-t)*scale,ox+r*scale,oy+(h-b)*scale)})
+        rotated=observed_boxes(actual,prs.slides[number-1],targets) if targets else {}
         chars=[];boxes=[]
         for i in range(tp.count_chars()):
             code=pdfium.raw.FPDFText_GetUnicode(tp,i)
@@ -153,12 +239,20 @@ def calibrate_runs(prs, number, page, objects, rendered):
                 if not c.isspace():chars.append(c);boxes.append(tp.get_charbox(i))
         text=''.join(chars);used=set()
         shapes=iter(s for s in prs.slides[number-1].shapes if s.has_text_frame)
+        shape_index=0
         for _,runs in objects:
             for run in runs:
-                shape=next(shapes)
+                shape=next(shapes);shape_index+=1
                 needle=''.join(unicodedata.normalize('NFKC',run['text']).split())
                 if not needle:continue
                 l,b,r,t=run['box'];desired=(ox+l*scale,oy+(h-t)*scale,ox+r*scale,oy+(h-b)*scale)
+                if run.get('rotation'):
+                    observed=rotated.get(shape_index)
+                    if observed is not None and fit_shape(shape,desired,observed):
+                        font=shape.text_frame.paragraphs[0].runs[0]
+                        run['fit']={'x':shape.left/12700,'y':shape.top/12700,'width':shape.width/12700,'height':shape.height/12700,
+                                    'size':font.font.size/12700,'spacing':int(font._r.get_or_add_rPr().get('spc','0'))}
+                    continue
                 matches=[];start=0
                 while (start:=text.find(needle,start))>=0:
                     end=start+len(needle)
@@ -186,7 +280,7 @@ def calibrate_runs(prs, number, page, objects, rendered):
                     'width':dw+size,'height':size*1.8,'size':size,'spacing':round(spacing*100)}
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False):
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
     reports={}
@@ -196,7 +290,7 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False):
         try:
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
-                objects,warnings=objects_for_page(page,grouped=grouped)
+                objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions)
                 if objects:
                     candidates[number]=objects
                     regions[number]=draw_objects(prs,prs.slides[number-1],page,objects)
@@ -211,11 +305,12 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False):
             rendered=render_presentations([calibrated],folder,settings)[0]
             selected={};scores={}
             for number,objects in candidates.items():
+                if word_regions:regions[number]=rendered_word_regions(prs,number,pages[number],objects,rendered)
                 actual=render_page(rendered,number-1,max_side=1800)
                 expected=aligned_source(pages[number],actual.size)
                 chosen=[];measurements=[]
                 for obj,boxes in zip(objects,regions[number]):
-                    measured=score_regions(expected,actual,boxes,prs)
+                    measured=score_regions(expected,actual,boxes,prs) if boxes else None
                     if measured:chosen.append(obj);measurements.extend(measured)
                 if chosen:selected[number]=chosen;scores[number]=measurements
             if not selected:return {}
@@ -226,6 +321,30 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False):
                 draw_objects(final,final.slides[number-1],pages[number],objects)
             verified=folder/'verified.pptx';final.save(verified)
             final_pdf=render_presentations([verified],folder,settings)[0]
+            if word_regions:
+                # A selected word can interact with a neighboring word left as
+                # raster. Prune failures and re-render; never approve a changed
+                # set using the previous set's measurements.
+                for iteration in range(2):
+                    changed=False
+                    for number,objects in list(selected.items()):
+                        actual=render_page(final_pdf,number-1,max_side=1800)
+                        expected=aligned_source(pages[number],actual.size)
+                        boxes=rendered_word_regions(final,number,pages[number],objects,final_pdf)
+                        kept=[obj for obj,box in zip(objects,boxes) if box and score_regions(expected,actual,box,final)]
+                        if len(kept)==len(objects):continue
+                        changed=True
+                        if kept:
+                            selected[number]=kept;draw_objects(final,final.slides[number-1],pages[number],kept)
+                        else:
+                            del selected[number]
+                            slide=final.slides[number-1]
+                            for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
+                            for shape in fallback.slides[number-1].shapes:
+                                slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
+                    if not changed:break
+                    verified=folder/f'pruned-{iteration}.pptx';final.save(verified)
+                    final_pdf=render_presentations([verified],folder,settings)[0]
             # A second whole-page check catches interactions between text objects,
             # clipping, shared resources and pixels outside their measured boxes.
             for number,objects in selected.items():
@@ -233,16 +352,24 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False):
                 expected=aligned_source(pages[number],actual.size)
                 score=pixel_score(expected,actual)
                 baseline_score=pixel_score(expected,render_page(baseline_pdf,number-1,max_side=1800))
-                if not acceptable_page(baseline_score,score):
+                final_scores=[];regions_valid=True
+                if word_regions:
+                    for boxes in rendered_word_regions(final,number,pages[number],objects,final_pdf):
+                        measured=score_regions(expected,actual,boxes,final) if boxes else None
+                        if measured:final_scores.extend(measured)
+                        else:regions_valid=False
+                if not regions_valid or not acceptable_page(baseline_score,score):
                     slide=final.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
                     for shape in fallback.slides[number-1].shapes:
                         slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
                     continue
+                if word_regions:scores[number]=final_scores
                 runs=[run for _,parts in objects for run in parts]
-                reports[number]={'route':'native-regions','editable_runs':len(runs),'editable_objects':sum(len(group) for group,_ in objects),
-                    'candidate_objects':sum(len(group) for group,_ in candidates[number]),'candidate_regions':len(candidates[number]),'source_text_characters':sum(len(r['text']) for r in runs),
-                    'regional_strategy':'joined-glyphs' if grouped else 'source-objects',
+                object_count=lambda items:len({ctypes.cast(obj.raw,ctypes.c_void_p).value for group,_ in items for obj in group})
+                reports[number]={'route':'native-regions','editable_runs':len(runs),'editable_objects':object_count(objects),
+                    'candidate_objects':object_count(candidates[number]),'candidate_regions':len(candidates[number]),'source_text_characters':sum(len(r['text']) for r in runs),
+                    'regional_strategy':'source-words' if word_regions else 'joined-glyphs' if grouped else 'source-objects',
                     'font_substitutions':sorted({r['source_font']+' → '+r['font'] for r in runs if r['substituted']}),
                     'region_scores':scores[number],'final_render':score,'baseline_render':baseline_score,
                     'warnings':['partial_native_editability','unrecovered_content_kept_as_graphic'],
@@ -265,4 +392,11 @@ def recover_regions(source,target,page_numbers,settings):
             # The first pass already saved verified shapes. Do not discard its
             # metadata or claim those pages are still whole-page images.
             for report in reports.values():report['warnings'].append('additional_grouped_recovery_unavailable')
+            return reports
+    remaining=[n for n in page_numbers if n not in reports]
+    if remaining:
+        try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True))
+        except ConversionError:
+            if not reports:raise
+            for report in reports.values():report['warnings'].append('additional_word_recovery_unavailable')
     return reports

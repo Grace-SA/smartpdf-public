@@ -1,6 +1,6 @@
 # 第三方组件与模型
 
-本模块不打包模型、字体或第三方可执行文件。以下是本轮核对的主要组件；部署镜像仍需保留完整传递许可及通知。
+本模块源码不打包模型、字体二进制或第三方可执行文件。输出 PPT 可以包含经过校验的 Noto Sans SC 完整字体，字体元数据内保留完整版权和 OFL 许可。以下是本轮核对的主要组件；部署镜像仍需保留完整传递许可及通知。
 
 | 组件 | 本轮用途 | 上游许可/来源 |
 | --- | --- | --- |
@@ -14,7 +14,8 @@
 | MLX / mlx-vlm | 可选 Mac 推理 | 各自 MIT；不列入必需 CPU 运行环境 |
 | pypdfium2 / PDFium | PDF 解析、几何和渲染 | 保留绑定包与 PDFium 二进制的许可证/第三方通知；[许可说明](https://github.com/pypdfium2-team/pypdfium2#licensing) |
 | pypdf / python-pptx | 预检 / OOXML | BSD-3-Clause / MIT |
-| Noto Sans SC | 中文字体候选 | SIL OFL 1.1，仓库 `vendor-fonts/NotoSansSC-OFL.txt` |
+| Noto Sans SC | 中文替代字体及完整字体嵌入 | SIL OFL 1.1，仓库 `vendor-fonts/NotoSansSC-OFL.txt`；运行包保留 `src/smartppt/OFL-NotoSansSC.txt` |
+| FontTools 4.68.0 | 将固定可变字体实例化为静态字体，保留 Unicode 字形、许可和完整字符集 | MIT，[官方项目](https://github.com/fonttools/fonttools) |
 | LibreOffice | 独立渲染检查 | 按实际发行版许可及第三方通知部署，未捆绑 |
 
 PaddleOCR-VL-1.6 已检查官方模型卡（Apache-2.0），本轮未推理，不计入效果比较。项目方已确认目前满足 OXR 免费使用门槛，本轮据此接入；相关页面底部保留链接到官方仓库的 **Powered by SoMark OXR**。这不改变上游条款；分发上游代码、权重或镜像时须连同其完整许可和传递通知交付。本目录只包含适配器、校验清单和许可通知，不包含上游代码或权重。不要将其描述为无条件 Apache-2.0。

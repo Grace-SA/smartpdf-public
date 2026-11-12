@@ -42,6 +42,25 @@ def test_duplicate_text_is_assigned_near_its_expected_region(tmp_path):
     assert set(result)=={0,1} and result[0][1]>280 and result[1][1]<60
 
 
+def test_rotated_pdf_chunks_use_exact_geometric_order(monkeypatch):
+    import pypdfium2 as pdfium
+    order=[3,4,0,1,2];letters='AB123'
+    class Text:
+        def count_chars(self):return 5
+        def get_charbox(self,i):
+            x=100-order[i]*10;return (x,100,x+9,110)
+        def close(self):pass
+    class Page:
+        def get_textpage(self):return Text()
+        def get_height(self):return 200
+    monkeypatch.setattr(pdfium.raw,'FPDFText_GetUnicode',lambda tp,i:ord(letters[order[i]]))
+    p=Presentation();s=p.slides.add_slide(p.slide_layouts[6]);shape=add_text(s,letters,60,90,50,20,12);shape.rotation=180
+    targets=[{'shape':0,'bbox':[60,90,109,100]}]
+    assert observed_boxes(Page(),s,targets)=={0:(60,90,109,100)}
+    shape.text='AB124';shape.text_frame.paragraphs[0].runs[0].font.size=Pt(12)
+    assert observed_boxes(Page(),s,targets)=={}
+
+
 def test_scan_fit_render_is_bounded_for_large_page():
     from smartppt.ocr_fit import raster_bounds
     from PIL import Image

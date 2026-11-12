@@ -41,6 +41,36 @@ def test_font_flags_resolve_obfuscated_names():
     assert font_family('ABC123','中文',34)[0]=='Noto Sans SC'
 
 
+@pytest.mark.parametrize('name,weight,bold,italic',[
+    ('Times-Roman',740,False,False),('Times-Italic',740,False,True),
+    ('Times-BoldItalic',400,True,True),('ArialMT',700,False,False),
+    ('ABCDEF+Helvetica',740,False,False),('HelveticaNeue-Roman',740,False,False),
+    ('HelveticaNeue-Thin',740,False,False),('UnknownFont',700,True,False),
+])
+def test_explicit_font_face_overrides_estimated_stem_weight(name,weight,bold,italic):
+    from smartppt.layout import font_style
+    assert font_style(name,weight)==(bold,italic)
+
+
+def test_known_family_precedes_misleading_flags_or_roman_style():
+    assert font_family('HelveticaNeue-Roman','Text',2)[0]=='Arial'
+    assert font_family('Helvetica','Text',65569)[0]=='Arial'
+    assert font_family('ABCDEF+Times-Roman','Text',1)[0]=='Times New Roman'
+
+
+def test_regional_background_matches_unchanged_fallback_sampling(tmp_path):
+    from smartppt.pdf import render_page
+    from smartppt.regional import draw_objects
+    path=tmp_path/'source.pdf';c=canvas.Canvas(str(path),pagesize=(612,792))
+    c.setFont('Helvetica',8)
+    for y in range(60,740,13):c.drawString(40,y,'Unchanged thin text 123.45')
+    c.save();prs=Presentation();prs.slide_width=Pt(612);prs.slide_height=Pt(792)
+    slide=prs.slides.add_slide(prs.slide_layouts[6])
+    with pdfium.PdfDocument(path) as doc,closing(doc[0]) as page:draw_objects(prs,slide,page,[])
+    result=Image.open(BytesIO(slide.shapes[0].image.blob)).convert('RGB')
+    assert np.array_equal(np.asarray(result),np.asarray(render_page(path,0,max_side=2200)))
+
+
 def test_stroked_or_clipping_text_is_not_candidate(tmp_path):
     path=tmp_path/'stroke.pdf';c=canvas.Canvas(str(path))
     for mode in [1,2,4,5,6,7]:

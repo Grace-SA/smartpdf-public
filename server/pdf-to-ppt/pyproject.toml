@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 name = "smartpdf-ppt"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["fastapi", "uvicorn", "httpx", "python-multipart", "pypdfium2", "pypdf", "python-pptx", "pillow", "numpy"]
+dependencies = ["fastapi", "uvicorn", "httpx", "python-multipart", "pypdfium2", "pypdf", "python-pptx", "pillow", "numpy", "fonttools==4.68.0"]
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "reportlab"]
 [tool.pytest.ini_options]
@@ -13,3 +13,5 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 [tool.setuptools.packages.find]
 where = ["src"]
+[tool.setuptools.package-data]
+smartppt = ["OFL-NotoSansSC.txt"]

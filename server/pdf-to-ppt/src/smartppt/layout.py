@@ -22,12 +22,31 @@ def font_family(name,text,flags=0):
     if any('\u2e80'<=c<='\uffef' for c in text):
         return 'Noto Sans SC',True
     name=re.sub(r'^[A-Z]{6}\+','',name)
+    # Known families take precedence over unreliable descriptor flags. In
+    # particular, HelveticaNeue-Roman is sans serif despite its style suffix.
+    lower=name.lower().replace(' ','')
+    if lower.startswith(('arial','helvetica','nimbussans')):return 'Arial',name!='Arial'
+    if lower.startswith(('times','nimbusroman')):return 'Times New Roman',name!='Times New Roman'
+    if lower.startswith(('courier','nimbusmono')):return 'Courier New',name!='Courier New'
     if flags & 1:return 'Courier New',name!='Courier New'
     if flags & 2:return 'Times New Roman',name!='Times New Roman'
     if any(x in name.lower() for x in ['times','serif','song','roman']):return 'Times New Roman',name!='Times New Roman'
     if 'courier' in name.lower() or 'mono' in name.lower():return 'Courier New',name!='Courier New'
     if name in ['Arial','Helvetica','Helvetica-Bold']:return 'Arial',name!='Arial'
     return 'Arial',name!='Arial'
+
+
+def font_style(base_name,weight,flags=0):
+    """Prefer explicit face names over PDFium's stem-width weight estimate."""
+    name=re.sub(r'^[A-Z]{6}\+','',base_name).lower().replace(' ','')
+    italic=bool(flags & 64) or any(x in name for x in ('italic','oblique'))
+    if any(x in name for x in ('bold','semibold','demi','heavy','black')):return True,italic
+    regular_faces={'helvetica','helvetica-oblique','times-roman','times-italic','courier','courier-oblique',
+                   'arial','arialmt','arial-italicmt','timesnewromanpsmt','timesnewromanps-italicmt',
+                   'couriernewpsmt','couriernewps-italicmt'}
+    if name in regular_faces or re.search(r'(?:-|,)(?:regular|roman|book|light|thin)(?:italic|oblique)?$',name):
+        return False,italic
+    return weight>=600,italic
 
 
 def add_text(slide,text,x,y,width,height,size,font='Arial',bold=False,color=(0,0,0),scale=1,italic=False):
@@ -48,8 +67,9 @@ def add_text(slide,text,x,y,width,height,size,font='Arial',bold=False,color=(0,0
     return shape
 
 
-def extract_native(page):
+def extract_native(page, *, split_words=False, allow_quarter_turns=False, partial_regions=False):
     """Resolve character boxes in page coordinates, retaining object provenance."""
+    if partial_regions and not split_words:raise ValueError('partial regions require word isolation')
     raw=pdfium.raw;groups=defaultdict(list);objects={};unsupported=[];incomplete=set();clipped=set()
     rotation=page.get_rotation();pw,ph=page.get_size()
     # PDFium text coordinates are in the original page coordinate system;
@@ -91,7 +111,12 @@ def extract_native(page):
             baseline=None
             if raw.FPDFText_GetCharOrigin(tp,i,origin_x_value,origin_y_value):
                 baseline=rotate_box((origin_x_value.value,origin_y_value.value,origin_x_value.value,origin_y_value.value))[1]
-            groups[pointer].append({'text':char,'box':box,'size':size,'angle':angle,'index':i,'baseline':baseline})
+            # Group glyphs along the text's own baseline, including quarter
+            # turns. Page-space boxes remain authoritative for reconstruction.
+            l,b,r,t=box;c,s=math.cos(angle),math.sin(angle)
+            pts=[(x*c+y*s,-x*s+y*c) for x,y in [(l,ph-t),(r,ph-t),(r,ph-b),(l,ph-b)]]
+            line_box=(min(x for x,y in pts),-max(y for x,y in pts),max(x for x,y in pts),-min(y for x,y in pts))
+            groups[pointer].append({'text':char,'box':box,'line_box':line_box,'size':size,'angle':angle,'index':i,'baseline':baseline})
         runs=[];remove=[]
         for pointer,chars in groups.items():
             obj=objects[pointer]
@@ -104,11 +129,22 @@ def extract_native(page):
             # remove one if even one of its characters could not be resolved.
             if pointer in incomplete:
                 unsupported.append('incomplete_text_object_kept_as_graphic');continue
-            if any(abs(c['angle'])>.01 or (unicodedata.category(c['text'])=='Cc' and not c['text'].isspace()) for c in chars):
+            def unsupported_angle(angle):
+                return abs(angle-round(angle/(math.pi/2))*(math.pi/2))>.01 if allow_quarter_turns else abs(angle)>.01
+            if any(unsupported_angle(c['angle']) for c in chars):
                 unsupported.append('rotated_text_kept_as_graphic');continue
-            font=obj.get_font();name=font.get_family_name();bold=font.get_weight()>=600 or 'bold' in font.get_base_name().lower()
+            ambiguous=[c for c in chars if unicodedata.category(c['text'])=='Cc' and not c['text'].isspace()]
+            if ambiguous:
+                unsupported.append('unmapped_glyph_kept_as_graphic')
+                # Full-object reconstruction is still forbidden. The regional
+                # path alone can copy isolated word rectangles from a scratch
+                # render while retaining these exact glyphs in the source image.
+                if not partial_regions:continue
+                if any(c['box'][2]<=c['box'][0] or c['box'][3]<=c['box'][1] for c in ambiguous):continue
+            blocked_boxes=[c['box'] for c in ambiguous]
+            font=obj.get_font();name=font.get_family_name()
             flags=max(0,raw.FPDFFont_GetFlags(font))
-            italic=bool(flags & 64) or any(x in font.get_base_name().lower() for x in ('italic','oblique'))
+            bold,italic=font_style(font.get_base_name(),font.get_weight(),flags)
             color=[ctypes.c_uint() for _ in range(4)]
             ok=raw.FPDFPageObj_GetFillColor(obj,*color)
             rgb=tuple(c.value for c in color[:3]) if ok else (0,0,0)
@@ -124,12 +160,18 @@ def extract_native(page):
                 runs.append({'text':text,'box':[l,b,r,t],'size':size,'font':family,
                     'substituted':substituted,'source_font':name,'bold':bold,'color':rgb,'index':pending[0]['index'],
                     'end_index':pending[-1]['index']+1,'source_base_font':font.get_base_name(),
-                    'object_id':pointer,'italic':italic,'baseline':pending[0]['baseline']})
+                    'object_id':pointer,'italic':italic,'baseline':pending[0]['baseline'],
+                    'blocked_boxes':blocked_boxes,
+                    'rotation':(round(math.degrees(pending[0]['angle'])/90)*90)%360})
             for char in chars:
+                if unicodedata.category(char['text'])=='Cc' and not char['text'].isspace():
+                    flush();pending=[];continue
+                if split_words and char['text'].isspace():
+                    pending.append(char);flush();pending=[];continue
                 if pending:
                     previous=pending[-1];size=char['size']
-                    gap=char['box'][0]-previous['box'][2]
-                    if abs(char['box'][1]-previous['box'][1])>size*.45 or gap>size*.8 or gap < -size:
+                    gap=char['line_box'][0]-previous['line_box'][2]
+                    if abs(char['line_box'][1]-previous['line_box'][1])>size*.45 or gap>size*.8 or gap < -size:
                         flush();pending=[]
                 pending.append(char)
             flush();remove.append(obj)
@@ -137,13 +179,13 @@ def extract_native(page):
         return runs,remove,sorted(set(unsupported))
 
 
-def page_background(page,remove,max_side=1800):
+def page_background(page,remove,max_side=1800,scale_limit=2.5):
     disabled=[]
     try:
         for obj in remove:
             if not pdfium.raw.FPDFPageObj_SetIsActive(obj,False):raise RuntimeError('cannot remove native text')
             disabled.append(obj)
-        with closing(page.render(scale=min(2.5,max_side/max(page.get_size())))) as bitmap:
+        with closing(page.render(scale=min(scale_limit,max_side/max(page.get_size())))) as bitmap:
             image=bitmap.to_pil().convert('RGB').copy()
     finally:
         for obj in disabled:pdfium.raw.FPDFPageObj_SetIsActive(obj,True)

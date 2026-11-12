@@ -55,6 +55,8 @@ def run_job(settings, job_id):
                 assistance = run_gate(original,target,source,assistance,settings)
                 from .content_gate import enforce_content_safety
                 assistance = enforce_content_safety(source,target,info,assistance,settings)
+                from .portable_fonts import try_portable_fonts
+                assistance = try_portable_fonts(source,target,assistance,settings)
                 original.unlink(missing_ok=True)
         else:
             convert_preserve(source, target, info)
