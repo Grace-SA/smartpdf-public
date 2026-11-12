@@ -20,6 +20,9 @@ def fingerprint():
         for name in (
             "convert.py",
             "layout_tables.py",
+            "layout_rows.py",
+            "layout_grid.py",
+            "ocr_layout.py",
             "text_tables.py",
             "requirements-lock.txt",
             "models.json",

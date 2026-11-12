@@ -48,7 +48,8 @@ No filename, password, extracted text or document analytics is sent to third par
 
 - `pnpm test` and `pnpm typecheck`.
 - `python scripts/pdf-to-excel/test_conversion.py`; set `STIRLING_URL` for the real rotated-table test. Missing OCR/Stirling explicitly skips corresponding integrations.
-- `python scripts/pdf-to-excel/test_layout.py` and `python scripts/pdf-to-excel/test_evaluation.py` validate model bounds and the independent scoring logic.
+- `python scripts/pdf-to-excel/test_layout.py`, `python scripts/pdf-to-excel/test_rows.py`, `python scripts/pdf-to-excel/test_grid.py` and `python scripts/pdf-to-excel/test_evaluation.py` validate model bounds, source-backed row/grid recovery and the independent scoring logic.
+- `python scripts/pdf-to-excel/test_acceptance.py` checks strict source-reviewed reference evaluation, including omitted spaces, leading zeros, unexpected cells/sheets, merge loss, source hashes and stale outputs. Local references and review ledgers remain outside Git; missing references stay pending.
 - `python scripts/pdf-to-excel/fixtures.py .pdf-excel-fixtures` then `pnpm exec playwright test --config playwright.pdf-excel.config.ts`. Set Python/OCR variables for the actual service. Build with the review flag first.
 - `download-corpus.py <local-directory>/corpus` and `benchmark.py <local-directory>` keep all downloaded fixtures/output outside Git. Set `PDF_EXCEL_BENCHMARK_TIMEOUT=180` for the model engine, matching the service budget. Public does not imply redistribution permission.
 - `compare-references.py <local-directory>` downloads pinned table-count/region/cell annotations; `evaluate-cells.py <local-directory>` compares actual output. Reference data is never used by the conversion engine. Exact text, whitespace-normalized text, spans and missing output are reported separately; this is not the official ICDAR scorer.

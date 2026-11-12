@@ -8,7 +8,9 @@ for (let i = 0; i < 40; i++) {
   try {
     response = await fetch(base + "/session");
     if (response.ok) break;
-  } catch {}
+  } catch {
+    // The child server may still be starting; retry until the bounded deadline.
+  }
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 assert.ok(response?.ok, "Service did not become ready");

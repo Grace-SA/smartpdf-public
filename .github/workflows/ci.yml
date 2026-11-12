@@ -69,6 +69,9 @@ jobs:
           .pdf-excel-env/bin/python scripts/pdf-to-excel/test_conversion.py
           .pdf-excel-env/bin/python scripts/pdf-to-excel/test_evaluation.py
           .pdf-excel-env/bin/python scripts/pdf-to-excel/test_layout.py
+          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_rows.py
+          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_grid.py
+          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_acceptance.py
           .pdf-excel-env/bin/python scripts/pdf-to-excel/fixtures.py .pdf-excel-fixtures
         env:
           PDF_EXCEL_MODELS: .pdf-excel-models

@@ -19,6 +19,126 @@ from text_tables import aligned_tables
 
 
 class ConversionTests(unittest.TestCase):
+    def test_scanned_borderless_table_retains_each_value(self):
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.utils import ImageReader
+        import pypdfium2 as pdfium
+
+        expected = [
+            ["Item", "Quantity", "Price"],
+            ["Apples", "12", "19.50"],
+            ["Pears", "24", "28.75"],
+            ["Oranges", "36", "39.25"],
+            ["Lemons", "48", "49.00"],
+        ]
+        original = self.root / "borderless-scan-source.pdf"
+        pdf = canvas.Canvas(str(original), pagesize=(595, 842))
+        pdf.setFont("Helvetica", 20)
+        for row, values in enumerate(expected):
+            for x, value in zip((60, 250, 420), values):
+                pdf.drawString(x, 720 - row * 56, value)
+        pdf.save()
+        document = pdfium.PdfDocument(original)
+        page = document[0]
+        bitmap = page.render(scale=2)
+        raster = bitmap.to_pil().copy()
+        bitmap.close()
+        page.close()
+        document.close()
+        source = self.root / "borderless-scan.pdf"
+        pdf = canvas.Canvas(str(source), pagesize=(595, 842))
+        pdf.drawImage(ImageReader(raster), 0, 0, width=595, height=842)
+        pdf.save()
+        result, book, _ = self.run_case("borderless-scan")
+        self.assertEqual(result["tables"], 1)
+        self.assertEqual(result["ocrPages"], [1])
+        self.assertEqual([list(row) for row in book.active.values], expected)
+        self.assertFalse(book.active.merged_cells.ranges)
+        book.close()
+
+    def test_empty_user_password_is_readable_but_password_required_is_not(self):
+        writer = PdfWriter(clone_from=self.root / "ruled.pdf")
+        writer.encrypt(user_password="", owner_password="synthetic-owner")
+        writer.write(self.root / "owner-protected.pdf")
+        _, book, _ = self.run_case("owner-protected")
+        expected = next(x["cells"] for x in self.expected if x["id"] == "ruled")
+        self.assertEqual([list(row) for row in book.active.values], expected)
+        book.close()
+        with self.assertRaisesRegex(ConversionError, "Unlock"):
+            self.run_case("encrypted")
+
+    def test_visible_crop_controls_page_budget(self):
+        from pypdf.generic import RectangleObject
+        from types import SimpleNamespace
+        from convert import visible_area
+
+        writer = PdfWriter(clone_from=self.root / "ruled.pdf")
+        page = writer.pages[0]
+        original = tuple(page.mediabox)
+        page.mediabox = RectangleObject((0, 0, 10000, 10000))
+        page.cropbox = RectangleObject(original)
+        writer.write(self.root / "large-media-small-crop.pdf")
+        _, book, _ = self.run_case("large-media-small-crop")
+        expected = next(x["cells"] for x in self.expected if x["id"] == "ruled")
+        self.assertEqual([list(row) for row in book.active.values], expected)
+        book.close()
+        page.cropbox = page.mediabox
+        writer.write(self.root / "large-visible-page.pdf")
+        with self.assertRaisesRegex(ConversionError, "dimensions"):
+            self.run_case("large-visible-page")
+        for crop in [(20, 20, 10, 10), (500, 500, 600, 600)]:
+            with self.subTest(crop=crop), self.assertRaises(ConversionError):
+                visible_area(
+                    SimpleNamespace(bbox=(0, 0, 100, 100), cropbox=crop, height=100)
+                )
+
+    def test_background_rectangles_are_not_merged_cell_separators(self):
+        from reportlab.pdfgen import canvas
+
+        source = self.root / "background-merges.pdf"
+        pdf = canvas.Canvas(str(source), pagesize=(420, 792))
+        pdf.setFillGray(0.8)
+        # Same-colour paint rectangles have invisible adjoining edges.
+        for x, y, width in (
+            (50, 676, 100),
+            (50, 652, 100),
+            (150, 676, 100),
+            (250, 676, 100),
+        ):
+            pdf.rect(x, y, width, 24, fill=1, stroke=0)
+        pdf.setStrokeGray(0)
+        pdf.setLineWidth(1)
+        pdf.rect(50, 604, 300, 96, fill=0, stroke=1)
+        pdf.line(150, 604, 150, 700)
+        pdf.line(250, 604, 250, 676)
+        pdf.line(150, 676, 350, 676)
+        for y in (652, 628):
+            pdf.line(50, y, 350, y)
+        pdf.setFillGray(0)
+        pdf.setFont("Helvetica", 10)
+        for x, y, value in (
+            (55, 670, "Group"),
+            (155, 686, "Statistics"),
+            (155, 662, "Code"),
+            (255, 662, "Rate"),
+            (55, 638, "First"),
+            (155, 638, "00123"),
+            (255, 638, "45%"),
+            (55, 614, "Second"),
+            (155, 614, "00456"),
+            (255, 614, "67%"),
+        ):
+            pdf.drawString(x, y, value)
+        pdf.save()
+        output = self.root / "background-merges.xlsx"
+        convert(source, output, {})
+        book = load_workbook(output)
+        sheet = book.worksheets[0]
+        self.assertEqual(set(map(str, sheet.merged_cells.ranges)), {"A1:A2", "B1:C1"})
+        self.assertEqual(sheet["B3"].value, "00123")
+        self.assertEqual(sheet["B4"].value, "00456")
+        book.close()
+
     def test_visible_crop_and_offset_origin_do_not_export_hidden_tables(self):
         from reportlab.pdfgen import canvas
         from pypdf.generic import RectangleObject

@@ -12,7 +12,13 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from text_tables import aligned_tables, conservative_aligned_tables
-from layout_tables import extract_layout_tables, LayoutError, visible_box
+from layout_tables import (
+    extract_layout_tables,
+    LayoutError,
+    visible_box,
+    physical_page,
+    restore_rotated_headers,
+)
 
 MAX_BYTES = 30 * 1024 * 1024
 MAX_CELLS = 250000
@@ -20,6 +26,14 @@ MAX_CELLS = 250000
 
 class ConversionError(Exception):
     pass
+
+
+def visible_area(page):
+    box = visible_box(page)
+    width, height = box[2] - box[0], box[3] - box[1]
+    if not all(math.isfinite(v) for v in box) or width <= 0 or height <= 0:
+        raise ConversionError("A page has unsupported dimensions.")
+    return width * height
 
 
 def pages_for(value, count):
@@ -112,6 +126,7 @@ def ruled_tables(page):
     # PDF objects outside the displayed media/crop intersection are not content
     # visible to the user. Clip before finding borders or extracting cell text.
     page = page.crop(tuple(visible_box(page)))
+    page = physical_page(page)
     found = page.find_tables()
     tables = []
     for candidate in found:
@@ -232,7 +247,7 @@ def scan_tables(page):
         raise ConversionError(
             "This page needs OCR, which is unavailable on this server."
         )
-    if page.width * page.height * 4 > 20_000_000:
+    if visible_area(page) * 4 > 20_000_000:
         raise ConversionError("The scanned page is too large for OCR.")
     im = np.asarray(page.to_image(resolution=144).original.convert("RGB"))
     if _ocr is None:
@@ -348,7 +363,8 @@ def scan_tables(page):
 
 
 def readable_heights(table, widths, font_size):
-    heights = [min(409, max(20, h)) for h in table["heights"]]
+    source_geometry = table.get("sourceGeometry", False)
+    heights = [min(409, max(1 if source_geometry else 20, h)) for h in table["heights"]]
 
     def width(text):
         total = 0
@@ -371,6 +387,8 @@ def readable_heights(table, widths, font_size):
         return total
 
     for cell in table["cells"]:
+        if source_geometry and not cell["text"].strip():
+            continue
         available = max(12, sum(widths[cell["c"] : cell["c"] + cell["cs"]]) * 5.25 - 8)
         if cell["r"] == 0:
             available /= 1.08
@@ -393,6 +411,8 @@ def readable_heights(table, widths, font_size):
                 else:
                     used += measured
         required = lines * font_size * 1.32 + 6
+        if cell.get("rotation") in (90, 180):
+            required = max(width(line) for line in cell["text"].split("\n")) + 6
         indices = range(cell["r"], cell["r"] + cell["rs"])
         if required > 409 * cell["rs"]:
             raise ConversionError(
@@ -432,8 +452,11 @@ def write_workbook(tables, output, layout):
             raise ConversionError("The result exceeds Excel worksheet limits.")
         for col, width in enumerate(t["widths"], 1):
             key = get_column_letter(col)
+            existing = s.column_dimensions.get(key)
+            minimum = 3 if t.get("sourceGeometry") else 8
             s.column_dimensions[key].width = max(
-                s.column_dimensions[key].width or 0, min(80, max(8, width / 5.25))
+                (existing.width or 0) if existing is not None else 0,
+                min(80, max(minimum, width / 5.25)),
             )
         font_size = t.get("fontSize", 11)
         heights = readable_heights(
@@ -458,10 +481,13 @@ def write_workbook(tables, output, layout):
                     else "Arial"
                 ),
                 size=font_size,
+                bold=e.get("bold", False),
             )
-            c.alignment = Alignment(vertical="top", wrap_text=True)
+            c.alignment = Alignment(
+                vertical="top", wrap_text=True, textRotation=e.get("rotation", 0)
+            )
             c.border = Border(left=thin, right=thin, top=thin, bottom=thin)
-            if e["r"] == 0:
+            if e["r"] < t.get("headerRows", 1):
                 c.font = Font(
                     name=c.font.name, size=font_size, bold=True, color="174B39"
                 )
@@ -518,7 +544,12 @@ def convert(source, output, options):
     except Exception:
         raise ConversionError("The PDF is damaged or cannot be opened.")
     if reader.is_encrypted:
-        raise ConversionError("Unlock this PDF before converting it.")
+        try:
+            opened = reader.decrypt("")
+        except Exception:
+            opened = False
+        if not opened:
+            raise ConversionError("Unlock this PDF before converting it.")
     try:
         count = len(reader.pages)
     except Exception:
@@ -546,11 +577,7 @@ def convert(source, output, options):
             native_indices = []
             for index in selected:
                 page = doc.pages[index]
-                if (
-                    page.width <= 0
-                    or page.height <= 0
-                    or page.width * page.height > 10_000_000
-                ):
+                if visible_area(page) > 10_000_000:
                     raise ConversionError("A page has unsupported dimensions.")
                 if not page.rotation and not (page.images and len(page.chars) < 10):
                     native_indices.append(index)
@@ -562,11 +589,7 @@ def convert(source, output, options):
                 raise ConversionError(str(error))
         for index in selected:
             page = doc.pages[index]
-            if (
-                page.width <= 0
-                or page.height <= 0
-                or page.width * page.height > 10_000_000
-            ):
+            if visible_area(page) > 10_000_000:
                 raise ConversionError("A page has unsupported dimensions.")
             # Reject an image region with no corresponding text, including mixed pages.
             image_only = bool(page.images) and len(page.chars) < 10
@@ -576,10 +599,19 @@ def convert(source, output, options):
                         f"Page {index+1} needs OCR. Enable scanned-page recognition."
                     )
                 found = scan_tables(page)
+                if not found and models and _ocr is not None:
+                    from ocr_layout import extract_scan_layout_tables
+
+                    try:
+                        found = extract_scan_layout_tables(
+                            source, index, models, page, _ocr
+                        )
+                    except LayoutError as error:
+                        raise ConversionError(str(error))
                 ocr_pages.append(index + 1)
                 if not found:
                     raise ConversionError(
-                        f"No reliable table was recognized on scanned page {index+1}. Try a clearer scan with visible table lines."
+                        f"No reliable table was recognized on scanned page {index+1}. Try a clearer scan with distinct rows and columns."
                     )
             elif page.rotation:
                 if not os.environ.get("STIRLING_URL"):
@@ -587,6 +619,8 @@ def convert(source, output, options):
                         "Rotated tables need the conversion server. Rotate the page upright and try again."
                     )
                 found = stirling_tables(source, index)
+                native = ruled_tables(page)
+                found = [restore_rotated_headers(table, native) for table in found]
                 warnings.append(
                     f"Page {index+1}: rotated table was reconstructed; check number formatting."
                 )

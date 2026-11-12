@@ -10,6 +10,68 @@ from text_tables import conservative_aligned_tables
 
 
 class LayoutTests(unittest.TestCase):
+    def test_rotated_header_recovery_requires_unique_unchanged_data(self):
+        from layout_tables import restore_rotated_headers
+
+        model = dict(
+            widths=[40, 40],
+            heights=[20, 20],
+            cells=[
+                dict(r=0, c=0, rs=1, cs=1, text="workers"),
+                dict(r=0, c=1, rs=1, cs=1, text="Count"),
+                dict(r=1, c=0, rs=1, cs=1, text="Region A"),
+                dict(r=1, c=1, rs=1, cs=1, text="00123"),
+            ],
+        )
+        native = copy.deepcopy(model)
+        native["cells"][0]["text"] = "Movement of\nworkers"
+        restored = restore_rotated_headers(model, [native])
+        self.assertEqual(restored["cells"][0]["text"], "Movement of\nworkers")
+        self.assertEqual(restored["cells"][3]["text"], "00123")
+        self.assertEqual(model["cells"][0]["text"], "workers")
+        self.assertIs(
+            restore_rotated_headers(model, [native, copy.deepcopy(native)]), model
+        )
+        native["cells"][3]["text"] = "123"
+        self.assertIs(restore_rotated_headers(model, [native]), model)
+        native["cells"][3]["text"] = "00123"
+        native["cells"][0]["text"] = "2026 workers"
+        self.assertIs(restore_rotated_headers(model, [native]), model)
+
+    def test_headerless_numeric_tables_preserve_independent_row_counts(self):
+        words = []
+        expected = []
+        for left, rows in [(20, 8), (240, 6)]:
+            values = []
+            for r in range(rows):
+                for c in range(3):
+                    text = f"{r * 3 + c:03}"
+                    values.append(text)
+                    words.append(
+                        dict(
+                            x0=left + c * 40,
+                            x1=left + c * 40 + 18,
+                            top=r * 20,
+                            bottom=r * 20 + 10,
+                            text=text,
+                        )
+                    )
+            expected.append(values)
+        page = SimpleNamespace(extract_words=lambda **_: words)
+        found = conservative_aligned_tables(page)
+        self.assertEqual([len(t["heights"]) for t in found], [8, 6])
+        self.assertEqual([[c["text"] for c in t["cells"]] for t in found], expected)
+        # Numeric chart labels, a dropped value, and prose on the page cannot
+        # satisfy the complete numeric-page fallback.
+        page.curves = [{"object_type": "curve"}]
+        self.assertEqual(conservative_aligned_tables(page), [])
+        page.curves = []
+        saved = words.pop(7)
+        self.assertEqual(conservative_aligned_tables(page), [])
+        words.append(saved)
+        words.append(dict(x0=20, x1=100, top=200, bottom=210, text="paragraph"))
+        self.assertEqual(conservative_aligned_tables(page), [])
+
     def test_numeric_chart_axes_are_not_recovered_as_a_table(self):
         words = []
         for r, value in enumerate(["300", "250", "200", "150", "100", "50"]):
@@ -102,6 +164,56 @@ class LayoutTests(unittest.TestCase):
         native["bbox"] = [500, 0, 900, 200]
         self.assertIs(prefer_native(model, [native]), model)
 
+    def test_physical_span_recovers_label_without_joining_numeric_rows(self):
+        from layout_tables import restore_native_spans
+
+        model = dict(
+            cells=[
+                dict(r=0, c=0, rs=1, cs=1, text="Chronic fatigue"),
+                dict(r=1, c=0, rs=1, cs=1, text="syndrome"),
+                dict(r=0, c=1, rs=1, cs=1, text="00123"),
+                dict(r=1, c=1, rs=1, cs=1, text="00456"),
+            ]
+        )
+        physical = dict(
+            closedGrid=True,
+            cells=[
+                dict(r=0, c=0, rs=2, cs=1, text="Chronic fatigue\nsyndrome"),
+                dict(r=0, c=1, rs=2, cs=1, text="00123\n00456"),
+            ],
+        )
+        result = restore_native_spans(model, physical)
+        self.assertIn(physical["cells"][0], result["cells"])
+        self.assertNotIn(physical["cells"][1], result["cells"])
+        self.assertEqual(
+            [c["text"] for c in result["cells"] if c["c"] == 1], ["00123", "00456"]
+        )
+        self.assertEqual(len(model["cells"]), 4)
+        physical["closedGrid"] = False
+        self.assertIs(restore_native_spans(model, physical), model)
+
+    def test_physical_span_does_not_combine_names_or_expand_existing_merge(self):
+        from layout_tables import restore_native_spans
+
+        model = dict(
+            cells=[
+                dict(r=0, c=0, rs=1, cs=1, text="Alpha"),
+                dict(r=1, c=0, rs=1, cs=1, text="Beta"),
+            ]
+        )
+        physical = dict(
+            closedGrid=True, cells=[dict(r=0, c=0, rs=2, cs=1, text="Alpha Beta")]
+        )
+        self.assertIs(restore_native_spans(model, physical), model)
+        model = dict(
+            cells=[
+                dict(r=0, c=0, rs=2, cs=1, text="Heading"),
+                dict(r=2, c=0, rs=1, cs=1, text=""),
+            ]
+        )
+        physical["cells"] = [dict(r=0, c=0, rs=3, cs=1, text="Heading")]
+        self.assertIs(restore_native_spans(model, physical), model)
+
     def test_pdf_glyphs_restore_punctuation_without_guessing_numbers(self):
         from layout_tables import source_cell_text
 
@@ -151,6 +263,40 @@ class LayoutTests(unittest.TestCase):
         page = SimpleNamespace(height=800, chars=chars)
         box = dict(l=0, t=8, r=150, b=45, coord_origin="TOPLEFT")
         self.assertEqual(source_cell_text("Alpha - Beta", box, page), "Alpha – Beta")
+
+    def test_source_glyph_recovery_ignores_only_complete_neighbour_lines(self):
+        from layout_tables import source_cell_text
+
+        def page_for(lines):
+            chars = []
+            for row, line in enumerate(lines):
+                for i, char in enumerate(line):
+                    chars.append(
+                        dict(
+                            text=char,
+                            x0=i * 6,
+                            x1=i * 6 + 6,
+                            top=10 + row * 20,
+                            bottom=20 + row * 20,
+                            doctop=10 + row * 20,
+                            upright=True,
+                            height=10,
+                            width=6,
+                        )
+                    )
+            return SimpleNamespace(height=800, chars=chars)
+
+        box = dict(l=0, t=8, r=300, b=85, coord_origin="TOPLEFT")
+        self.assertEqual(source_cell_text("-", box, page_for(["Header", "–"])), "–")
+        self.assertEqual(
+            source_cell_text("10-20", box, page_for(["Header", "10–20 30"])), "10-20"
+        )
+        self.assertEqual(
+            source_cell_text("10-20", box, page_for(["10–20", "10–20"])), "10-20"
+        )
+        self.assertEqual(
+            source_cell_text("00123", box, page_for(["Header", "00124"])), "00123"
+        )
 
     def test_stacked_numeric_values_are_not_a_recovered_grid(self):
         from layout_tables import independent_grid

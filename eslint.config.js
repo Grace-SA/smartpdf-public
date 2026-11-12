@@ -54,7 +54,14 @@ export default ts.config(
     rules: { ...hooks.configs.recommended.rules },
   },
   {
-    files: ["scripts/*.mjs", "infra/**/*.mjs", "server/**/*.mjs", "*.js"],
+    files: [
+      "scripts/*.mjs",
+      "scripts/pdf-to-excel/*.mjs",
+      "scripts/excel/*.mjs",
+      "infra/**/*.mjs",
+      "server/**/*.mjs",
+      "*.js",
+    ],
     languageOptions: {
       globals: {
         console: "readonly",
@@ -82,6 +89,10 @@ export default ts.config(
         document: "readonly",
       },
     },
+  },
+  {
+    files: ["scripts/pdf-to-excel/container-smoke.mjs"],
+    languageOptions: { globals: { fetch: "readonly" } },
   },
   {
     files: ["scripts/ux-preview-server.mjs"],

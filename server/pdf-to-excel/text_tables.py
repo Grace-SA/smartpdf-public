@@ -7,9 +7,56 @@ three consecutive rows with matching column starts and visible inter-cell gaps.
 from statistics import median
 import re
 
+NUMERIC = re.compile(r"[+\-−($€£¥]?\d[\d\s.,%()\-]*")
+
+
+def numeric_page_tables(page):
+    """Headerless numeric pages require complete, repeated columns without graphics.
+
+    Persistent wide gutters divide independent side-by-side tables before row
+    grouping, so a shorter table cannot cut a longer neighbour into fragments.
+    """
+    if any(getattr(page, key, []) for key in ("images", "lines", "rects", "curves")):
+        return []
+    words = page.extract_words(x_tolerance=2, y_tolerance=3)
+    if len(words) < 15 or any(not NUMERIC.fullmatch(w["text"]) for w in words):
+        return []
+    bands = []
+    for word in sorted(words, key=lambda w: w["x0"]):
+        if bands and word["x0"] <= bands[-1][1] + 4:
+            bands[-1][1] = max(bands[-1][1], word["x1"])
+        else:
+            bands.append([word["x0"], word["x1"]])
+    if len(bands) < 3:
+        return []
+    gaps = [right[0] - left[1] for left, right in zip(bands, bands[1:])]
+    # A split must be substantially wider than ordinary column separation.
+    cuts = [
+        (bands[i][1] + bands[i + 1][0]) / 2
+        for i, gap in enumerate(gaps)
+        if gap >= max(48, median(gaps) * 2.5)
+    ]
+    bounds = [float("-inf"), *cuts, float("inf")]
+    tables = []
+    for left, right in zip(bounds, bounds[1:]):
+        region = [w for w in words if left <= w["x0"] < right]
+        found = aligned_words(region)
+        if (
+            not found
+            or any(len(t["widths"]) < 3 or len(t["heights"]) < 5 for t in found)
+            or sum(len(t["cells"]) for t in found) != len(region)
+        ):
+            return []
+        tables.extend(found)
+    for table in tables:
+        table["headerRows"] = 0
+    return tables
+
 
 def conservative_aligned_tables(page):
-    numeric = re.compile(r"[+\-−($€£¥]?\d[\d\s.,%()\-]*")
+    numeric_tables = numeric_page_tables(page)
+    if numeric_tables:
+        return numeric_tables
     return [
         table
         for table in aligned_tables(page)
@@ -18,7 +65,7 @@ def conservative_aligned_tables(page):
             for cell in table["cells"]
         )
         and sum(
-            bool(numeric.fullmatch(cell["text"].strip())) for cell in table["cells"]
+            bool(NUMERIC.fullmatch(cell["text"].strip())) for cell in table["cells"]
         )
         >= max(2, len(table["cells"]) * 0.25)
     ]
@@ -26,6 +73,10 @@ def conservative_aligned_tables(page):
 
 def aligned_tables(page, excluded=()):
     words = page.extract_words(x_tolerance=2, y_tolerance=3)
+    return aligned_words(words, excluded)
+
+
+def aligned_words(words, excluded=()):
     lines = []
     for word in sorted(words, key=lambda w: ((w["top"] + w["bottom"]) / 2, w["x0"])):
         cx = (word["x0"] + word["x1"]) / 2

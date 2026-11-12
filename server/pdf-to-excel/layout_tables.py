@@ -33,6 +33,26 @@ def visible_box(page):
     ]
 
 
+def physical_page(page):
+    """Exclude background fills from rules, retaining stroked boxes and thin bars.
+
+    Some PDF writers paint a cell background as several adjoining rectangles.
+    Their invisible boundaries are not cell separators. Thin filled rectangles
+    remain because many writers draw actual grid lines with those primitives.
+    """
+    if not hasattr(page, "filter"):
+        return page
+    return page.filter(
+        lambda obj: not (
+            obj.get("object_type") == "rect"
+            and not obj.get("stroke")
+            and obj.get("fill")
+            and obj.get("width", 0) > 3
+            and obj.get("height", 0) > 3
+        )
+    )
+
+
 def model_box(box, page):
     view = visible_box(page)
     local = top_box(box, view[3] - view[1])
@@ -116,6 +136,22 @@ def source_cell_text(text, box, page):
         )
         return "".join(value.split()).casefold()
 
+    if original and canonical(text) != canonical(original):
+        # Predicted text boxes can overlap a neighbouring header line. Recover
+        # glyphs from a unique sequence of complete source lines only; never
+        # match a substring of an amount or discard another value on that line.
+        lines = original.splitlines()
+        keys = [canonical(line) for line in lines]
+        joined = "".join(keys)
+        wanted = canonical(text)
+        start = joined.find(wanted) if wanted else -1
+        if start >= 0 and joined.find(wanted, start + 1) < 0:
+            offsets = [0]
+            for key in keys:
+                offsets.append(offsets[-1] + len(key))
+            end = start + len(wanted)
+            if start in offsets and end in offsets:
+                original = "\n".join(lines[offsets.index(start) : offsets.index(end)])
     if original and canonical(text) == canonical(original):
         # A PDF's visual soft wraps must not become extra hard Excel breaks;
         # combining those with Excel wrapping can double the required row height.
@@ -188,6 +224,56 @@ def adapt_table(item, page):
     }
 
 
+def restore_rotated_headers(model, native):
+    """Restore only uniquely matched source headers; preserve all existing data."""
+    from copy import deepcopy
+
+    def canonical(value):
+        return "".join(value.split())
+
+    def digits(value):
+        return re.findall(r"\d[\d.,]*", canonical(value))
+
+    options = []
+    for candidate in native:
+        if len(candidate["heights"]) != len(model["heights"]) or len(
+            candidate["widths"]
+        ) != len(model["widths"]):
+            continue
+        source = {(c["r"], c["c"]): c for c in candidate["cells"] if c["text"].strip()}
+        old = {(c["r"], c["c"]): c for c in model["cells"] if c["text"].strip()}
+        if source.keys() != old.keys():
+            continue
+        changes = {}
+        valid = True
+        for key, cell in old.items():
+            other = source[key]
+            if (cell["rs"], cell["cs"]) != (other["rs"], other["cs"]):
+                valid = False
+                break
+            before, after = canonical(cell["text"]), canonical(other["text"])
+            if before == after:
+                continue
+            if (
+                cell["r"] != 0
+                or not any(c.isalpha() for c in before)
+                or before not in after
+                or digits(before) != digits(after)
+            ):
+                valid = False
+                break
+            changes[key] = other["text"]
+        if valid and changes:
+            options.append(changes)
+    if len(options) != 1:
+        return model
+    cells = deepcopy(model["cells"])
+    for c in cells:
+        if (c["r"], c["c"]) in options[0]:
+            c["text"] = options[0][c["r"], c["c"]]
+    return dict(model, cells=cells)
+
+
 def prefer_native(model, native):
     """Use exact ruled geometry only when independent structure agrees in size."""
 
@@ -224,10 +310,67 @@ def prefer_native(model, native):
             overlap(candidate["bbox"], model["bbox"]) >= 0.7
             and len(candidate["widths"]) == len(model["widths"])
             and len(candidate["heights"]) == len(model["heights"])
-            and preserves_values(candidate)
         ):
-            return candidate
+            if preserves_values(candidate):
+                return candidate
+            restored = restore_native_spans(model, candidate)
+            if restored is not model:
+                return restored
     return model
+
+
+def restore_native_spans(model, physical):
+    """Recover physically bounded label spans without collapsing data rows.
+
+    A complete matching grid can establish that a wrapped label occupies one
+    cell. Multiple numeric values, independently capitalized labels and existing
+    model spans are never joined by this recovery path.
+    """
+    from copy import deepcopy
+
+    if not physical.get("closedGrid"):
+        return model
+    cells = deepcopy(model["cells"])
+    changed = False
+    for target in physical["cells"]:
+        if target["rs"] == 1 and target["cs"] == 1:
+            continue
+        start, end = target["r"], target["r"] + target["rs"]
+        left, right = target["c"], target["c"] + target["cs"]
+        members = [
+            c
+            for c in cells
+            if c["r"] < end
+            and c["r"] + c["rs"] > start
+            and c["c"] < right
+            and c["c"] + c["cs"] > left
+        ]
+        if not members or any(
+            c["r"] < start
+            or c["r"] + c["rs"] > end
+            or c["c"] < left
+            or c["c"] + c["cs"] > right
+            or c["rs"] > 1
+            or c["cs"] > 1
+            for c in members
+        ):
+            continue
+        nonempty = sorted(
+            [c for c in members if c["text"].strip()], key=lambda c: (c["r"], c["c"])
+        )
+        if len(nonempty) > 1 and (
+            target["cs"] != 1
+            or target["rs"] > 4
+            or any(any(ch.isdigit() for ch in c["text"]) for c in nonempty)
+            or any(not c["text"].lstrip()[0].islower() for c in nonempty[1:])
+        ):
+            continue
+        before = "".join("".join(c["text"].split()) for c in nonempty)
+        if not before or before != "".join(target["text"].split()):
+            continue
+        cells = [c for c in cells if c not in members] + [dict(target)]
+        changed = True
+    return dict(model, cells=cells) if changed else model
 
 
 def recover_ruled_prediction(item, page, native):
@@ -285,6 +428,7 @@ def refine_predictions(item, page):
     No sample IDs, reference annotations or generated text are used here.
     """
     from copy import deepcopy
+    from layout_rows import repair_merged_rows
 
     item = deepcopy(item)
     data = item["data"]
@@ -410,7 +554,7 @@ def refine_predictions(item, page):
             pdata["table_cells"] = pcells
             pdata["num_cols"] -= 1
         restore_stub_header(pdata, page)
-        result.append(part)
+        result.append(repair_merged_rows(part, page))
     return result
 
 
@@ -450,7 +594,7 @@ def restore_stub_header(data, page):
         return
     left, right = min(b[0] for b in bounds), max(b[2] for b in bounds)
     top, bottom = min(b[1] for b in top_bounds), max(b[3] for b in bounds)
-    for edge in getattr(page, "edges", []):
+    for edge in getattr(physical_page(page), "edges", []):
         if edge.get("orientation") == "h" and top < edge["top"] < bottom:
             if min(right, edge["x1"]) - max(left, edge["x0"]) >= 0.8 * (right - left):
                 return
@@ -549,14 +693,26 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
                 native[index] = []
         for prediction in predictions:
             try:
-                model = adapt_table(prediction, pages[index])
-                table = prefer_native(model, native[index])
+                from layout_grid import has_vertical_headers, recover_source_grid
+
+                table = (
+                    recover_source_grid(prediction, pages[index])
+                    if has_vertical_headers(prediction, pages[index])
+                    else None
+                )
+                if table is None:
+                    model = adapt_table(prediction, pages[index])
+                    table = prefer_native(model, native[index])
             except LayoutError as error:
                 table = (
                     recover_ruled_prediction(prediction, pages[index], native[index])
                     if "overlapping cells" in str(error)
                     else None
                 )
+                if table is None and "overlapping cells" in str(error):
+                    from layout_grid import recover_source_grid
+
+                    table = recover_source_grid(prediction, pages[index])
                 if table is None:
                     raise
             cell_count += len(table["widths"]) * len(table["heights"])

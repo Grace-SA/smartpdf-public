@@ -1,13 +1,6 @@
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
-import {
-  mkdtemp,
-  mkdir,
-  rm,
-  readFile,
-  writeFile,
-  stat,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, rm, readFile, stat } from "node:fs/promises";
 import { createWriteStream, createReadStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
@@ -209,7 +202,9 @@ if models:
             new URL(origin).host === req.headers.host ||
             origin === options.origin ||
             origin === process.env.PDF_EXCEL_ORIGIN;
-        } catch {}
+        } catch {
+          // Invalid origins remain disallowed.
+        }
         if (!allowed) return json(res, 403, { error: "Origin not allowed." });
       }
       if (req.headers["sec-fetch-site"] === "cross-site")
