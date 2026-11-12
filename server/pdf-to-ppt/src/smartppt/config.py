@@ -17,6 +17,7 @@ class Settings:
     stirling_url: str = field(default_factory=lambda: os.getenv('SMARTPPT_STIRLING_URL', ''))
     stirling_key: str = field(default_factory=lambda: os.getenv('SMARTPPT_STIRLING_KEY', ''))
     layout_assistance: bool = field(default_factory=lambda: os.getenv('SMARTPPT_LAYOUT_ASSISTANCE', '0') == '1')
+    orientation_runner: str = field(default_factory=lambda: os.getenv('SMARTPPT_ORIENTATION_RUNNER', ''))
     ocr_python: str = field(default_factory=lambda: os.getenv('SMARTPPT_OCR_PYTHON', ''))
     ocr_runner: str = field(default_factory=lambda: os.getenv('SMARTPPT_OCR_RUNNER', ''))
     ocr_verifier_python: str = field(default_factory=lambda: os.getenv('SMARTPPT_OCR_VERIFIER_PYTHON', ''))

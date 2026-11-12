@@ -52,7 +52,7 @@ PYTHONPATH=src .venv/bin/python -m smartppt.worker
 
 固定模型：`mlx-community/Unlimited-OCR-2-bf16`，revision `850d1e483f5a82a0597f0a45aac31b07ba840df2`；官方底座 `baidu/Unlimited-OCR-2`，revision `0480966938291445591f69f08a13b041c073a96a`。模型许可及依赖见本目录 `THIRD_PARTY.md`。
 
-启动前使用源码中的 `ocr/u2-manifest.json` 校验权重、配置、模板与 tokenizer 的大小和 SHA-256；额外的可加载配置或权重也会拒绝。模型目录必须是已完整物化的独立目录，不能使用指向目录外部的 Hugging Face 缓存符号链接。新清单的权重哈希来自固定 revision 的 Git LFS 元数据，配置/tokenizer 字节另行下载并核对 Git blob；本轮未下载权重或重跑 MLX 推理，新增校验不能代替模型实测。
+启动前使用源码中的 `ocr/u2-manifest.json` 校验权重、配置、模板与 tokenizer 的大小和 SHA-256；额外的可加载配置或权重也会拒绝。模型目录必须是已完整物化的独立目录，不能使用指向目录外部的 Hugging Face 缓存符号链接。清单的权重哈希来自固定 revision 的 Git LFS 元数据，配置/tokenizer 字节另行下载并核对 Git blob。2026-11-11 校验改动时未重跑 MLX；2026-11-12 已用本地完整权重进行真实推理回归，结果与限制见最新验收报告。
 
 ## 可选的 SoMark OXR
 
@@ -79,7 +79,21 @@ export SMARTPPT_OXR_RUNNER="$PWD/ocr/oxr_runner.py"
 
 每一段文字必须通过独立 Office 渲染后的局部比较，整页还要与同一渲染器输出的原图基准比较。失败对象留在背景中，失败页面恢复原来的原图；原始错误诊断仍保留在 `content_gate`。`native-regions` 表示部分文字可编辑，界面显示段数，不能视为全文恢复、原生表格或图表恢复。渲染器失败时保留原图并记录错误。
 
-通过原有独立模型区域复核的小角度扫描行（最多 8°）可在识别框内校正字体度量，按原角度生成旋转文本框，原页面不整体旋转。固定 3° 样本已验收；并不保证范围内任意模糊、透视或复杂背景都通过。90° 横转、竖排、模型分歧和无法安全擦除的区域保留图像。现有数字/字符校验不因提高可编辑覆盖率而关闭。
+通过原有独立模型区域复核的小角度扫描行（最多 8°）可在识别框内校正字体度量，按原角度生成旋转文本框，原页面不整体旋转。固定 3° 样本已实测；并不保证范围内任意模糊、透视或复杂背景都通过。竖排、模型分歧和无法安全擦除的区域保留图像。现有数字/字符校验不因提高可编辑覆盖率而关闭。
+
+可选的四方向预处理使用 Paddle 官方 PP-LCNet，固定 revision 和文件哈希见 `ocr/orientation-manifest.json`。使用已有 ONNX Runtime CPU 环境，无新增付费服务：
+
+```sh
+.ocr-venv/bin/python ocr/download_models.py --orientation
+export SMARTPPT_ORIENTATION_RUNNER="$PWD/ocr/orientation_runner.py"
+export SMARTPPT_ORIENTATION_MODEL="${SMARTPPT_OCR_MODELS:-$PWD/ocr/models}/PP-LCNet_x1_0_doc_ori_onnx"
+```
+
+方向置信度低于 0.9 或分类间隔不足时不旋转。归正后的同一图像交给三种 OCR；原图、归正图的哈希及逐像素转置均需校验。输出的背景和可编辑文本恢复原页面方向。方向分类不作为文字正确的证据，旧 OCR 缓存不能用于不同像素。
+
+扫描文字现在估计 Arial、Times New Roman、Courier New 的常规、粗体、斜体及粗斜体。配置渲染器后，以实际 Office 字形校准字号、基线和字距；小角度行先逆旋转测量。候选必须同时满足几何门槛和不降低页面比较结果，否则恢复校准前的文本框。校准位图最长边限制为 2400px。字体仍未嵌入，中文细字重与不同客户端字体替换仍需人工检查。
+
+原生 PDF 的相邻字符对象仅在源顺序、字体/样式、基线、间距和缺口内容均满足要求时合并。生成的空白边界可以依据位置修复；所有非空白源字符必须保持原序完全一致。列间距、不同样式、缺失字符和真实换行不能被拼接掩盖。局部恢复仍按完整原始对象验证，不因合并文本框而放宽删除背景的条件。
 
 真实 Office 区域恢复验收可通过 `SMARTPPT_TEST_RENDERER=/absolute/path/to/soffice .venv/bin/python -m pytest -q` 启用；未配置时该验收测试明确跳过，普通单元测试继续运行。服务器字体仍需单独交付与验收，不引入在线 OCR API 或新的付费依赖。
 
@@ -92,5 +106,15 @@ export SMARTPPT_OXR_RUNNER="$PWD/ocr/oxr_runner.py"
 测试全部使用程序生成的合成输入，不依赖真实用户文档或线上 OCR。公开样本、权重和真实渲染证据只保存在本机；批量实测结论见仓库 `docs/pdf-to-ppt-ocr-improvement.md`。
 
 本轮代码审查、独立渲染证据、通用上线质量目标及未完成门禁见 `docs/pdf-to-ppt-review-2026-11-11.md`。新增测试不替代主站累计回归和真实模型/生产运行时验收。
+
+后续 400 个公开输入、固定基准、真实三模型扫描回归、文字准确率与审查修复见 `docs/pdf-to-ppt-acceptance-2026-11-12.md`。当前生成成功率已较高，但真实文档的可编辑文字完整性和扫描文字位置精度仍未达到通用上线标准。
+
+新的本地准确率评估器支持位置绑定的字符编辑距离、缺失/额外文字、数字区域一致性和几何误差。输入必须注明独立参考来源；未知结果保留 `null`，整页图片不能计为可编辑成功：
+
+```sh
+PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-evaluation.json --output /path/to/local-report.json
+```
+
+输入结构为 `documents` 数组，每份包含 `eligible`、`generated` 和 `pages`；每页包含 `truth`、`predictions`、`truth_verified`。参考区域含 `id/text/bbox`，预测含 `text/bbox`，bbox 使用同一页坐标的 `[left,top,right,bottom]`。可提供唯一整数 `reading_order` 表示独立渲染器的字符顺序，区域分配始终使用几何。默认位置阈值 2pt。`structure_verified`、`render_verified` 未完成时，文档级完整成功率仍为未知；已验证成功数量的下限单独提供。不要把数据集的自动提取参考文本称为人工 OCR 真值。
 
 这是实验模块，不接生产路由、不修改现有 Office→PDF 引擎、不部署。公开发布仍需网站鉴权/配额、Linux 固定镜像、并发负载、PowerPoint/WPS、字体交付、扫描质量与真实设备验收。OCR 脚本退出和取消本机 worker 不代表远端 Stirling 的任务也已取消；引擎临时文件清理需另外验收。

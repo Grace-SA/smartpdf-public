@@ -1,12 +1,17 @@
 """Provision fixed public ONNX model files; check size and SHA-256 before use."""
-import hashlib,json,os
+import argparse,hashlib,json,os
 from pathlib import Path
 import httpx
 ROOT=Path(__file__).resolve().parent
 
 def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--orientation',action='store_true');args=parser.parse_args()
     models=Path(os.getenv('SMARTPPT_OCR_MODELS',str(ROOT/'models')))
     manifest=json.loads((ROOT/'model-manifest.json').read_text())
+    if args.orientation:
+        orientation=json.loads((ROOT/'orientation-manifest.json').read_text())
+        orientation['files']=[{'file':name,**entry,'url':f"https://huggingface.co/{orientation['repository']}/resolve/{orientation['revision']}/{name}"} for name,entry in orientation['files'].items()]
+        manifest['models'].append(orientation)
     with httpx.Client(timeout=120,follow_redirects=True) as client:
         for model in manifest['models']:
             folder=models/model['repository'].split('/')[-1];folder.mkdir(parents=True,exist_ok=True)

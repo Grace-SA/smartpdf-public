@@ -87,7 +87,11 @@ def extract_native(page):
             if not char.isspace() and (box[0]<0 or box[1]<0 or box[2]>pw or box[3]>ph):
                 clipped.add(pointer)
             objects[pointer]=obj
-            groups[pointer].append({'text':char,'box':box,'size':size,'angle':angle,'index':i})
+            origin_x_value,origin_y_value=ctypes.c_double(),ctypes.c_double()
+            baseline=None
+            if raw.FPDFText_GetCharOrigin(tp,i,origin_x_value,origin_y_value):
+                baseline=rotate_box((origin_x_value.value,origin_y_value.value,origin_x_value.value,origin_y_value.value))[1]
+            groups[pointer].append({'text':char,'box':box,'size':size,'angle':angle,'index':i,'baseline':baseline})
         runs=[];remove=[]
         for pointer,chars in groups.items():
             obj=objects[pointer]
@@ -119,7 +123,8 @@ def extract_native(page):
                 size=pending[0]['size'];family,substituted=font_family(name,text,flags)
                 runs.append({'text':text,'box':[l,b,r,t],'size':size,'font':family,
                     'substituted':substituted,'source_font':name,'bold':bold,'color':rgb,'index':pending[0]['index'],
-                    'object_id':pointer,'italic':italic})
+                    'end_index':pending[-1]['index']+1,'source_base_font':font.get_base_name(),
+                    'object_id':pointer,'italic':italic,'baseline':pending[0]['baseline']})
             for char in chars:
                 if pending:
                     previous=pending[-1];size=char['size']
@@ -150,17 +155,73 @@ def add_background(slide,image,width,height,offset=(0,0)):
     slide.shapes.add_picture(stream,Pt(offset[0]),Pt(offset[1]),width=Pt(width),height=Pt(height))
 
 
+def merge_native_runs(page,runs):
+    """Join adjacent source glyph objects without crossing columns or styles.
+
+    PDFium-generated spaces have no text object. Recover only those literal
+    whitespace gaps from the source text stream; never invent or reorder text.
+    Object removal/provenance stays in extract_native, before this presentation
+    grouping. Regional all-or-nothing object verification remains unchanged.
+    """
+    result=[]
+    with closing(page.get_textpage()) as tp:
+        for run in runs:
+            item=dict(run);item['object_ids']=[run['object_id']];previous=result[-1] if result else None
+            if previous:
+                a,b=previous['box'],run['box'];size=run['size'];gap=run['index']-previous['end_index']
+                compatible=(0<=gap<=8 and abs(previous['size']-size)<.01
+                            and all(previous[k]==run[k] for k in ('font','source_font','source_base_font','bold','italic','color'))
+                            and previous['baseline'] is not None and run['baseline'] is not None
+                            and abs(previous['baseline']-run['baseline'])<=size*.08
+                            and -.1*size<=b[0]-a[2]<=size*.8)
+                if compatible:
+                    separator=tp.get_text_range(previous['end_index'],gap) if gap else ''
+                    generated_breaks=all(raw_value in (9,10,13,32) and
+                                         (raw_value not in (10,13) or pdfium.raw.FPDFText_IsGenerated(tp,j)==1)
+                                         for j in range(previous['end_index'],run['index'])
+                                         for raw_value in [pdfium.raw.FPDFText_GetUnicode(tp,j)])
+                    if generated_breaks and all(c in ' \t\r\n' for c in separator):
+                        had_break='\r' in separator or '\n' in separator
+                        separator=separator.replace('\r','').replace('\n','')
+                        # Some producers position each glyph separately; PDFium
+                        # reports artificial newlines even on a shared baseline.
+                        if had_break and not separator and b[0]-a[2]>size*.22:separator=' '
+                        previous['text']+=separator+run['text'];previous['end_index']=run['end_index']
+                        previous['object_ids'].append(run['object_id'])
+                        previous['box']=[min(a[0],b[0]),min(a[1],b[1]),max(a[2],b[2]),max(a[3],b[3])]
+                        continue
+            result.append(item)
+    return result
+
+
+def reference_text(page,original):
+    """Repair whitespace boundaries only when every source character agrees.
+
+    This is source geometry, not OCR truth. Missing/hidden/clipped characters
+    cannot be filled in or silently removed to make content checks pass.
+    """
+    from .quality import normalized
+    try:
+        runs,_,_=extract_native(page)
+        candidate='\n'.join(r['text'] for r in merge_native_runs(page,runs))
+        return candidate if normalized(candidate)==normalized(original) else original
+    except Exception:
+        # Optional layout-aware boundaries must not change input eligibility.
+        return original
+
+
 def native_slide(prs,page,slide=None):
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
     runs,remove,warnings=extract_native(page)
+    source_runs=len(runs);runs=merge_native_runs(page,runs)
     slide=slide if slide is not None else prs.slides.add_slide(prs.slide_layouts[6])
     add_background(slide,page_background(page,remove),w*scale,h*scale,(ox,oy))
     for run in runs:
         l,b,r,t=run['box'];fs=run['size']
         add_text(slide,run['text'],ox+l*scale,oy+(h-t-fs*.18)*scale,
             (r-l+fs*.3)*scale,fs*1.5*scale,fs*scale,run['font'],run['bold'],run['color'],italic=run['italic'])
-    return {'route':'native-coordinate','editable_runs':len(runs),'font_substitutions':sorted(set(r['source_font']+' → '+r['font'] for r in runs if r['substituted'])),
+    return {'route':'native-coordinate','editable_runs':len(runs),'source_object_runs':source_runs,'font_substitutions':sorted(set(r['source_font']+' → '+r['font'] for r in runs if r['substituted'])),
         'warnings':warnings,'graphics':'raster; not editable','source_text_characters':sum(len(r['text']) for r in runs)}
 
 

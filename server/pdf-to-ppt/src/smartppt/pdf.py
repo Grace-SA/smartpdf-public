@@ -8,7 +8,7 @@ from pypdf.errors import DependencyError
 from .config import ConversionError
 
 
-def inspect_pdf(path: Path, max_bytes=30*1024*1024, max_pages=200):
+def inspect_pdf(path: Path, max_bytes=30*1024*1024, max_pages=200, *, coordinate_reference=True):
     if not 0 < path.stat().st_size <= max_bytes:
         raise ConversionError('file_size_limit')
     with path.open('rb') as f:
@@ -32,6 +32,9 @@ def inspect_pdf(path: Path, max_bytes=30*1024*1024, max_pages=200):
                         raise ConversionError('page_dimensions')
                     with closing(page.get_textpage()) as tp:
                         text = tp.get_text_range()
+                    if coordinate_reference:
+                        from .layout import reference_text
+                        text = reference_text(page,text)
                     pages.append({'number': i+1, 'width': w, 'height': h,
                                   'text': text, 'characters': len(text.strip()),
                                   'needs_ocr_check': len(text.strip()) < 12})

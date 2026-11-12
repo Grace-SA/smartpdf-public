@@ -164,6 +164,20 @@ def test_whole_page_gate_compares_same_renderer_baseline():
     assert not acceptable_page(baseline,{'mae':.003,'foreground_mae':.25})
 
 
+def test_grouped_retry_never_replaces_verified_object_recovery(monkeypatch):
+    import smartppt.regional as regional
+    from smartppt.config import ConversionError
+    calls=[];verified={'route':'native-regions','warnings':[]}
+    def recover(source,target,pages,settings,grouped=False):
+        calls.append((pages,grouped))
+        if grouped:raise ConversionError('layout_render_failed')
+        return {1:verified}
+    monkeypatch.setattr(regional,'_recover_regions',recover)
+    result=regional.recover_regions(None,None,[1,2],None)
+    assert result[1] is verified and calls==[([1,2],False),([2],True)]
+    assert 'additional_grouped_recovery_unavailable' in verified['warnings']
+
+
 @pytest.mark.skipif(not __import__('os').getenv('SMARTPPT_TEST_RENDERER'),reason='optional real Office acceptance; renderer required')
 def test_real_regional_recovery_and_rejected_page_restore(tmp_path,settings,monkeypatch):
     import os

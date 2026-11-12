@@ -115,7 +115,9 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == '--inspect':
         from .pdf import inspect_pdf
         try:
-            print(json.dumps(inspect_pdf(Path(sys.argv[2]), settings.max_bytes, settings.max_pages)))
+            # Upload preflight has a short deadline. Geometry-aware reference
+            # reconstruction belongs to the supervised conversion job instead.
+            print(json.dumps(inspect_pdf(Path(sys.argv[2]), settings.max_bytes, settings.max_pages, coordinate_reference=False)))
         except ConversionError as e:
             print(json.dumps({'error': e.code})); sys.exit(2)
         return

@@ -7,10 +7,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-CANDIDATES = [('Arial','Arial.ttf',False),('Arial','Arial Bold.ttf',True),
-              ('Times New Roman','Times New Roman.ttf',False),
-              ('Times New Roman','Times New Roman Bold.ttf',True),
-              ('Courier New','Courier New.ttf',False),('Courier New','Courier New Bold.ttf',True)]
+CANDIDATES = [(family,family+suffix+'.ttf',bold,italic)
+              for family in ('Arial','Times New Roman','Courier New')
+              for suffix,bold,italic in [('',False,False),(' Bold',True,False),
+                                        (' Italic',False,True),(' Bold Italic',True,True)]]
 
 
 def latin_font(text, crop, background, directory):
@@ -20,7 +20,7 @@ def latin_font(text, crop, background, directory):
     ink=np.max(np.abs(pixels-np.array(background)),axis=2)
     if ink.max()<1:return None
     ink/=ink.max();best=None;baseline=None
-    for family,filename,bold in CANDIDATES:
+    for family,filename,bold,italic in CANDIDATES:
         path=Path(directory)/filename
         if not path.is_file():continue
         font=ImageFont.truetype(str(path),80)
@@ -31,8 +31,8 @@ def latin_font(text, crop, background, directory):
         if not bounds:continue
         mask=mask.crop(bounds).resize(crop.size,Image.Resampling.LANCZOS)
         error=float(np.abs(ink-np.asarray(mask,dtype=float)/255).mean())
-        candidate={'family':family,'bold':bold,'path':str(path),'error':error,'matched':True}
-        if family=='Arial' and not bold:baseline=candidate
+        candidate={'family':family,'bold':bold,'italic':italic,'path':str(path),'error':error,'matched':True}
+        if family=='Arial' and not bold and not italic:baseline=candidate
         if best is None or error<best['error']:best=candidate
     if best and baseline:
         margin=.12 if best['family']=='Courier New' else .06

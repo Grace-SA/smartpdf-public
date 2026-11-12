@@ -17,7 +17,7 @@ import numpy as np
 import pypdfium2 as pdfium
 from pptx import Presentation
 from pptx.util import Pt
-from .layout import extract_native, page_background, add_background, add_text
+from .layout import extract_native, merge_native_runs, page_background, add_background, add_text
 from .pdf import render_page
 from .render_gate import render_presentations
 
@@ -74,7 +74,7 @@ def score_regions(expected, actual, boxes, prs):
     return scores or None
 
 
-def objects_for_page(page):
+def objects_for_page(page,grouped=True):
     runs,objects,warnings=extract_native(page);groups=defaultdict(list)
     for run in runs:groups[run['object_id']].append(run)
     safe=[]
@@ -90,14 +90,23 @@ def objects_for_page(page):
             any('\ufffd' in r['text'] or any(0xD800<=ord(c)<=0xDFFF for c in r['text']) for r in parts)):
             continue
         if parts:safe.append((obj,parts))
-    return safe,warnings
+    if not grouped:return [([obj],parts) for obj,parts in safe],warnings
+    # A single glyph per PDF object is common in browser-generated reports.
+    # Verify a complete line as one candidate, while retaining every underlying
+    # object in its atomic removal set. Never split a multi-line source object.
+    by_id={ctypes.cast(obj.raw,ctypes.c_void_p).value:obj for obj,parts in safe}
+    singles=sorted((parts[0] for obj,parts in safe if len(parts)==1),key=lambda r:r['index'])
+    grouped=[([by_id[p] for p in dict.fromkeys(run['object_ids'])],[run]) for run in merge_native_runs(page,singles)]
+    grouped.extend(([obj],parts) for obj,parts in safe if len(parts)!=1)
+    grouped.sort(key=lambda item:min(r['index'] for r in item[1]))
+    return grouped,warnings
 
 
 def draw_objects(prs,slide,page,objects):
     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
-    add_background(slide,page_background(page,[obj for obj,_ in objects]),w*scale,h*scale,(ox,oy))
+    add_background(slide,page_background(page,[obj for group,_ in objects for obj in group]),w*scale,h*scale,(ox,oy))
     regions=[]
     for _,runs in objects:
         boxes=[]
@@ -177,7 +186,7 @@ def calibrate_runs(prs, number, page, objects, rendered):
                     'width':dw+size,'height':size*1.8,'size':size,'spacing':round(spacing*100)}
 
 
-def recover_regions(source, target, page_numbers, settings):
+def _recover_regions(source, target, page_numbers, settings,grouped=False):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
     reports={}
@@ -187,7 +196,7 @@ def recover_regions(source, target, page_numbers, settings):
         try:
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
-                objects,warnings=objects_for_page(page)
+                objects,warnings=objects_for_page(page,grouped=grouped)
                 if objects:
                     candidates[number]=objects
                     regions[number]=draw_objects(prs,prs.slides[number-1],page,objects)
@@ -231,8 +240,9 @@ def recover_regions(source, target, page_numbers, settings):
                         slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
                     continue
                 runs=[run for _,parts in objects for run in parts]
-                reports[number]={'route':'native-regions','editable_runs':len(runs),'editable_objects':len(objects),
-                    'candidate_objects':len(candidates[number]),'source_text_characters':sum(len(r['text']) for r in runs),
+                reports[number]={'route':'native-regions','editable_runs':len(runs),'editable_objects':sum(len(group) for group,_ in objects),
+                    'candidate_objects':sum(len(group) for group,_ in candidates[number]),'candidate_regions':len(candidates[number]),'source_text_characters':sum(len(r['text']) for r in runs),
+                    'regional_strategy':'joined-glyphs' if grouped else 'source-objects',
                     'font_substitutions':sorted({r['source_font']+' → '+r['font'] for r in runs if r['substituted']}),
                     'region_scores':scores[number],'final_render':score,'baseline_render':baseline_score,
                     'warnings':['partial_native_editability','unrecovered_content_kept_as_graphic'],
@@ -240,4 +250,19 @@ def recover_regions(source, target, page_numbers, settings):
             if reports:final.save(target)
         finally:
             for page in pages.values():page.close()
+    return reports
+
+
+def recover_regions(source,target,page_numbers,settings):
+    """Keep verified object recovery; try joined glyphs only on remaining pages."""
+    from .config import ConversionError
+    reports=_recover_regions(source,target,page_numbers,settings,grouped=False)
+    remaining=[n for n in page_numbers if n not in reports]
+    if remaining:
+        try:reports.update(_recover_regions(source,target,remaining,settings,grouped=True))
+        except ConversionError:
+            if not reports:raise
+            # The first pass already saved verified shapes. Do not discard its
+            # metadata or claim those pages are still whole-page images.
+            for report in reports.values():report['warnings'].append('additional_grouped_recovery_unavailable')
     return reports

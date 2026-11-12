@@ -14,12 +14,13 @@ from PIL import Image,ImageFont,ImageDraw
 import pypdfium2 as pdfium
 from pptx import Presentation
 from .config import ConversionError
-from .layout import add_background,add_text,font_family,native_slide
+from .layout import add_background,add_text,font_family,native_slide,reference_text
 from .pdf import render_page
 from .quality import normalized,numeric_tokens,shape_text,text_metrics
 from .consensus import region_agreement,overlapping_lines,erase_bounds
 from .ocr_font import latin_font
 from .deskew import rectified_line,mapped_point
+from .orientation import prepare_images,restore_shapes,restore_point
 
 
 def scan_page(page):
@@ -91,7 +92,8 @@ def coherent_ink(mask):
     return mask & (neighbors>=3)
 
 
-def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None):
+def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None,orientation=0):
+    if type(orientation)!=int or orientation not in (0,90,180,270):raise ConversionError('invalid_orientation')
     validate_ocr(record,image_path)
     with Image.open(image_path) as im:image=im.convert('RGB').copy()
     a=np.array(image);accepted=[];warnings=[]
@@ -143,18 +145,19 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             patch[np.asarray(mask,dtype=bool)[mt:mb,ml:mr]]=background.astype(np.uint8)
         accepted.append((line,*bounds,color,background,working,mapping))
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
+    if orientation in (90,270):w,h=h,w;sw,sh=sh,sw
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
     clear_shapes(slide);add_background(slide,Image.fromarray(a),w*scale,h*scale,(ox,oy))
-    font_choices=[]
+    font_choices=[];targets=[]
     for line,l,t,r,b,color,background,working,mapping in accepted:
         sx=w*scale/image.width;sy=h*scale/image.height;size=(b-t)*sy/0.75
         family,_=font_family('Arial',line['text'])
         # Glyph height alone is not evidence of bold (especially mixed CJK/Latin).
-        bold=False
+        bold=False;italic=False
         choice=latin_font(line['text'],working.crop((l,t,r,b)),background,os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))
         if choice:
-            family=choice['family'];bold=choice['bold']
-            font_choices.append(family+(' Bold' if bold else ''))
+            family=choice['family'];bold=choice['bold'];italic=choice['italic']
+            font_choices.append(family+(' Bold' if bold else '')+(' Italic' if italic else ''))
             if not choice['matched']:warnings.append('font_identity_unverified')
         metric_path=Path(os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))/('Arial Bold.ttf' if bold else 'Arial.ttf')
         if choice:metric_path=Path(choice['path'])
@@ -163,7 +166,7 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             font=ImageFont.truetype(str(metric_path),100)
             size=min(size,(r-l)*sx/max(1,font.getlength(line['text']))*100)
         else:warnings.append('font_metrics_unavailable')
-        shape=add_text(slide,line['text'],ox+l*sx,oy+t*sy-size*.18,(r-l)*sx+size*.3,size*1.5,size,family,bold,color)
+        shape=add_text(slide,line['text'],ox+l*sx,oy+t*sy-size*.18,(r-l)*sx+size*.3,size*1.5,size,family,bold,color,italic=italic)
         if mapping is not None:
             width,height=shape.width/12700,shape.height/12700
             center=mapped_point(mapping,l+width/(2*sx),t-size*.18/sy+height/(2*sy))
@@ -171,12 +174,17 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             shape.left=Pt(ox+center[0]*sx-width/2);shape.top=Pt(oy+center[1]*sy-height/2)
             shape.rotation=mapping['angle']%360
             warnings.append('deskewed_ocr_requires_review')
+        points=[(l,t),(r,t),(r,b),(l,b)]
+        if mapping is not None:points=[mapped_point(mapping,x,y) for x,y in points]
+        points=[restore_point(ox+x*sx,oy+y*sy,orientation,sw,sh) for x,y in points]
+        targets.append({'shape':len(slide.shapes)-1,'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
+    restore_shapes(slide,orientation,round(sw*12700),round(sh*12700))
     if not record['lines']:warnings.append('no_ocr_text_detected')
     if len(accepted)<len(record['lines']):warnings.append('partial_ocr_editability')
-    return {'route':'paddle-ocr','detected_lines':len(record['lines']),'editable_lines':len(accepted),
+    return {'route':'paddle-ocr','orientation_degrees':orientation,'detected_lines':len(record['lines']),'editable_lines':len(accepted),
         'independent_model_agreement':verified,
         'region_verified_lines':sum(line_approvals) if line_approvals is not None else None,
-        'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),
+        'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
         'warnings':sorted(set(warnings+['ocr_requires_review'])),'graphics':'raster; not editable'}
 
 
@@ -189,8 +197,9 @@ def assist(source,target,settings,cached_ocr=None,cached_verifiers=None,cached_o
             with closing(doc[i]) as page:
                 if scan_page(page):
                     path=folder/f'page-{i+1}.png';render_page(source,i,max_side=1900).save(path);scan_images[i]=path
-        records={};verifiers={};oxr_records={}
+        records={};verifiers={};oxr_records={};angles={}
         if scan_images:
+            scan_images,angles=prepare_images(scan_images,folder,settings)
             if cached_ocr is not None:records=cached_ocr
             else:
                 python=Path(settings.ocr_python);runner=Path(settings.ocr_runner)
@@ -238,12 +247,13 @@ def assist(source,target,settings,cached_ocr=None,cached_verifiers=None,cached_o
                     if approvals is None:
                         # A single recognizer's confidence is not independent evidence.
                         approvals=[False]*len(records[i]['lines'])
-                    item=ocr_slide(prs,slide,page,scan_images[i],records[i],verified,approvals)
+                    item=ocr_slide(prs,slide,page,scan_images[i],records[i],verified,approvals,orientation=angles.get(i,0))
                     if i not in verifiers and i not in oxr_records:
                         item['warnings'].append('independent_ocr_verification_unavailable')
                     item['verification_engines']=(['Unlimited OCR 2'] if i in verifiers else [])+(['SoMark OXR'] if i in oxr_records else [])
                 else:
                     with closing(page.get_textpage()) as tp:reference=tp.get_text_range()
+                    reference=reference_text(page,reference)
                     if safe_table(slide,reference):item={'route':'stirling-table','warnings':['table_layout_requires_review']}
                     else:
                         original=[deepcopy(s._element) for s in slide.shapes]
@@ -256,4 +266,7 @@ def assist(source,target,settings,cached_ocr=None,cached_verifiers=None,cached_o
                             item={'route':'stirling-retained','warnings':['coordinate_repair_rejected_for_content_loss']}
                 report.append({'page':i+1,**item})
         prs.save(target)
+        if settings.renderer_path and any(p.get('editable_lines') for p in report):
+            from .ocr_fit import fit_ocr_pages
+            fit_ocr_pages(source,target,report,settings)
     return {'pages':report,'verdict':'needs_review','fully_editable':False}
