@@ -50,6 +50,18 @@ def normalize(records, width, height, engine):
     for r in records:
         label = r["label"].lower().replace("-", "_").replace(" ", "_")
         base = re.sub(r"^(append_|cross_)", "", label)
+        # U2 uses `other` for ordinary text that has no more specific region
+        # class. Preserve only real text, not its unreadable/image placeholders.
+        if base == "other" and engine == "u2":
+            if r["content"].strip().lower() in {
+                "",
+                "[non-text]",
+                "[unreadable]",
+                "[image]",
+                "[figure]",
+            }:
+                raise Rejected("OCR returned an unclassified visual region.")
+            base = "text"
         base = {
             "page_header": "header",
             "page_footer": "footer",

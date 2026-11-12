@@ -1,11 +1,28 @@
 import os, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
-from ocr import OCR
+from ocr import OCR, normalize
 from model import Rejected
 
 
 class FallbackTests(unittest.TestCase):
+    def test_u2_other_preserves_text_but_not_unreadable_or_embedded_tables(self):
+        row = dict(label="other", bbox=[10, 20, 900, 80], content="Synthetic heading")
+        block = normalize([row], 612, 792, "u2")[0]
+        self.assertEqual(
+            (block["kind"], block["text"]), ("paragraph", "Synthetic heading")
+        )
+        for value in (
+            "",
+            "[unreadable]",
+            "[image]",
+            "<table><tr><td>123</td></tr></table>",
+        ):
+            with self.assertRaises(Rejected):
+                normalize([{**row, "content": value}], 612, 792, "u2")
+        with self.assertRaises(Rejected):
+            normalize([row], 612, 792, "oxr")
+
     def test_retry_uses_original_pixels_and_shared_budget(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
             os.environ, PDFWORD_MODEL_ROOT=tmp, PDFWORD_OCR_PYTHON="python"
