@@ -156,6 +156,36 @@ class GridRecoveryTests(unittest.TestCase):
         self.assertEqual(book.active["B1"].value, "00123")
         book.close()
 
+    def test_sparse_grid_keeps_empty_cell_borders_and_merge_perimeter(self):
+        from convert import write_workbook
+        from openpyxl import load_workbook
+
+        table = dict(
+            page=1,
+            index=1,
+            widths=[80, 80, 80],
+            heights=[20, 20, 20],
+            cells=[
+                dict(r=0, c=0, rs=1, cs=3, text="Heading"),
+                dict(r=1, c=0, rs=1, cs=1, text="00123"),
+                dict(r=2, c=2, rs=1, cs=1, text="0.00"),
+            ],
+        )
+        output = Path(self.tmp.name) / "sparse.xlsx"
+        write_workbook([table], output, "tables")
+        book = load_workbook(output)
+        sheet = book.active
+        self.assertEqual((sheet.max_row, sheet.max_column), (3, 3))
+        self.assertIsNone(sheet["C2"].value)
+        self.assertEqual(sheet["C2"].border.right.style, "thin")
+        self.assertEqual(sheet["C2"].border.bottom.style, "thin")
+        self.assertEqual(set(map(str, sheet.merged_cells.ranges)), {"A1:C1"})
+        self.assertEqual(sheet["C1"].border.right.style, "thin")
+        self.assertIsNone(sheet["B1"].border.right.style)
+        self.assertEqual(sheet["A2"].value, "00123")
+        self.assertEqual(sheet["C3"].value, "0.00")
+        book.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

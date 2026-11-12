@@ -10,6 +10,66 @@ from text_tables import conservative_aligned_tables
 
 
 class LayoutTests(unittest.TestCase):
+    def test_currency_recovery_requires_complete_grid_and_identical_number(self):
+        from layout_tables import restore_rotated_headers
+
+        model = dict(
+            widths=[40, 40],
+            heights=[20, 20],
+            cells=[
+                dict(r=0, c=0, rs=1, cs=1, text="Item"),
+                dict(r=0, c=1, rs=1, cs=1, text="Amount"),
+                dict(r=1, c=0, rs=1, cs=1, text="00123"),
+                dict(r=1, c=1, rs=1, cs=1, text="001.20"),
+            ],
+        )
+        native = copy.deepcopy(model)
+        native["closedGrid"] = True
+        native["cells"][-1]["text"] = "$ 001.20"
+        self.assertEqual(
+            restore_rotated_headers(model, [native])["cells"][-1]["text"], "$ 001.20"
+        )
+        self.assertEqual(model["cells"][-1]["text"], "001.20")
+        for value in ["$ 001.21", "$ 1.20", "$ 001.2", "$ -001.20", "€$ 001.20"]:
+            native["cells"][-1]["text"] = value
+            self.assertIs(restore_rotated_headers(model, [native]), model)
+        native["cells"][-1]["text"] = "$ 001.20"
+        self.assertIs(
+            restore_rotated_headers(model, [native, copy.deepcopy(native)]), model
+        )
+        native["closedGrid"] = False
+        self.assertIs(restore_rotated_headers(model, [native]), model)
+
+    def test_clipped_word_glyphs_require_unique_complete_visible_source_word(self):
+        import tempfile
+        import pdfplumber
+        from reportlab.pdfgen import canvas
+        from layout_tables import source_cell_text, local_box
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "words.pdf"
+            pdf = canvas.Canvas(str(path), pagesize=(300, 300))
+            pdf.setFont("Helvetica", 12)
+            pdf.drawString(40, 240, "2005–06")
+            pdf.drawString(40, 210, "2005–06")
+            pdf.save()
+            with pdfplumber.open(path) as doc:
+                page = doc.pages[0]
+                first = page.extract_words()[0]
+                b = [first["x0"] + 6, first["top"], first["x1"] - 6, first["bottom"]]
+                box = local_box(b, page)
+                self.assertEqual(source_cell_text("2005-06", box, page), "2005–06")
+                self.assertEqual(source_cell_text("2005-07", box, page), "2005-07")
+                both = local_box([b[0], b[1], b[2], b[3] + 31], page)
+                self.assertEqual(source_cell_text("2005-06", both, page), "2005-06")
+                # Full source word crosses the visible crop. Do not bring its
+                # hidden first glyph back into the workbook.
+                page.cropbox = (first["x0"] + 3, 0, 300, 300)
+                del page._excel_source_words
+                self.assertEqual(
+                    source_cell_text("2005-06", local_box(b, page), page), "2005-06"
+                )
+
     def test_rotated_header_recovery_requires_unique_unchanged_data(self):
         from layout_tables import restore_rotated_headers
 

@@ -155,7 +155,32 @@ def source_cell_text(text, box, page):
     if original and canonical(text) == canonical(original):
         # A PDF's visual soft wraps must not become extra hard Excel breaks;
         # combining those with Excel wrapping can double the required row height.
-        return original if "\n" in text else original.replace("\n", " ")
+        from layout_ranges import restore_range_spaces
+
+        value = original if "\n" in text else original.replace("\n", " ")
+        return restore_range_spaces(text, value, chars)
+    # Some predicted boxes clip the first/last glyph of one complete word.
+    # Recover that word only with exact canonical content and a unique centre
+    # inside the prediction. Never recover words crossing the visible crop.
+    if text.strip() and hasattr(page, "extract_words"):
+        words = getattr(page, "_excel_source_words", None)
+        if words is None:
+            words = defaultdict(list)
+            for word in page.extract_words(x_tolerance=2, y_tolerance=3):
+                if (
+                    view[0] <= word["x0"] <= word["x1"] <= view[2]
+                    and view[1] <= word["top"] <= word["bottom"] <= view[3]
+                ):
+                    words[canonical(word["text"])].append(word)
+            page._excel_source_words = words
+        candidates = [
+            word
+            for word in words.get(canonical(text), [])
+            if b[0] - 1 <= (word["x0"] + word["x1"]) / 2 <= b[2] + 1
+            and b[1] - 1 <= (word["top"] + word["bottom"]) / 2 <= b[3] + 1
+        ]
+        if len(candidates) == 1:
+            return candidates[0]["text"]
     return text
 
 
@@ -225,7 +250,7 @@ def adapt_table(item, page):
 
 
 def restore_rotated_headers(model, native):
-    """Restore only uniquely matched source headers; preserve all existing data."""
+    """Restore uniquely matched clipped headers and source currency literals."""
     from copy import deepcopy
 
     def canonical(value):
@@ -253,6 +278,13 @@ def restore_rotated_headers(model, native):
                 break
             before, after = canonical(cell["text"]), canonical(other["text"])
             if before == after:
+                continue
+            # Spreadsheet parsers can drop the currency format while retaining
+            # its numeric string. Only add one literal source currency symbol;
+            # decimal places, sign, separators and leading zeros must agree.
+            currency = re.fullmatch(r"([$€£¥])([+\-−]?\d[\d.,]*)", after)
+            if currency and currency.group(2) == before and candidate.get("closedGrid"):
+                changes[key] = other["text"]
                 continue
             if (
                 cell["r"] != 0
@@ -429,6 +461,8 @@ def refine_predictions(item, page):
     """
     from copy import deepcopy
     from layout_rows import repair_merged_rows
+    from layout_headers import restore_underlined_headers
+    from layout_sections import restore_section_headers
 
     item = deepcopy(item)
     data = item["data"]
@@ -554,7 +588,11 @@ def refine_predictions(item, page):
             pdata["table_cells"] = pcells
             pdata["num_cols"] -= 1
         restore_stub_header(pdata, page)
-        result.append(repair_merged_rows(part, page))
+        result.append(
+            restore_section_headers(
+                restore_underlined_headers(repair_merged_rows(part, page), page), page
+            )
+        )
     return result
 
 
@@ -655,6 +693,24 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
     from pypdf import PdfReader, PdfWriter
     from docling.datamodel.base_models import DocumentStream, ConversionStatus
 
+    from layout_dense import dense_grid
+
+    native, fast, remaining = {}, {}, []
+    for index in indices:
+        native[index] = native_extractor(pages[index])
+        table = dense_grid(pages[index], native[index])
+        if table is None:
+            remaining.append(index)
+        else:
+            fast[index] = [table]
+    cell_count = sum(
+        len(t["widths"]) * len(t["heights"]) for tables in fast.values() for t in tables
+    )
+    if cell_count > 250000:
+        raise LayoutError("The extracted tables exceed the cell budget.")
+    if not remaining:
+        return fast
+    indices = remaining
     writer = PdfWriter()
     reader = PdfReader(source)
     for index in indices:
@@ -671,9 +727,7 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
         raise LayoutError(
             "Table recognition did not finish completely. Try fewer pages."
         )
-    grouped = defaultdict(list)
-    native = {}
-    cell_count = 0
+    grouped = defaultdict(list, fast)
     for item in result.document.tables:
         # A title/value pair is frequently labelled as a table by the layout
         # detector. The supported grid needs at least two rows and columns.
@@ -694,11 +748,12 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
         for prediction in predictions:
             try:
                 from layout_grid import has_vertical_headers, recover_source_grid
+                from layout_open import recover_open_grid
 
                 table = (
                     recover_source_grid(prediction, pages[index])
                     if has_vertical_headers(prediction, pages[index])
-                    else None
+                    else recover_open_grid(prediction, pages[index])
                 )
                 if table is None:
                     model = adapt_table(prediction, pages[index])
@@ -739,6 +794,21 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
             if cell_count > 250000:
                 raise LayoutError("The extracted tables exceed the cell budget.")
             grouped[index].append(dict(table, method="ruled-recovery"))
+    from layout_regions import recover_regions
+
+    region_budget = 2
+    for index in indices:
+        if grouped[index] or region_budget <= 0:
+            continue
+        recovered, attempted = recover_regions(
+            source, index, pages[index], converter_for(models), region_budget
+        )
+        region_budget -= attempted
+        for table in recovered:
+            cell_count += len(table["widths"]) * len(table["heights"])
+            if cell_count > 250000:
+                raise LayoutError("The extracted tables exceed the cell budget.")
+            grouped[index].append(table)
     for tables in grouped.values():
         tables.sort(key=lambda t: (t["bbox"][1], t["bbox"][0]))
     return dict(grouped)

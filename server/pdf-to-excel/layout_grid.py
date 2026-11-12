@@ -92,12 +92,13 @@ def indices(box, xs, ys):
     return r, c, end_r, end_c
 
 
-def recover_source_grid(item, page):
+def recover_source_grid(item, page, *, grids=None, allow_blank_stub=False):
     from layout_tables import model_box, overlap, physical_page, visible_box
 
     box = model_box(item["prov"][0]["bbox"], page)
     page = physical_page(page.crop(tuple(visible_box(page))))
-    grids = page.find_tables()
+    if grids is None:
+        grids = page.find_tables()
     candidates = [t for t in grids if overlap(t.bbox, box) >= 0.65]
     if not candidates:
         return None
@@ -115,7 +116,24 @@ def recover_source_grid(item, page):
         if not region or covered & region:
             return None
         covered.update(region)
-    if len(covered) != (len(xs) - 1) * (len(ys) - 1):
+    missing = [
+        (r, c)
+        for r in range(len(ys) - 1)
+        for c in range(len(xs) - 1)
+        if (r, c) not in covered
+    ]
+    if missing and (
+        not allow_blank_stub
+        or any(
+            c > 1
+            or r > 1
+            or any(
+                ch["text"].strip() and inside(ch, [xs[c], ys[r], xs[c + 1], ys[r + 1]])
+                for ch in page.chars
+            )
+            for r, c in missing
+        )
+    ):
         return None
     boxes = list(main.cells)
     pitch = median(b - a for a, b in zip(ys, ys[1:]))

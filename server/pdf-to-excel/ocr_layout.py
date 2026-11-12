@@ -54,7 +54,9 @@ def scan_converter(models, reader):
 
         def _read(self, image):
             result, _ = reader(np.asarray(image))
-            return result
+            from ocr_spaces import recover_spaces
+
+            return recover_spaces(np.asarray(image), result, reader)
 
     class ScanPipeline(StandardPdfPipeline):
         def _make_ocr_model(self, art_path):

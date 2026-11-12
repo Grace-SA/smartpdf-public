@@ -253,6 +253,9 @@ def scan_tables(page):
     if _ocr is None:
         _ocr = RapidOCR(intra_op_num_threads=2, inter_op_num_threads=2)
     result, _ = _ocr(im)
+    from ocr_spaces import recover_spaces
+
+    result = recover_spaces(im, result, _ocr)
     if not result:
         return []
     gray = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
@@ -469,6 +472,15 @@ def write_workbook(tables, output, layout):
         )
         for r, height in enumerate(heights, offset + 1):
             s.row_dimensions[r].height = height
+        # Sparse model predictions omit empty cells. The complete detected grid
+        # must still be visible; populate its styling before applying merges.
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for row in s.iter_rows(min_row=offset + 1, max_row=offset + rows, max_col=cols):
+            for cell in row:
+                cell.border = border
+                cell.number_format = "@"
+                if cell.row - offset - 1 < t.get("headerRows", 1):
+                    cell.fill = PatternFill("solid", fgColor="EDF5EF")
         values = [[""] * cols for _ in range(min(rows, 12))]
         for e in t["cells"]:
             c = s.cell(offset + e["r"] + 1, e["c"] + 1, clean(e["text"]))
@@ -486,7 +498,7 @@ def write_workbook(tables, output, layout):
             c.alignment = Alignment(
                 vertical="top", wrap_text=True, textRotation=e.get("rotation", 0)
             )
-            c.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+            c.border = border
             if e["r"] < t.get("headerRows", 1):
                 c.font = Font(
                     name=c.font.name, size=font_size, bold=True, color="174B39"
@@ -636,6 +648,14 @@ def convert(source, output, options):
                     found = conservative_aligned_tables(
                         page.crop(tuple(visible_box(page)))
                     )
+                if not found:
+                    from layout_cards import recover_card_tables
+
+                    found = recover_card_tables(page, table_from_pdf)
+                if not found:
+                    from layout_dates import recover_date_tables
+
+                    found = recover_date_tables(page)
             if not found:
                 missing.append(index + 1)
             if any(t["method"] == "aligned" for t in found):
@@ -681,7 +701,7 @@ def convert(source, output, options):
             + ", ".join(map(str, aligned_pages))
             + ". Check the row and column alignment."
         )
-    if any(t["method"] == "layout" for t in tables):
+    if any(t["method"].startswith("layout") for t in tables):
         warnings.append(
             "Table structure was reconstructed. Check merged cells and column alignment against the original PDF."
         )

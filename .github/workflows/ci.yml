@@ -66,12 +66,7 @@ jobs:
           .pdf-excel-env/bin/pip install -r server/pdf-to-excel/requirements-lock.txt reportlab==4.4.9
           .pdf-excel-env/bin/pip check
           .pdf-excel-env/bin/python scripts/pdf-to-excel/prepare-models.py .pdf-excel-models
-          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_conversion.py
-          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_evaluation.py
-          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_layout.py
-          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_rows.py
-          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_grid.py
-          .pdf-excel-env/bin/python scripts/pdf-to-excel/test_acceptance.py
+          .pdf-excel-env/bin/python -m unittest discover -s scripts/pdf-to-excel -p 'test_*.py'
           .pdf-excel-env/bin/python scripts/pdf-to-excel/fixtures.py .pdf-excel-fixtures
         env:
           PDF_EXCEL_MODELS: .pdf-excel-models
