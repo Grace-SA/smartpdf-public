@@ -94,8 +94,32 @@ def add_table(document, block, width, existing=None):
     table.autofit = "widths" not in block
     widths = block.get("widths", [1] * block["cols"])
     total = sum(widths)
-    for c, w in zip(table.columns, widths):
-        c.width = Pt(width * w / total)
+    column_widths = [width * w / total for w in widths]
+    if min(column_widths) < 2:
+        if width < 2 * len(widths):
+            raise Rejected("Table columns cannot fit the available page width.")
+        flexible = sum(max(0, w - 2) for w in column_widths)
+        column_widths = [
+            2 + (width - 2 * len(widths)) * max(0, w - 2) / flexible
+            for w in column_widths
+        ]
+    for c, w in zip(table.columns, column_widths):
+        c.width = Pt(w)
+    # Word expands even a fixed grid to fit its default 5.4pt cell margins.
+    # Fine subdivisions of merged cells can therefore push a table off-page.
+    # Reserve 2pt for minimum content and borders and bound horizontal padding.
+    padding = max(0, min(20, int((min(column_widths) * 20 - 40) / 2)))
+    props = table._tbl.tblPr
+    margins = props.find(qn("w:tblCellMar"))
+    if margins is not None:
+        props.remove(margins)
+    margins = OxmlElement("w:tblCellMar")
+    for side in ("left", "right"):
+        edge = OxmlElement("w:" + side)
+        edge.set(qn("w:w"), str(padding))
+        edge.set(qn("w:type"), "dxa")
+        margins.append(edge)
+    props.insert_element_before(margins, "w:tblLook")
     skip = 1 if existing is not None and block.get("repeat_header") else 0
     offset = len(table.rows) - skip
     for _ in range(block["rows"] - skip):

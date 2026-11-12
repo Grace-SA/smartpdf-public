@@ -72,6 +72,38 @@ class ReconstructionTests(unittest.TestCase):
             Document(self.root / "edited.docx").tables[0].cell(1, 0).text, "99"
         )
 
+    def test_fine_merged_grid_reserves_word_cell_padding_without_overflow(self):
+        from docx.oxml.ns import qn
+
+        table = table_from_html(
+            '<table><tr><td colspan="2">Header</td><td>Amount</td></tr>'
+            "<tr><td></td><td>Item</td><td>123.45</td></tr></table>"
+        )
+        table.update(
+            id="fine-grid",
+            kind="table",
+            bbox=[36, 36, 576, 120],
+            widths=[0.001, 1, 9],
+        )
+        export_word(
+            dict(
+                schema=2, pages=[dict(index=0, width=612, height=792, blocks=[table])]
+            ),
+            self.output,
+            self.root,
+        )
+        result = Document(self.output).tables[0]
+        widths = [c.width.pt for c in result.columns]
+        self.assertGreaterEqual(min(widths), 2)
+        self.assertLessEqual(sum(widths), 540.1)
+        margins = result._tbl.tblPr.find(qn("w:tblCellMar"))
+        padding = sum(
+            int(margins.find(qn("w:" + s)).get(qn("w:w"))) for s in ("left", "right")
+        )
+        self.assertLessEqual(padding + 40, min(widths) * 20)
+        self.assertEqual(result.cell(0, 0)._tc, result.cell(0, 1)._tc)
+        self.assertEqual(result.cell(1, 2).text, "123.45")
+
     def test_hidden_layer_is_replaced_by_ocr_once(self):
         fixture(
             self.source,
