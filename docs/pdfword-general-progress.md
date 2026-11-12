@@ -16,7 +16,9 @@ Status: local acceptance candidate. The two approved batches are **not yet accep
 - Editable DOCX export preserves source-page bookmarks, merged cells, images and inline styling. An independent Node OPC validator verifies ZIP integrity/budgets, relationships, XML, PNG payloads and page/table/image counts against the conversion manifest.
 - Page progress, OCR review warnings, actual server capabilities, capability-aware FAQs and the three technology credits are in the UI. OCR results say they are ready for review.
 - Cancellation, bounded OCR subprocesses, local temporary directories and atomic final output are retained. The local reference job has a 270-second budget, individual OCR calls 180 seconds, and a cumulative raster budget. The UI's 200-page maximum is an input limit, not a guarantee for 200 scanned pages.
-- Both layout and Paddle recognition endpoints are restricted to loopback. Inline mathematical markup that is not rendered as an equation is explicitly reported for manual formatting.
+- Both layout and Paddle recognition endpoints are restricted to loopback. A bounded, non-executing LaTeX subset now exports editable Office Math: fractions, roots, sub/superscripts, common operators and Greek symbols. Unknown syntax remains visible and is reported for manual formatting. Display-formula image regions remain images.
+- Conservative geometric bands now produce real two/three-column Word sections with full-width headings. Column breaks precede the next paragraph, avoiding a spurious blank first line in the right column. Overlapping or ambiguous layouts keep reading flow instead of forcing an incorrect column grid.
+- Automatic OCR can retry a rejected OXR result through U2 when both local models are installed. It restores original pixels before the retry, shares one 180-second page budget (120 seconds for the first attempt), preserves cancellation, and validates the alternative structure before exporting it. A retry warning remains visible; structural recovery is not a recognition-accuracy guarantee.
 
 ## Local setup
 
@@ -45,10 +47,10 @@ Local cumulative verification: 75 Vitest files / 629 tests passed; 23 Python che
 ## Remaining work before general release
 
 1. Complete per-cell/reading-order annotations and a genuinely frozen held-out corpus, including at least ten independent sources per core category. Resolve the observed poor-scan errors and validate complex borderless/cross-page tables quantitatively.
-2. Finish layout fidelity for multi-column, nested, overlapping and complex mathematical content; current output prioritizes editable reading order and may reflow columns into one flow. Lists retain source numbering as editable text; they are not yet fully reconstructed semantic Word numbering definitions. Image/table fallback does not equal full editability.
+2. Finish layout fidelity for four-column, nested, overlapping and complex mathematical content; ambiguous layouts still prioritize editable reading order and may reflow into one flow. Lists retain source numbering as editable text; they are not yet fully reconstructed semantic Word numbering definitions. Image/table fallback does not equal full editability.
 3. Validate Japanese, unusual font mappings, annotations, full photographic distortion coverage and long mixed documents. Passwords, active forms, visible annotations and unsupported page geometry remain explicit boundaries.
 4. Build and pin an isolated Linux GPU worker, then validate concurrency, memory, cancellation/cleanup and ten-page warm P95 budgets. The Apple Silicon reference adapters do not meet that deployment requirement by themselves.
-5. Open, edit, save and rerender the accepted corpus in actual Microsoft Word. LibreOffice and python-docx reopening are useful independent checks, not Microsoft Word acceptance.
+5. Complete corpus-wide real Microsoft Word acceptance, distinguishing edit/save/reopen/export compatibility from visual fidelity. The eight focused Word for Mac 16.115 probes pass the compatibility operations, but complex mixed-layout probes still reflow. LibreOffice and python-docx reopening are useful independent checks, not Microsoft Word acceptance.
 6. Pass final exact-commit CI and review the feature branch before merge. Production publication requires separate authorization.
 
 ## Primary references
@@ -58,3 +60,22 @@ Local cumulative verification: 75 Vitest files / 629 tests passed; 23 Python che
 - [PaddleOCR-VL official pipeline](https://www.paddleocr.ai/v3.5.0/en/version3.x/pipeline_usage/PaddleOCR-VL.html)
 - [Paddle document preprocessing](https://www.paddleocr.ai/v3.5.0/en/version3.x/pipeline_usage/doc_preprocessor.html)
 - [PaddleOCR-VL 1.5 MLX weights](https://huggingface.co/mlx-community/PaddleOCR-VL-1.5-bf16)
+- [Microsoft Word LaTeX and Office Math](https://learn.microsoft.com/en-us/office/math/latex)
+
+## Follow-up acceptance methodology
+
+The local whole-file benchmark freezes converter source and hashes each input/output. It runs all 139 inventory entries with OCR enabled, applies the same 270-second local task budget, independently validates the generated DOCX and source-page markers, and verifies a programmatic edit/save/reopen. Failed or explicitly refused files and timeouts remain in the denominator. Image entries are wrapped as PDFs; these tests do not establish a direct-image upload feature. The corpus has 137 distinct file hashes and is a development corpus, not 139 independent held-out source families.
+
+The completed OCR-enabled baseline at `821086d` generated and independently validated 90/139 files (64.75%); 43 failed or were refused and six timed out. This is whole-file generation success, not whole-corpus accuracy or production acceptance. The follow-up source is frozen for a separate complete rerun.
+
+Follow-up code verification: 630 unit/integration tests across 75 files and 30 Python checks passed; TypeScript/build and lint of the changed JavaScript/TypeScript files passed. The cumulative browser run had 637 passed, four skipped and five failures. Two sitemap failures came from missing feature flags in the local SEO generation command; after correcting the invocation, all ten SEO browser checks passed. Three pre-existing WebKit navigation failures remain. Repository-wide lint also reports three unchanged Node-global errors in the existing Excel validation script. The real local mobile-width upload, conversion, download and delete flow passed and its downloaded DOCX contains actual two-column Word sections.
+
+Real Word testing uses isolated copies, verifies the intended active document before PDF export, inserts an edit marker, saves and reopens, and checks that table and Office Math counts survive. PDF export and visual inspection are recorded separately. Eight focused documents passed the Word operations; supported inline equations and the aligned two-column fixture were visually checked in actual Word. A complex historical-page probe expanded to three pages and a mixed chart/table probe expanded to two, so compatibility success must not be presented as layout-fidelity success.
+
+Text reference comparison uses three upstream transcriptions, removing whitespace only and counting Levenshtein character errors. The previous frozen candidate reproduces 100%, 99.71% and 96.37% character agreement. The historical reference includes punctuation, line-end hyphens, reading-order and transcription artifacts. These measurements cover 3/139 files and do not establish whole-corpus accuracy. An experimental higher-resolution route worsened the historical reference score and was rolled back; its output is not final-candidate accuracy evidence.
+
+An image-checked diagnostic of that historical comparison found 48 difference groups: 29 punctuation-form changes, 13 joined line-end hyphens, three reference artifacts, two moved side-caption groups and one letter-case change. These are diagnostic alignment groups, not the Levenshtein edit count. The original strict score remains unchanged; calling all of its 3.63% difference OCR misrecognition would be inaccurate.
+
+Twelve explicitly mapped upstream table regression references add strict grid comparison. Text in a merged cell is attributed only to its top-left owner; repeated `python-docx` merged-cell proxies are not counted as recognition errors. Shape mismatches and failed conversions count as unmatched in this metric. Strict grid agreement, semantic merged-cell equivalence, full-document text accuracy and visual fidelity remain separate claims. All exact source mappings, downloaded references and per-file reports stay outside Git.
+
+Linux GPU testing does not require a cloud server. A local Linux machine with an appropriate NVIDIA GPU can perform the target acceptance. This Apple Silicon host cannot establish CUDA compatibility, GPU isolation, device memory limits or target concurrency. The new OCR adapter remains explicitly local-only; the unchanged production image still runs v1.

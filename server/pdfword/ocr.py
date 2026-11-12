@@ -4,6 +4,7 @@ import json
 import os
 import re
 import signal
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -151,12 +152,41 @@ class OCR:
         self.python = os.environ.get("PDFWORD_OCR_PYTHON")
         self.model_root = os.environ.get("PDFWORD_MODEL_ROOT")
         self.calls = 0
+        self.last_engine = None
 
     def recognize(self, image, width, height, complex_layout=False):
         if not self.python or not self.model_root:
             raise Rejected("This page needs OCR. The OCR worker is not configured.")
-        # Raster-only pages have no trustworthy text geometry: use layout detection.
-        engine = "oxr" if self.engine == "auto" else self.engine
+        self.last_engine = None
+        if self.engine != "auto" or not (Path(self.model_root) / "u2").is_dir():
+            engine = "oxr" if self.engine == "auto" else self.engine
+            result = self._recognize(image, width, height, engine, 180)
+            self.last_engine = engine
+            return result
+        # A failed structural response is never exported. Retry independently from
+        # the original pixels; both attempts share a fixed 180-second page budget.
+        started = time.monotonic()
+        backup = self.work / "ocr-original.png"
+        shutil.copyfile(image, backup)
+        try:
+            try:
+                result = self._recognize(image, width, height, "oxr", 120)
+                self.last_engine = "oxr"
+                return result
+            except Rejected:
+                if self.cancel and Path(self.cancel).exists():
+                    raise Rejected("Conversion cancelled.")
+                remaining = 180 - (time.monotonic() - started)
+                if remaining < 1:
+                    raise
+                shutil.copyfile(backup, image)
+                result = self._recognize(image, width, height, "u2", remaining)
+                self.last_engine = "u2-fallback"
+                return result
+        finally:
+            backup.unlink(missing_ok=True)
+
+    def _recognize(self, image, width, height, engine, budget):
         if engine not in {"u2", "oxr", "paddle"}:
             raise Rejected("OCR engine unavailable.")
         self.calls += 1
@@ -207,7 +237,7 @@ class OCR:
                     while process.poll() is None:
                         if self.cancel and Path(self.cancel).exists():
                             raise Rejected("Conversion cancelled.")
-                        if time.monotonic() - started > 180:
+                        if time.monotonic() - started > budget:
                             raise Rejected("OCR timed out. Try a shorter document.")
                         time.sleep(0.1)
                     if process.returncode:

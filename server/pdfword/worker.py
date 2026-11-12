@@ -4,7 +4,6 @@ import argparse
 import ctypes
 import json
 import math
-import re
 import tempfile
 import unicodedata
 from contextlib import closing
@@ -16,6 +15,7 @@ from model import Rejected, validate, box
 from layout import native_page, repeated_margins, link_tables
 from exporter import export_word
 from ocr import OCR
+from math_export import unsupported
 
 
 def preflight(source):
@@ -143,9 +143,13 @@ def needs_ocr(page):
     )
 
 
-def render(page, path):
+def raster_scale(page):
     width, height = page.get_size()
-    scale = min(2.5, math.sqrt(16000000 / (width * height)))
+    return min(2.5, math.sqrt(16000000 / (width * height)))
+
+
+def render(page, path):
+    scale = raster_scale(page)
     with closing(page.render(scale=scale)) as bitmap:
         bitmap.to_pil().convert("RGB").save(path)
 
@@ -204,7 +208,8 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     # Outlined glyphs and image-only regions must be recognized, not silently omitted.
                     use_ocr = use_ocr or (not visible and bool(blocks))
                 if use_ocr:
-                    pixels += math.ceil(width * 2.5) * math.ceil(height * 2.5)
+                    scale = raster_scale(page)
+                    pixels += math.ceil(width * scale) * math.ceil(height * scale)
                     if pixels > 256000000:
                         raise Rejected(
                             "OCR page pixels exceed the task budget. Split the document."
@@ -226,6 +231,10 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     blocks = ocr.recognize(
                         full, width, height, complex_layout=bool(visible)
                     )
+                    if getattr(ocr, "last_engine", None) == "u2-fallback":
+                        model["warnings"].append(
+                            f"Page {i+1}: alternative OCR recovered an incomplete result; review the page."
+                        )
                     if not blocks:
                         raise Rejected(f"Page {i+1} produced no recognized content.")
                     model["warnings"].append(
@@ -235,7 +244,7 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     block["bbox"] = box(block["bbox"], width, height)
                     block["id"] = f"p{i}-b{j}"
                     block["reading_order"] = j
-                    if re.search(r"\$[^$\n]+\$", block.get("text", "")):
+                    if unsupported(block.get("text", "")):
                         model["warnings"].append(
                             f"Page {i+1}: inline formula markup needs manual formatting."
                         )

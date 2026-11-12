@@ -6,10 +6,37 @@ import tempfile
 from pathlib import Path
 from docx import Document
 from docx.enum.section import WD_SECTION_START, WD_ORIENT
+from docx.enum.text import WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from model import Rejected, validate, content_text
+from math_export import segments
+from columns import column_flow
+
+
+def set_columns(section, count=1, widths=None):
+    props = section._sectPr
+    old = props.find(qn("w:cols"))
+    if old is not None:
+        props.remove(old)
+    cols = OxmlElement("w:cols")
+    cols.set(qn("w:num"), str(count))
+    cols.set(qn("w:space"), "360")
+    if widths:
+        cols.set(qn("w:equalWidth"), "0")
+        available = (
+            section.page_width.pt
+            - section.left_margin.pt
+            - section.right_margin.pt
+            - 18 * (count - 1)
+        ) * 20
+        for width in widths:
+            col = OxmlElement("w:col")
+            col.set(qn("w:w"), str(round(available * width / sum(widths))))
+            col.set(qn("w:space"), "360")
+            cols.append(col)
+    props.append(cols)
 
 
 def mark(paragraph, index):
@@ -23,6 +50,16 @@ def mark(paragraph, index):
 
 
 def run_text(paragraph, text, block):
+    last = None
+    for value, formula, _ in segments(text):
+        if formula is not None:
+            paragraph._p.append(formula)
+        else:
+            last = plain_run(paragraph, value, block)
+    return last
+
+
+def plain_run(paragraph, text, block):
     run = paragraph.add_run(text)
     run.font.name = "Arial"
     run.font.size = Pt(max(6, min(36, block.get("size", 11))))
@@ -118,11 +155,33 @@ def export_word(model, destination, assets):
             section.bottom_margin
         ) = Pt(margin)
         section.header_distance = section.footer_distance = Pt(min(16, margin / 2))
+        set_columns(section)
         width = page["width"] - 2 * margin
         height = page["height"] - 2 * margin
         marked = False
-        for block in page["blocks"]:
+        column_break = False
+        for block in column_flow(page["blocks"], page["width"]):
             kind = block["kind"]
+            if kind == "columns_start":
+                section = doc.add_section(WD_SECTION_START.CONTINUOUS)
+                set_columns(section, block["count"], block["widths"])
+                available = page["width"] - 2 * margin - 18 * (block["count"] - 1)
+                column_widths = [
+                    available * w / sum(block["widths"]) for w in block["widths"]
+                ]
+                column_index = 0
+                width = column_widths[column_index]
+                continue
+            if kind == "column_break":
+                column_index += 1
+                width = column_widths[column_index]
+                column_break = True
+                continue
+            if kind == "columns_end":
+                section = doc.add_section(WD_SECTION_START.CONTINUOUS)
+                set_columns(section)
+                width = page["width"] - 2 * margin
+                continue
             if kind in ("header", "footer"):
                 if continuing:
                     continue
@@ -141,6 +200,12 @@ def export_word(model, destination, assets):
                 text.append(block["text"])
                 continue
             if kind == "table":
+                if column_break:
+                    paragraph = doc.add_paragraph()
+                    paragraph.paragraph_format.space_after = Pt(0)
+                    paragraph.paragraph_format.line_spacing = Pt(1)
+                    paragraph.add_run().add_break(WD_BREAK.COLUMN)
+                    column_break = False
                 old = tables.get(block.get("continues")) if continuing else None
                 table = add_table(doc, block, width, old)
                 tables[block["id"]] = table
@@ -164,6 +229,9 @@ def export_word(model, destination, assets):
                 text.append(content_text(block))
                 continue
             paragraph = doc.add_paragraph()
+            if column_break:
+                paragraph.add_run().add_break(WD_BREAK.COLUMN)
+                column_break = False
             if not marked:
                 mark(paragraph, i)
                 marked = True

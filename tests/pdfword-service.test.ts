@@ -256,3 +256,28 @@ d.save(sys.argv[1])
     images: 1,
   });
 });
+
+it("accepts an editable Office Math document without ordinary text runs", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "pdfword-math-"));
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const file = path.join(root, "math.docx");
+  execFileSync(process.env.PYTHON || "python3", [
+    "-B",
+    "-c",
+    `
+import sys
+from docx import Document
+from docx.oxml import OxmlElement
+d=Document()
+for k,r in list(d.part.package.rels.items()):
+ if r.reltype.endswith('/thumbnail'):del d.part.package.rels[k]
+p=d.add_paragraph();m=OxmlElement('m:oMath');r=OxmlElement('m:r');t=OxmlElement('m:t');t.text='x=2';r.append(t);m.append(r);p._p.append(m)
+d.save(sys.argv[1])
+`,
+    file,
+  ]);
+  await expect(checkDocx(file)).resolves.toMatchObject({
+    tables: 0,
+    images: 0,
+  });
+});

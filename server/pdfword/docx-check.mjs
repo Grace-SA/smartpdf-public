@@ -213,7 +213,9 @@ export async function checkDocx(file) {
   const document = parser.parse(entries.get("word/document.xml"));
   if (
     !document["w:document"]?.["w:body"] ||
-    !/<w:t(?:\s[^>]*)?>[^<]+<\/w:t>/.test(entries.get("word/document.xml"))
+    !/<(?:w|m):t(?:\s[^>]*)?>[^<]+<\/(?:w|m):t>/.test(
+      entries.get("word/document.xml"),
+    )
   )
     fail();
   const body = entries.get("word/document.xml");
