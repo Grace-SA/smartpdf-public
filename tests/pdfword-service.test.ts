@@ -281,3 +281,45 @@ d.save(sys.argv[1])
     images: 0,
   });
 });
+
+it.each([
+  [true, true, true, true],
+  [false, true, true, false],
+  [true, false, true, false],
+  [true, true, false, false],
+])(
+  "checks illustrated body with referenced margin text (%s, %s, %s)",
+  async (image, text, referenced, valid) => {
+    const root = await mkdtemp(path.join(tmpdir(), "pdfword-margin-"));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const file = path.join(root, "margin.docx");
+    execFileSync(process.env.PYTHON || "python3", [
+      "-B",
+      "-c",
+      `
+import sys,io
+from docx import Document
+from docx.oxml.ns import qn
+from PIL import Image
+d=Document()
+for k,r in list(d.part.package.rels.items()):
+ if r.reltype.endswith('/thumbnail'):del d.part.package.rels[k]
+h=d.sections[0].header
+h.paragraphs[0].text='Illustration title' if sys.argv[3]=='true' else ''
+if sys.argv[2]=='true':
+ b=io.BytesIO();Image.new('RGB',(20,20),'red').save(b,format='PNG');b.seek(0);d.add_picture(b)
+if sys.argv[4]!='true':
+ for element in list(d.sections[0]._sectPr):
+  if element.tag==qn('w:headerReference'):element.getparent().remove(element)
+d.save(sys.argv[1])
+`,
+      file,
+      String(image),
+      String(text),
+      String(referenced),
+    ]);
+    if (valid)
+      await expect(checkDocx(file)).resolves.toMatchObject({ images: 1 });
+    else await expect(checkDocx(file)).rejects.toThrow();
+  },
+);

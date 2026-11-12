@@ -211,14 +211,25 @@ export async function checkDocx(file) {
     images += [...xml.matchAll(/<a:blip\b/g)].length;
   }
   const document = parser.parse(entries.get("word/document.xml"));
+  const body = entries.get("word/document.xml");
+  const hasText = (xml) =>
+    /<(?:w|m):t(?:\s[^>]*)?>[^<]+<\/(?:w|m):t>/.test(xml || "");
+  // An illustrated page can legitimately place all editable text in its
+  // headers/footers. Only count parts actually referenced by a body section.
+  const marginText = [
+    ...body.matchAll(/<w:(?:header|footer)Reference\b[^>]*\br:id="([^"]+)"/g),
+  ].some((match) => {
+    const target = relationships.get("word/document.xml")?.get(match[1]);
+    return (
+      /^word\/(?:header|footer)\d+\.xml$/.test(target || "") &&
+      hasText(entries.get(target))
+    );
+  });
   if (
     !document["w:document"]?.["w:body"] ||
-    !/<(?:w|m):t(?:\s[^>]*)?>[^<]+<\/(?:w|m):t>/.test(
-      entries.get("word/document.xml"),
-    )
+    !(hasText(body) || (/<a:blip\b/.test(body) && marginText))
   )
     fail();
-  const body = entries.get("word/document.xml");
   const markers = [...body.matchAll(/w:name="smartpdf_page_(\d+)"/g)].map((m) =>
     Number(m[1]),
   );

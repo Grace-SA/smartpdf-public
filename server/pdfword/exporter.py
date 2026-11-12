@@ -73,6 +73,16 @@ def plain_run(paragraph, text, block):
 
 
 def add_table(document, block, width, existing=None):
+    # Word merges adjacent w:tbl elements when opening/saving a document.
+    # Separate independent tables, while explicit continuations reuse one table.
+    body = document.element.body
+    previous = body[-2] if len(body) > 1 else None
+    if existing is None and previous is not None and previous.tag == qn("w:tbl"):
+        separator = document.add_paragraph()
+        separator.paragraph_format.space_before = Pt(0)
+        separator.paragraph_format.space_after = Pt(0)
+        separator.paragraph_format.line_spacing = Pt(1)
+        separator.paragraph_format.keep_with_next = True
     table = (
         existing
         if existing is not None

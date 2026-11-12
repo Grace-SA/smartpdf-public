@@ -271,6 +271,29 @@ class ReconstructionTests(unittest.TestCase):
             Document(self.output)._element.xml.count('w:name="smartpdf_page_'), 2
         )
 
+    def test_independent_adjacent_tables_remain_separate_in_word(self):
+        blocks = []
+        for i, value in enumerate(("12.34", "56.78", "90.12")):
+            table = table_from_html(f"<table><tr><td>{value}</td></tr></table>")
+            table.update(
+                id=f"t{i}", kind="table", bbox=[40, 50 + i * 80, 570, 100 + i * 80]
+            )
+            blocks.append(table)
+        report = export_word(
+            dict(schema=2, pages=[dict(index=0, width=612, height=792, blocks=blocks)]),
+            self.output,
+            self.root,
+        )
+        document = Document(self.output)
+        self.assertEqual(report["tables"], 3)
+        self.assertEqual(
+            [t.cell(0, 0).text for t in document.tables], ["12.34", "56.78", "90.12"]
+        )
+        self.assertEqual(
+            [element.tag.rsplit("}", 1)[-1] for element in document.element.body],
+            ["tbl", "p", "tbl", "p", "tbl", "sectPr"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
