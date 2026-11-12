@@ -1,14 +1,19 @@
 """Bounded Apple Silicon OCR subprocesses for local acceptance only."""
 
 import asyncio
+from contextvars import ContextVar
 import json
 import os
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
+_loaded = None
+_loop = None
+
 
 def main(request):
+    global _loaded, _loop
     from mlx_vlm import apply_chat_template, generate, load
     from PIL import Image
     from ocr import parse_u2
@@ -16,7 +21,12 @@ def main(request):
     engine = request["engine"]
     root = Path(request["model_root"])
     name = {"u2": "u2", "oxr": "oxr", "paddle": "paddle-vl"}[engine]
-    model, processor = load(str(root / name), trust_remote_code=False)
+    key = str(root / name)
+    if _loaded is None:
+        _loaded = (key, *load(key, trust_remote_code=False))
+    if _loaded[0] != key:
+        raise ValueError("A model process is scoped to one engine")
+    _, model, processor = _loaded
     limit = min(int(request.get("max_tokens", 8192)), 8192)
     truncated = False
 
@@ -26,13 +36,15 @@ def main(request):
         out = generate(
             model, processor, text, image=[image], max_tokens=cap, temperature=0
         )
-        truncated |= out.generation_tokens >= cap
-        return out.text
+        hit_limit = out.generation_tokens >= cap
+        if engine == "u2":
+            truncated |= hit_limit
+        return out.text, hit_limit
 
     if engine == "u2":
         pages = []
         for image in request["images"]:
-            parsed = parse_u2(infer(image, "Multi page parsing."))
+            parsed = parse_u2(infer(image, "Multi page parsing.")[0])
             if len(parsed) != 1:
                 raise ValueError("page mismatch")
             pages.extend(parsed)
@@ -41,6 +53,23 @@ def main(request):
         from oxr.config.settings import settings
         from oxr.model.client import ModelOutput, model_client
         from oxr.pipeline.orchestrator import process_decoded_document
+        from oxr.pipeline import recognition
+
+        active_block = ContextVar("ocr_block", default=None)
+        recognize_block = recognition.recognize_block
+
+        async def checked_block(*args, **kwargs):
+            nonlocal truncated
+            state = {}
+            token = active_block.set(state)
+            try:
+                result = await recognize_block(*args, **kwargs)
+                # A discarded truncated attempt may have recovered. Only the
+                # final inference for each block determines completeness.
+                truncated |= state.get("truncated", False)
+                return result
+            finally:
+                active_block.reset(token)
 
         endpoint = urlsplit(settings.layout_analyze_model.url)
         if (
@@ -53,12 +82,15 @@ def main(request):
         async def local_inference(
             prompt, image, timeout, model_options=None, max_tokens=None
         ):
-            value = infer(
+            value, hit_limit = infer(
                 Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)),
                 prompt,
                 min(max_tokens or limit, limit),
             )
-            return ModelOutput(value, finish_reason="length" if truncated else "stop")
+            state = active_block.get()
+            if state is not None:
+                state["truncated"] = hit_limit
+            return ModelOutput(value, finish_reason="length" if hit_limit else "stop")
 
         model_client._call_vision_model = local_inference
         settings.oxr_model.max_concurrency = 1
@@ -73,7 +105,13 @@ def main(request):
                 images, "document.pdf", ["json"], keep_header_footer=True
             )
 
-        result = asyncio.run(run())
+        if _loop is None:
+            _loop = asyncio.new_event_loop()
+        recognition.recognize_block = checked_block
+        try:
+            result = _loop.run_until_complete(run())
+        finally:
+            recognition.recognize_block = recognize_block
         pages = []
         for page in result["outputs"]["json"]["pages"]:
             size = page["page_size"]
@@ -98,4 +136,6 @@ def main(request):
 
 
 if __name__ == "__main__":
-    main(json.loads(Path(sys.argv[1]).read_text()))
+    from process_server import serve
+
+    serve(main)

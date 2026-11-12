@@ -89,7 +89,9 @@ def add_table(document, block, width, existing=None):
         else document.add_table(rows=0, cols=block["cols"])
     )
     table.style = "Table Grid"
-    table.autofit = False
+    # Native geometry has measured widths. OCR HTML often has none: let Word
+    # distribute that space by content instead of locking every column equally.
+    table.autofit = "widths" not in block
     widths = block.get("widths", [1] * block["cols"])
     total = sum(widths)
     for c, w in zip(table.columns, widths):
@@ -98,18 +100,35 @@ def add_table(document, block, width, existing=None):
     offset = len(table.rows) - skip
     for _ in range(block["rows"] - skip):
         table.add_row()
+    # python-docx rebuilds its complete cell map for every table.cell() call.
+    # Finish merges first, then reuse one map for the many text assignments.
     for c in block["cells"]:
         if c["row"] < skip:
             continue
         r = c["row"] + offset
         col = c["col"]
-        cell = table.cell(r, col)
         if c["rowspan"] > 1 or c["colspan"] > 1:
-            cell = cell.merge(table.cell(r + c["rowspan"] - 1, col + c["colspan"] - 1))
+            table.cell(r, col).merge(
+                table.cell(r + c["rowspan"] - 1, col + c["colspan"] - 1)
+            )
+    grid = table._cells
+    for c in block["cells"]:
+        if c["row"] < skip:
+            continue
+        cell = grid[(c["row"] + offset) * block["cols"] + c["col"]]
         cell.text = ""
+        cell.paragraphs[0].clear()
         run_text(
-            cell.paragraphs[0], c["text"], {"size": 10, "bold": c.get("header", False)}
+            cell.paragraphs[0],
+            c["text"],
+            {"size": c.get("size", 10), "bold": c.get("header", False)},
         )
+        cell.paragraphs[0].paragraph_format.space_after = Pt(0)
+        cell.paragraphs[0].paragraph_format.space_before = Pt(0)
+    for row in table.rows:
+        props = row._tr.get_or_add_trPr()
+        if props.find(qn("w:cantSplit")) is None:
+            props.append(OxmlElement("w:cantSplit"))
     if table.rows and (
         block.get("header_rows")
         or any(c.get("header") for c in block["cells"] if c["row"] == 0)

@@ -47,9 +47,20 @@ def table_from_html(markup):
     if (
         not isinstance(markup, str)
         or len(markup) > 500000
-        or re.search(r"<!|<\?|&(?:#\d+|#x[\da-f]+);", markup, re.I)
+        or re.search(r"<!|<\?", markup)
     ):
         raise Rejected("Table markup requires review.")
+    # HTML numeric references are ordinary OCR text, not entity declarations.
+    # Validate their code points before parsing, without pre-decoding markup.
+    for match in re.finditer(r"&#(x[\da-f]+|\d+);", markup, re.I):
+        value = match[1]
+        code = int(value[1:], 16) if value.lower().startswith("x") else int(value)
+        if code not in (9, 10, 13) and not (
+            32 <= code <= 0xD7FF
+            or 0xE000 <= code <= 0xFFFD
+            or 0x10000 <= code <= 0x10FFFF
+        ):
+            raise Rejected("Invalid table text reference.")
     from lxml import html
 
     try:

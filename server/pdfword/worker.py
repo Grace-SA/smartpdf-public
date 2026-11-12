@@ -309,13 +309,17 @@ def convert(source, destination, *, engine=None, cancel=None, progress=None):
     if destination.exists():
         raise Rejected("Choose a new Word output file.")
     with tempfile.TemporaryDirectory(dir=destination.parent) as temp:
-        model = parse_pdf(
-            source,
-            temp,
-            ocr=OCR(temp, cancel=cancel, engine=engine),
-            progress=progress,
-            cancel=cancel,
-        )
+        ocr = OCR(temp, cancel=cancel, engine=engine)
+        try:
+            model = parse_pdf(
+                source,
+                temp,
+                ocr=ocr,
+                progress=progress,
+                cancel=cancel,
+            )
+        finally:
+            ocr.close()
         if cancel and Path(cancel).exists():
             raise Rejected("Conversion cancelled.")
         return export_word(model, destination, temp)

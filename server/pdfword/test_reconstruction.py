@@ -91,6 +91,51 @@ class ReconstructionTests(unittest.TestCase):
         self.assertEqual(text, "VISIBLE OCR 123")
         self.assertNotIn("HIDDEN", text)
 
+    def test_borderless_numeric_grid_keeps_decimals_and_source_font(self):
+        commands = b""
+        for r, values in enumerate(
+            (
+                ("Item", "Amount"),
+                ("Alpha", "12.34"),
+                ("Beta", "-56.78"),
+                ("Gamma", "0.01"),
+            )
+        ):
+            for x, value in zip((50, 180), values):
+                commands += f"BT /F1 8 Tf {x} {740-r*15} Td ({value}) Tj ET ".encode()
+        fixture(self.source, content=commands)
+        with patch(
+            "worker.OCR.recognize",
+            side_effect=AssertionError("Native grid must not require OCR"),
+        ):
+            convert(self.source, self.output)
+        table = Document(self.output).tables[0]
+        self.assertEqual(
+            [[c.text for c in r.cells] for r in table.rows],
+            [
+                ["Item", "Amount"],
+                ["Alpha", "12.34"],
+                ["Beta", "-56.78"],
+                ["Gamma", "0.01"],
+            ],
+        )
+        self.assertEqual(table.cell(1, 1).paragraphs[0].runs[0].font.size.pt, 8)
+        self.assertEqual(
+            table.cell(1, 1).paragraphs[0].paragraph_format.space_after.pt, 0
+        )
+
+    def test_word_crossing_ruling_is_split_by_glyph_geometry(self):
+        commands = b"50 600 m 150 600 l S 50 620 m 150 620 l S 50 640 m 150 640 l S 50 600 m 50 640 l S 100 600 m 100 640 l S 150 600 m 150 640 l S "
+        commands += (
+            b"BT /F1 10 Tf 94 625 Td (AB) Tj ET BT /F1 10 Tf 94 605 Td (12) Tj ET"
+        )
+        fixture(self.source, content=commands)
+        convert(self.source, self.output)
+        table = Document(self.output).tables[0]
+        self.assertEqual(
+            [[c.text for c in r.cells] for r in table.rows], [["A", "B"], ["1", "2"]]
+        )
+
     def test_borderless_text_grid_requests_structured_recognition(self):
         content = b""
         for row, names in enumerate(
@@ -169,11 +214,18 @@ class ReconstructionTests(unittest.TestCase):
             "<table><tr><td>cm<sup>2</sup> / H<sub>2</sub>O / $m^{3}$</td></tr></table>"
         )
         self.assertEqual(units["cells"][0]["text"], "cm² / H₂O / m³")
+        entities = table_from_html(
+            "<table><tr><td>&#65; &#x3b2; &lt;tag&gt;</td></tr></table>"
+        )
+        self.assertEqual(entities["cells"][0]["text"], "A β <tag>")
         for bad in [
             "<table><tr><td>x",
             "<table><tr><td>x</td><td>y</td></tr><tr><td>z</td></tr></table>",
             '<table><tr><td rowspan="999">x</td></tr></table>',
             "<table><tr><td><script>x</script></td></tr></table>",
+            "<!DOCTYPE table><table><tr><td>x</td></tr></table>",
+            "<table><tr><td>&#0;</td></tr></table>",
+            "<table><tr><td>&#xD800;</td></tr></table>",
         ]:
             with self.subTest(bad=bad), self.assertRaises(Rejected):
                 table_from_html(bad)

@@ -22,8 +22,11 @@ def run(directory):
     cancel = directory / "cancel"
     signal.signal(signal.SIGTERM, lambda *_: cancel.touch())
     signal.signal(signal.SIGINT, lambda *_: cancel.touch())
+    timed_out = False
 
     def timeout(*_):
+        nonlocal timed_out
+        timed_out = True
         cancel.touch()
         raise Rejected("Conversion exceeded the local task time limit.")
 
@@ -44,7 +47,14 @@ def run(directory):
         return 0
     except Rejected as error:
         (directory / "output.docx").unlink(missing_ok=True)
-        emit(error=str(error), code="INPUT_REJECTED")
+        emit(
+            error=(
+                "Conversion exceeded the local task time limit."
+                if timed_out
+                else str(error)
+            ),
+            code="TIME_LIMIT" if timed_out else "INPUT_REJECTED",
+        )
         return 2
     except Exception:
         (directory / "output.docx").unlink(missing_ok=True)

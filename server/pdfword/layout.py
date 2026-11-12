@@ -189,11 +189,20 @@ def native_tables(page, words):
             r0, r1 = (
                 min(range(len(ys)), key=lambda j: abs(ys[j] - b[k])) for k in (1, 3)
             )
-            inside = [
-                w
+            # Word extraction can join glyphs across a ruling. Assign glyphs to
+            # cells first so an entire joined word cannot land in one neighbour.
+            from pdfplumber.utils import extract_words
+
+            chars = [
+                char
                 for w in words
-                if contains(b, [w["x0"], w["top"], w["x1"], w["bottom"]])
+                for char in w.get("chars", [])
+                if b[0] <= (char["x0"] + char["x1"]) / 2 < b[2]
+                and b[1] <= (char["top"] + char["bottom"]) / 2 < b[3]
             ]
+            inside = extract_words(
+                chars, return_chars=True, x_tolerance=2, y_tolerance=3
+            )
             paras = words_to_blocks(inside, page.width, page.height)
             cells.append(
                 dict(
@@ -202,6 +211,7 @@ def native_tables(page, words):
                     rowspan=r1 - r0,
                     colspan=c1 - c0,
                     text="\n".join(p["text"] for p in paras),
+                    size=median(p["size"] for p in paras) if paras else 10,
                     header=False,
                 )
             )
@@ -230,6 +240,94 @@ def native_tables(page, words):
                 source="native",
             )
         )
+    return result
+
+
+def borderless_tables(words, page):
+    """Recover regular numeric grids only; ambiguous/multiline grids still use OCR."""
+    lines = []
+    for word in sorted(words, key=lambda w: (w["top"], w["x0"])):
+        if not lines or abs(word["top"] - lines[-1][0]["top"]) > 3:
+            lines.append([])
+        lines[-1].append(word)
+    rows = []
+    for line in lines:
+        groups = []
+        for word in sorted(line, key=lambda w: w["x0"]):
+            if not groups or word["x0"] - groups[-1][-1]["x1"] > 18:
+                groups.append([])
+            groups[-1].append(word)
+        rows.append(groups)
+    result = []
+    pending = []
+
+    def finish():
+        if len(pending) < 3:
+            return
+        cols = len(pending[0])
+        numeric = sum(
+            all(
+                re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", join_words(cell))
+                for cell in row[1:]
+            )
+            for row in pending
+        )
+        if numeric < max(2, len(pending) - 1):
+            return
+        boxes = [
+            [
+                union([[w["x0"], w["top"], w["x1"], w["bottom"]] for w in cell])
+                for cell in row
+            ]
+            for row in pending
+        ]
+        lefts = [min(row[c][0] for row in boxes) for c in range(cols)]
+        rights = [max(row[c][2] for row in boxes) for c in range(cols)]
+        if any(rights[c] + 12 > lefts[c + 1] for c in range(cols - 1)):
+            return
+        edges = (
+            [lefts[0]]
+            + [(rights[c] + lefts[c + 1]) / 2 for c in range(cols - 1)]
+            + [rights[-1]]
+        )
+        cells = []
+        for r, row in enumerate(pending):
+            for c, cell in enumerate(row):
+                sizes = [char["size"] for w in cell for char in w.get("chars", [])]
+                cells.append(
+                    dict(
+                        row=r,
+                        col=c,
+                        rowspan=1,
+                        colspan=1,
+                        text=join_words(cell),
+                        size=median(sizes) if sizes else 10,
+                        header=False,
+                    )
+                )
+        result.append(
+            dict(
+                kind="table",
+                rows=len(pending),
+                cols=cols,
+                cells=cells,
+                bbox=union([b for row in boxes for b in row]),
+                widths=[b - a for a, b in zip(edges, edges[1:])],
+                source="native",
+            )
+        )
+
+    for row in rows:
+        if pending:
+            previous = pending[-1]
+            height = max(w["bottom"] - w["top"] for cell in previous for w in cell)
+            gap = row[0][0]["top"] - previous[0][0]["top"]
+            if len(row) != len(previous) or gap > max(18, height * 2.5):
+                finish()
+                pending = []
+        if 2 <= len(row) <= 32:
+            pending.append(row)
+    finish()
     return result
 
 
@@ -281,6 +379,15 @@ def native_page(page):
     )
     words = [w for w in words if w["text"].strip()]
     tables = native_tables(clean, words)
+    remaining_words = [
+        w
+        for w in words
+        if not any(
+            contains(t["bbox"], [w["x0"], w["top"], w["x1"], w["bottom"]])
+            for t in tables
+        )
+    ]
+    tables.extend(borderless_tables(remaining_words, clean))
     images = graphics(clean, tables)
     excluded = [t["bbox"] for t in tables] + images
     remaining = [

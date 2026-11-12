@@ -91,6 +91,11 @@ def normalize(records, width, height, engine):
                 **table_from_html(r["content"]),
                 continuation=label.startswith("append_"),
             )
+            # Dense tables carry a real page-space height even when the model
+            # does not return font metrics. Bound the fallback by row height.
+            size = max(6, min(10, (bounds[3] - bounds[1]) / (b["rows"] * 1.2)))
+            for cell in b["cells"]:
+                cell["size"] = size
         elif base in {
             "image",
             "figure",
@@ -165,6 +170,76 @@ class OCR:
         self.model_root = os.environ.get("PDFWORD_MODEL_ROOT")
         self.calls = 0
         self.last_engine = None
+        self.processes = {}
+
+    def close(self):
+        for process in self.processes.values():
+            self._stop(process)
+        self.processes.clear()
+
+    @staticmethod
+    def _stop(process):
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        process.wait()
+        if process.stdin:
+            process.stdin.close()
+
+    def _request(self, python, script, request, env, started, budget):
+        # Keep CPU preprocessing and one inference model alive within this job.
+        # Switching engines releases the previous model before loading another.
+        key = (
+            python,
+            script,
+            (
+                json.loads(request.read_text())["engine"]
+                if script == "ocr_process.py"
+                else "cpu"
+            ),
+        )
+        for previous in list(self.processes):
+            if previous != key and previous[1] == script:
+                self._stop(self.processes.pop(previous))
+        process = self.processes.get(key)
+        if process is None or process.poll() is not None:
+            if process is not None:
+                self._stop(process)
+            with (self.work / f"process-{self.calls}-{script}.log").open("ab") as log:
+                process = subprocess.Popen(
+                    [python, str(Path(__file__).with_name(script)), "--serve"],
+                    stdin=subprocess.PIPE,
+                    stdout=log,
+                    stderr=log,
+                    env=env,
+                    text=True,
+                    start_new_session=True,
+                )
+            self.processes[key] = process
+        done = Path(str(request) + ".done")
+        done.unlink(missing_ok=True)
+        try:
+            process.stdin.write(str(request) + "\n")
+            process.stdin.flush()
+            while not done.exists():
+                if self.cancel and Path(self.cancel).exists():
+                    raise Rejected("Conversion cancelled.")
+                if time.monotonic() - started > budget:
+                    raise Rejected("OCR timed out. Try a shorter document.")
+                if process.poll() is not None:
+                    raise Rejected("OCR process stopped before completing the page.")
+                time.sleep(0.05)
+            if done.stat().st_size > 1024 or json.loads(done.read_text()) != {
+                "ok": True
+            }:
+                raise Rejected("OCR could not finish. Retry or choose a clearer scan.")
+        except BaseException:
+            self._stop(self.processes.pop(key))
+            raise
+        finally:
+            done.unlink(missing_ok=True)
 
     def recognize(self, image, width, height, complex_layout=False):
         if not self.python or not self.model_root:
@@ -242,6 +317,11 @@ class OCR:
         with (self.work / f"ocr-{self.calls}.log").open("wb") as log:
             started = time.monotonic()
             for command in commands:
+                if Path(command[1]).name in {"ocr_process.py", "prepare_image.py"}:
+                    self._request(
+                        command[0], Path(command[1]).name, request, env, started, budget
+                    )
+                    continue
                 process = subprocess.Popen(
                     command, stdout=log, stderr=log, env=env, start_new_session=True
                 )
