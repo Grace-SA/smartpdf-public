@@ -28,6 +28,22 @@ def test_unknown_font_bytes_are_never_embedded():
         noto_payload(b'not the approved public font')
 
 
+def test_two_font_families_preserve_distinct_relationships(tmp_path):
+    source=tmp_path/'source.pptx';one=tmp_path/'one.pptx';two=tmp_path/'two.pptx'
+    prs=Presentation();slide=prs.slides.add_slide(prs.slide_layouts[6])
+    add_text(slide,'Sans 中文',20,20,200,30,18,'Noto Sans SC')
+    add_text(slide,'Serif 中文',20,80,200,30,18,'Noto Serif SC');prs.save(source)
+    embed_noto(source,one,{'regular':b'synthetic sans'})
+    embed_noto(one,two,{'regular':b'synthetic serif','bold':b'synthetic bold serif'},'Noto Serif SC')
+    with zipfile.ZipFile(two) as z:
+        root=ET.fromstring(z.read('ppt/presentation.xml'));fonts=root.find('{'+P+'}embeddedFontLst')
+        assert {f.find('{'+P+'}font').get('typeface') for f in fonts}=={'Noto Sans SC','Noto Serif SC'}
+        rels={r.get('Id'):r.get('Target') for r in ET.fromstring(z.read('ppt/_rels/presentation.xml.rels'))}
+        ids=[f.find('{'+P+'}'+style).get('{'+R+'}id') for f in fonts for style in ('regular','bold') if f.find('{'+P+'}'+style) is not None]
+        assert len(ids)==len(set(ids))==3
+        assert {z.read('ppt/'+rels[r]) for r in ids}=={b'synthetic sans',b'synthetic serif',b'synthetic bold serif'}
+
+
 def test_font_package_relationships_and_unique_family(tmp_path):
     source=tmp_path/'before.pptx';target=tmp_path/'after.pptx';p=Presentation();s=p.slides.add_slide(p.slide_layouts[6])
     add_text(s,'中文 123',30,40,200,40,16,'Noto Sans SC');p.save(source)
@@ -81,12 +97,14 @@ def test_small_scan_words_keep_numbers_and_do_not_require_cjk_font(tmp_path,sett
 
 
 @pytest.mark.skipif(not os.getenv('SMARTPPT_TEST_RENDERER') or not os.getenv('SMARTPPT_CJK_FONT'),reason='real Office renderer and approved font required')
-def test_actual_embedded_font_and_script_layout_are_verified(tmp_path,settings,monkeypatch):
+@pytest.mark.parametrize('family',['Noto Sans SC','Noto Serif SC'])
+def test_actual_embedded_font_and_script_layout_are_verified(tmp_path,settings,monkeypatch,family):
+    if family=='Noto Serif SC' and not os.getenv('SMARTPPT_CJK_SERIF_FONT'):pytest.skip('optional approved serif font required')
     from smartppt.render_gate import render_presentations
     import smartppt.portable_fonts as module
     target=tmp_path/'original.pptx';p=Presentation();p.slide_width=Pt(500);p.slide_height=Pt(400)
-    s=p.slides.add_slide(p.slide_layouts[6]);add_text(s,'中文预算123.45元，年度2026。',30,50,420,30,18,'Noto Sans SC')
-    add_text(s,'粗体合计678.90元',30,130,420,30,18,'Noto Sans SC',bold=True)
+    s=p.slides.add_slide(p.slide_layouts[6]);add_text(s,'中文预算123.45元，年度2026。',30,50,420,30,18,family)
+    add_text(s,'粗体合计678.90元',30,130,420,30,18,family,bold=True)
     add_text(s,'Footer 678.90',30,300,250,25,14);p.save(target)
     settings.renderer_path=os.environ['SMARTPPT_TEST_RENDERER'];rendered=render_presentations([target],tmp_path,settings)[0]
     report={'pages':[{'page':1,'route':'paddle-ocr','ink_targets':[{'shape':0,'bbox':[30,50,450,80]}]}]}
@@ -94,6 +112,7 @@ def test_actual_embedded_font_and_script_layout_are_verified(tmp_path,settings,m
     try_portable_fonts(rendered,target,report,settings)
     assert report['font_portability']['embedded'],report
     assert report['font_portability']['faces']==['regular','bold']
+    assert report['font_portability']['families']=={family:['regular','bold']}
     assert report['font_portability']['positioned_script_pages']==[1]
     result=Presentation(target);slide=result.slides[0]
     assert normalized(''.join(shape_text(slide.shapes)))==expected

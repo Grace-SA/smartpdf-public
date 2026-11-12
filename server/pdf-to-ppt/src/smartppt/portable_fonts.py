@@ -15,7 +15,7 @@ import pypdfium2 as pdfium
 from pptx import Presentation
 from pptx.util import Pt
 from .config import ConversionError
-from .font_embedding import bundled_payloads,embed_noto
+from .font_embedding import bundled_payloads,embed_noto,FAMILIES
 from .ocr_fit import observed_boxes,fit_shape
 from .quality import normalized,shape_text
 from .render_gate import render_presentations,metric,accept_candidate
@@ -33,7 +33,7 @@ def script_segments(text):
 
 def font_shapes(prs):
     return [(i,s) for i,slide in enumerate(prs.slides) for s in slide.shapes if s.has_text_frame and
-            any(r.font.name=='Noto Sans SC' for p in s.text_frame.paragraphs for r in p.runs)]
+            any(r.font.name in FAMILIES for p in s.text_frame.paragraphs for r in p.runs)]
 
 
 def split_script_shapes(prs,rendered,small_text_pages=()):
@@ -52,7 +52,7 @@ def split_script_shapes(prs,rendered,small_text_pages=()):
                     if not shape.has_text_frame or shape.rotation or len(shape.text_frame.paragraphs)!=1:continue
                     runs=shape.text_frame.paragraphs[0].runs
                     if len(runs)!=1 or runs[0].font.size is None:continue
-                    if runs[0].font.name=='Noto Sans SC':
+                    if runs[0].font.name in FAMILIES:
                         chunks=script_segments(shape.text);kind='mixed-script'
                     elif index in small_text_pages and runs[0].font.size.pt<12 and runs[0].font.name in ('Arial','Times New Roman','Courier New'):
                         chunks=re.findall(r'\s*\S+\s*',shape.text);kind='small-words'
@@ -95,12 +95,17 @@ def finalize_portable_fonts(source,target,report,settings):
                  len(s.text.split())>1 and any(r.font.size is not None and r.font.size.pt<12 and
                  r.font.name in ('Arial','Times New Roman','Courier New') for p in s.text_frame.paragraphs for r in p.runs)}
     if not font_runs and not small_pages:return report
-    bold=any(r.font.bold for _,s in font_runs for p in s.text_frame.paragraphs for r in p.runs if r.font.name=='Noto Sans SC')
-    payloads=bundled_payloads(bold) if font_runs else {};font_pages={i for i,_ in font_runs}|small_pages
+    families=sorted({r.font.name for _,s in font_runs for p in s.text_frame.paragraphs for r in p.runs if r.font.name in FAMILIES})
+    payloads={}
+    for family in families:
+        bold=any(r.font.bold for _,s in font_runs for p in s.text_frame.paragraphs for r in p.runs if r.font.name==family)
+        payloads[family]=bundled_payloads(bold,family)
+    font_pages={i for i,_ in font_runs}|small_pages
     with tempfile.TemporaryDirectory(prefix='smartppt-portable-font-',dir=Path(source).parent) as tmp:
         folder=Path(tmp);before=folder/'before.pptx';embedded=folder/'embedded.pptx';shutil.copyfile(target,before)
-        if payloads:embed_noto(before,embedded,payloads)
-        else:shutil.copyfile(before,embedded)
+        shutil.copyfile(before,embedded)
+        for family,faces in payloads.items():
+            stage=folder/'font-stage.pptx';embed_noto(embedded,stage,faces,family);stage.replace(embedded)
         baseline=render_presentations([before],folder,settings)[0]
         prs=Presentation(embedded);fallback=Presentation(embedded);targets=split_script_shapes(prs,baseline,small_pages)
         candidate=folder/'candidate.pptx';prs.save(candidate)
@@ -134,7 +139,9 @@ def finalize_portable_fonts(source,target,report,settings):
         for page in report.get('pages',[]):
             if page['page']-1 in changed and 'ink_targets' in page:
                 page['ink_targets_before_font_portability']=page.pop('ink_targets')
-        report['font_portability']={'embedded':bool(payloads),'validated':True,'family':'Noto Sans SC' if payloads else None,'faces':list(payloads),
+        report['font_portability']={'embedded':bool(payloads),'validated':True,'family':families[0] if len(families)==1 else None,
+            'families':{family:list(faces) for family,faces in payloads.items()},
+            'faces':sorted({style for faces in payloads.values() for style in faces},key=lambda s:('regular','bold').index(s)),
             'whole_font':bool(payloads),'positioned_script_pages':[i+1 for i in sorted(changed) if any(r['kind']=='mixed-script' for r in targets[i])],
             'positioned_small_text_pages':[i+1 for i in sorted(changed) if any(r['kind']=='small-words' for r in targets[i])],
             'script_layout_rejected_pages':[i+1 for i in restored],

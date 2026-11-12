@@ -44,10 +44,23 @@ def test_page_rotation_cancels_text_rotation(tmp_path):
         l,b,r,t=runs[0]['box'];assert r-l>t-b
 
 
-def test_font_mapping():
+def test_font_mapping(monkeypatch):
+    monkeypatch.delenv('SMARTPPT_CJK_SERIF_FONT',raising=False)
     assert font_family('SimSun','中文')[0]=='Noto Sans SC'
     assert font_family('Times-Roman','123')[0]=='Times New Roman'
     assert font_family('Courier','123')[0]=='Courier New'
+
+
+def test_optional_cjk_serif_keeps_latin_in_same_family(tmp_path,monkeypatch):
+    path=tmp_path/'operator-font.ttf';path.write_bytes(b'font availability only; embedding separately checks the pinned hash')
+    monkeypatch.setenv('SMARTPPT_CJK_SERIF_FONT',str(path))
+    for name in ('Songti SC','SimSun','ABCDEF+MingLiU','Noto Serif SC'):
+        for text in ('English 123.45','中文预算'):
+            assert font_family(name,text)[0]=='Noto Serif SC'
+    assert font_family('Helvetica','English')[0]=='Arial'
+    assert font_family('Unknown','中文')[0]=='Noto Sans SC'
+    path.unlink()
+    assert font_family('SimSun','中文')[0]=='Noto Sans SC'
 
 
 def sample_record(tmp_path):

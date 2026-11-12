@@ -8,6 +8,8 @@ from contextlib import closing
 import ctypes
 from io import BytesIO
 import math
+import os
+from pathlib import Path
 import re
 import unicodedata
 import pypdfium2 as pdfium
@@ -19,6 +21,12 @@ from pptx.util import Pt
 
 
 def font_family(name,text,flags=0):
+    # Keep the Latin letters of a named CJK serif face in that same family.
+    # Opt in only when the operator actually provides the optional font.
+    lower=re.sub(r'^[A-Z]{6}\+','',name).lower().replace(' ','')
+    serif_path=os.getenv('SMARTPPT_CJK_SERIF_FONT')
+    if serif_path and Path(serif_path).is_file() and any(k in lower for k in ('songti','simsun','nsimsun','sung','mingliu','notoserifsc','宋体','明體')):
+        return 'Noto Serif SC',name!='Noto Serif SC'
     if any('\u2e80'<=c<='\uffef' for c in text):
         return 'Noto Sans SC',True
     name=re.sub(r'^[A-Z]{6}\+','',name)

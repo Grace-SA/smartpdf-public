@@ -101,6 +101,30 @@ def test_unsupported_angle_is_not_claimed_as_complete(tmp_path,settings):
     assert report==original and hashlib.sha256(target.read_bytes()).hexdigest()==before
 
 
+@pytest.mark.skipif(not os.getenv('SMARTPPT_TEST_RENDERER'),reason='real Office renderer required')
+def test_optical_font_size_fits_taller_capitals_but_rejects_extreme_scale(tmp_path,settings):
+    import ctypes
+    from smartppt.regional import draw_objects,calibrate_runs,rendered_word_regions
+    from smartppt.render_gate import render_presentations
+    source=tmp_path/'capitals.pdf';c=canvas.Canvas(str(source),pagesize=(400,400));c.setFont('Helvetica',30)
+    c.drawString(30,300,'CAPITALS 123');c.drawString(30,200,'EXTREME 456');c.save()
+    prs=Presentation();prs.slide_width=Pt(400);prs.slide_height=Pt(400);slide=prs.slides.add_slide(prs.slide_layouts[6])
+    settings.renderer_path=os.environ['SMARTPPT_TEST_RENDERER']
+    with pdfium.PdfDocument(source) as doc,closing(doc[0]) as page:
+        runs,objects,_=extract_native(page);lookup={ctypes.cast(o.raw,ctypes.c_void_p).value:o for o in objects}
+        runs[0]['size']=24;runs[1]['size']=12
+        parts=[([lookup[r['object_id']]],[r]) for r in runs]
+        draw_objects(prs,slide,page,parts);target=tmp_path/'before.pptx';prs.save(target)
+        rendered=render_presentations([target],tmp_path,settings)[0]
+        calibrate_runs(prs,1,page,parts,rendered)
+        assert 'fit' in runs[0] and 'fit' not in runs[1]
+        draw_objects(prs,slide,page,parts);target=tmp_path/'fitted.pptx';prs.save(target)
+        actual=render_presentations([target],tmp_path,settings)[0]
+        geometry=rendered_word_regions(prs,1,page,parts,actual)
+        assert geometry[0] is not None and geometry[1] is None
+        assert [s.text for s in slide.shapes if s.has_text_frame]==['CAPITALS 123','EXTREME 456']
+
+
 @pytest.mark.parametrize('angle',[0,90,180,270])
 @pytest.mark.parametrize('page_rotation',[0,90,180,270])
 def test_rotated_word_baseline_accounts_for_page_rotation(tmp_path,angle,page_rotation):

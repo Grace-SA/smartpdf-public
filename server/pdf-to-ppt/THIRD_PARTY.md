@@ -15,6 +15,7 @@
 | pypdfium2 / PDFium | PDF 解析、几何和渲染 | 保留绑定包与 PDFium 二进制的许可证/第三方通知；[许可说明](https://github.com/pypdfium2-team/pypdfium2#licensing) |
 | pypdf / python-pptx | 预检 / OOXML | BSD-3-Clause / MIT |
 | Noto Sans SC | 中文替代字体及完整字体嵌入 | SIL OFL 1.1，仓库 `vendor-fonts/NotoSansSC-OFL.txt`；运行包保留 `src/smartppt/OFL-NotoSansSC.txt` |
+| Noto Serif SC | 可选宋体/明体替代及完整字体嵌入 | SIL OFL 1.1，[固定上游许可](https://github.com/notofonts/noto-cjk/blob/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/Serif/LICENSE)；字体内 Adobe 版权及完整许可保留于 `src/smartppt/OFL-NotoSerifSC.txt`，文件与哈希见 README |
 | FontTools 4.68.0 | 将固定可变字体实例化为静态字体，保留 Unicode 字形、许可和完整字符集 | MIT，[官方项目](https://github.com/fonttools/fonttools) |
 | LibreOffice | 独立渲染检查 | 按实际发行版许可及第三方通知部署，未捆绑 |
 

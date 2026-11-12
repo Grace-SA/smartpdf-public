@@ -17,6 +17,9 @@ from lxml import etree as ET
 from .config import ConversionError
 
 NOTO_SHA256='a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da'
+SERIF_SHA256='050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9'
+FAMILIES={'Noto Sans SC':('SMARTPPT_CJK_FONT','NotoSansSC-variable.ttf',NOTO_SHA256,'OFL-NotoSansSC.txt'),
+          'Noto Serif SC':('SMARTPPT_CJK_SERIF_FONT','NotoSerifSC-variable.ttf',SERIF_SHA256,'OFL-NotoSerifSC.txt')}
 P='http://schemas.openxmlformats.org/presentationml/2006/main'
 R='http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 REL='http://schemas.openxmlformats.org/package/2006/relationships'
@@ -68,9 +71,9 @@ def eot_payload(font,data):
     return struct.pack('<I',len(header)+len(data))+header[4:]+data
 
 
-@lru_cache(maxsize=2)
-def noto_payload(data,bold=False):
-    if sha256(data).hexdigest()!=NOTO_SHA256:raise ConversionError('portable_font_integrity_failed')
+@lru_cache(maxsize=4)
+def noto_payload(data,bold=False,family='Noto Sans SC'):
+    if family not in FAMILIES or sha256(data).hexdigest()!=FAMILIES[family][2]:raise ConversionError('portable_font_integrity_failed')
     from fontTools.ttLib import TTFont
     from fontTools.varLib.instancer import instantiateVariableFont
     with TTFont(BytesIO(data)) as font:
@@ -78,26 +81,28 @@ def noto_payload(data,bold=False):
         separate_unicode_aliases(font)
         # Carry the complete copyright/license notice inside the font metadata,
         # so it survives Office editing and repackaging of the presentation.
-        license_text=Path(__file__).with_name('OFL-NotoSansSC.txt').read_text()
+        license_text=Path(__file__).with_name(FAMILIES[family][3]).read_text()
         font['name'].setName(license_text,13,3,1,0x409)
         output=BytesIO();font.save(output)
         return eot_payload(font,output.getvalue())
 
 
-def bundled_payloads(bold=False):
-    path=Path(os.getenv('SMARTPPT_CJK_FONT','NotoSansSC-variable.ttf'))
+def bundled_payloads(bold=False,family='Noto Sans SC'):
+    if family not in FAMILIES:raise ConversionError('portable_font_integrity_failed')
+    env,filename,_,_=FAMILIES[family];path=Path(os.getenv(env,filename))
     if not path.is_file() or path.stat().st_size>32*1024*1024:raise ConversionError('portable_font_unavailable')
-    data=path.read_bytes();result={'regular':noto_payload(data)}
-    if bold:result['bold']=noto_payload(data,True)
+    data=path.read_bytes();result={'regular':noto_payload(data,family=family)}
+    if bold:result['bold']=noto_payload(data,True,family)
     return result
 
 
-def embed_noto(source,target,payloads):
+def embed_noto(source,target,payloads,family='Noto Sans SC'):
     """Add one unique, used typeface and collision-free package relationships."""
     with zipfile.ZipFile(source) as package:parts={n:package.read(n) for n in package.namelist()}
     parser=ET.XMLParser(resolve_entities=False,no_network=True)
     root=ET.fromstring(parts['ppt/presentation.xml'],parser)
-    if not any(b'Noto Sans SC' in data for name,data in parts.items() if name.startswith('ppt/slides/') and name.endswith('.xml')):
+    if family not in FAMILIES:raise ConversionError('portable_font_integrity_failed')
+    if not any(family.encode() in data for name,data in parts.items() if name.startswith('ppt/slides/') and name.endswith('.xml')):
         raise ConversionError('portable_font_not_used')
     fonts=root.find('{'+P+'}embeddedFontLst')
     if fonts is None:
@@ -105,9 +110,9 @@ def embed_noto(source,target,payloads):
         # The presentation schema places the font list before these siblings.
         later={'custShowLst','photoAlbum','custDataLst','kinsoku','defaultTextStyle','extLst'}
         index=next((i for i,node in enumerate(root) if ET.QName(node).localname in later),len(root));root.insert(index,fonts)
-    if any(f.find('{'+P+'}font').get('typeface')=='Noto Sans SC' for f in fonts if f.find('{'+P+'}font') is not None):
+    if any(f.find('{'+P+'}font').get('typeface')==family for f in fonts if f.find('{'+P+'}font') is not None):
         raise ConversionError('portable_font_already_embedded')
-    entry=ET.SubElement(fonts,'{'+P+'}embeddedFont');ET.SubElement(entry,'{'+P+'}font',typeface='Noto Sans SC')
+    entry=ET.SubElement(fonts,'{'+P+'}embeddedFont');ET.SubElement(entry,'{'+P+'}font',typeface=family)
     rels=ET.fromstring(parts['ppt/_rels/presentation.xml.rels'],parser);types=ET.fromstring(parts['[Content_Types].xml'],parser)
     ids={r.get('Id') for r in rels};index=1
     for style in ('regular','bold'):

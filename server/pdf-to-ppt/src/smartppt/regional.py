@@ -270,7 +270,10 @@ def calibrate_runs(prs, number, page, objects, rendered):
                 dw,dh=desired[2]-desired[0],desired[3]-desired[1]
                 if min(aw,ah,dw,dh)<=0:continue
                 ratio=dh/ah
-                if not .8<=ratio<=1.2 or not .7<=dw/(aw*ratio)<=1.3:continue
+                # Nominal point sizes are not comparable across font families:
+                # CJK faces can have much taller Latin capitals. Allow bounded
+                # optical sizing; final 2pt glyph and pixel gates are unchanged.
+                if not .65<=ratio<=1.5 or not .7<=dw/(aw*ratio)<=1.3:continue
                 count=len(run['text'])
                 spacing=(dw-aw*ratio)/max(1,count-1)
                 size=shape.text_frame.paragraphs[0].runs[0].font.size/12700*ratio

@@ -56,6 +56,7 @@ def render_presentations(files, folder, settings):
     font_dirs=[Path('/System/Library/Fonts'),Path('/usr/share/fonts')]
     if os.getenv('SMARTPPT_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_FONT_DIR']))
     if os.getenv('SMARTPPT_CJK_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_FONT']).parent)
+    if os.getenv('SMARTPPT_CJK_SERIF_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_SERIF_FONT']).parent)
     dirs=''.join('<dir>'+escape(str(p))+'</dir>' for p in font_dirs if p.exists())
     config.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'+dirs+
         '<cachedir>'+escape(str(folder/'cache'))+'</cachedir><alias><family>SimSun</family><prefer><family>Noto Sans SC</family></prefer></alias></fontconfig>')

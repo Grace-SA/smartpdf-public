@@ -36,6 +36,7 @@ export SMARTPPT_OCR_RUNNER="$PWD/ocr/paddle_runner.py"
 export SMARTPPT_RENDERER=/absolute/path/to/soffice
 export SMARTPPT_FONT_DIR=/absolute/path/to/fonts
 export SMARTPPT_CJK_FONT=/absolute/path/to/NotoSansSC-variable.ttf
+export SMARTPPT_CJK_SERIF_FONT=/absolute/path/to/NotoSerifSC-variable.ttf
 
 # 在分别继承以上环境的两个终端中运行：
 PYTHONPATH=src .venv/bin/python -m uvicorn smartppt.api:app --host 127.0.0.1 --port 8765
@@ -46,7 +47,9 @@ PYTHONPATH=src .venv/bin/python -m smartppt.worker
 
 字体目录需提供实际字体。这里的 OCR 字号校准使用 Arial/Arial Bold 度量；其他字体/平台需重新验收，缺失度量会报告。`SMARTPPT_CJK_FONT` 应指向仓库已有 Noto Sans SC（SHA-256 `a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da`）。嵌入使用固定 FontTools 4.68.0，只处理该许可开放的字体；不复制系统字体或任意上传 PDF 中的字体。未使用 Noto 的保留页面不会自动变成可移植字体页面。字体嵌入不代表原字体完全一致，也不代表所有客户端布局已通过。
 
-最新验证及未通过项见 [本轮质量报告](../../docs/pdf-to-ppt-quality-round2-2026-11-12.md)。本模块仍是独立验收服务，尚未达到通用上线标准。
+可选的 `SMARTPPT_CJK_SERIF_FONT` 用于明确标识的宋体/明体及其拉丁字符，指向 [Noto 官方固定版本](https://github.com/notofonts/noto-cjk/blob/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/google-fonts/NotoSerifSC%5Bwght%5D.ttf)，文件 25,125,512 字节，SHA-256 `050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9`。部署准备阶段下载并校验，服务运行时不联网下载；未配置或文件缺失时保留原字体策略。仅固定哈希的字体允许嵌入，完整版权/OFL 随字体元数据保留。字体名称仍标明替代关系，不承诺宋体字形完全相同。
+
+最新验证及未通过项见 [本轮质量报告](../../docs/pdf-to-ppt-quality-round3-2026-11-12.md)。本模块仍是独立验收服务，尚未达到通用上线标准。
 
 ## 可选的 Unlimited OCR 2
 
