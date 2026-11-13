@@ -6,7 +6,8 @@ from pathlib import Path
 from lxml import etree as ET
 from .font_embedding import bundled_payloads
 
-VARIANTS=('SmartPDF Sans100','SmartPDF Serif200')
+from .base_font import FAMILY as BASE_FAMILY
+VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY)
 
 def materialize_variant_fonts(files,folder):
     required=set()
@@ -34,3 +35,4 @@ def variant_fontconfig_rules():
     return ''.join('<match target="pattern"><test name="family" compare="eq"><string>'+family+
         '</string></test><edit name="weight" mode="assign" binding="strong"><int>'+str(weight)+
         '</int></edit></match>' for family,weight in [('SmartPDF Sans100',0),('SmartPDF Serif200',40)])
+

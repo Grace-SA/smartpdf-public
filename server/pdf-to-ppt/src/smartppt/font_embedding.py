@@ -24,7 +24,8 @@ FAMILIES={'Noto Sans SC':('SMARTPPT_CJK_FONT','NotoSansSC-variable.ttf',NOTO_SHA
 FAMILIES['SmartPDF Sans100']=FAMILIES['Noto Sans SC']
 FAMILIES['SmartPDF Serif200']=FAMILIES['Noto Serif SC']
 CMU_FACES=json.loads(Path(__file__).with_name('cmu-fonts.json').read_text())['families']
-PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)
+from .base_font import FAMILY as BASE_FAMILY
+PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)|{BASE_FAMILY}
 STYLES=('regular','bold','italic','boldItalic')
 P='http://schemas.openxmlformats.org/presentationml/2006/main'
 R='http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -117,6 +118,12 @@ def cmu_payload(data,family,style):
 
 
 def bundled_payloads(bold=False,family='Noto Sans SC',styles=None):
+    if family==BASE_FAMILY:
+        if bold or set(styles or ())-{'regular'}:raise ConversionError('portable_base_font_style_unsupported')
+        from .base_font import ttf_bytes
+        from fontTools.ttLib import TTFont
+        data=ttf_bytes()
+        with TTFont(BytesIO(data)) as font:return {'regular':eot_payload(font,data)}
     if family in CMU_FACES:
         root=Path(os.getenv('SMARTPPT_CMU_FONT_DIR','cmu-fonts'))
         required=set(styles or ())|{'regular'}|({'bold'} if bold else set());result={}
@@ -166,3 +173,4 @@ def embed_noto(source,target,payloads,family='Noto Sans SC'):
         parts[name]=ET.tostring(xml,xml_declaration=True,encoding='UTF-8',standalone=True)
     with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED) as package:
         for name,data in parts.items():package.writestr(name,data)
+

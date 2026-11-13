@@ -249,6 +249,9 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 l=min(c['box'][0] for c in visible);b=min(c['box'][1] for c in visible)
                 r=max(c['box'][2] for c in visible);t=max(c['box'][3] for c in visible)
                 size=pending[0]['size'];family,substituted=font_family(name,text,flags,base_name=font.get_base_name())
+                from .base_font import source_family
+                exact_family=source_family(font,text,bold=bold,italic=italic)
+                if exact_family is not None:family,substituted=exact_family,True
                 runs.append({'text':text,'box':[l,b,r,t],'size':size,'font':family,
                     'substituted':substituted,'source_font':name,'bold':bold,'color':rgb,'index':pending[0]['index'],
                     'end_index':pending[-1]['index']+1,'source_base_font':font.get_base_name(),
