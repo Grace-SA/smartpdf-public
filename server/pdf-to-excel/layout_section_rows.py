@@ -1,6 +1,6 @@
 """Recover sectioned numeric records from complete native lines and source rules.
 
-An isolated experiment: no document IDs, expected rows, or reference values.
+No document IDs, expected rows, or reference values enter this function.
 """
 
 from collections import Counter, defaultdict
@@ -11,13 +11,14 @@ import re
 
 from pdfplumber.utils import cluster_objects, extract_text
 from layout_tables import model_box, local_box, physical_page, visible_box
+from source_phrases import canonical
 
 
 def number(text):
     value = re.sub(r"\s+", "", text)
     return bool(
         re.fullmatch(
-            r"(?:Ref\.|[—–-]|[+−–-]?(?:\d[\d.,]*|\.\d+)(?:%|\*{1,3}|†|‡)?|\([\d.,]+(?:[–−-][\d.,]+)?\))",
+            r"(?:Ref\.|[†‡]|na|[—–-]|[$€£]?[+−–-]?(?:\d[\d.,]*|\.\d+)(?:%|\*{1,3}|†|‡)?|\([\d.,]+(?:[–−-][\d.,]+)?\))",
             value,
         )
     )
@@ -99,6 +100,16 @@ def recover(item, page):
             and c["col_span"] == 1
             and c["text"].strip()
             and (col == 0 or number(c["text"]))
+            and (
+                col != 0
+                or sum(
+                    other["start_row_offset_idx"] == c["start_row_offset_idx"]
+                    and other["start_col_offset_idx"] > 0
+                    and number(other["text"])
+                    for other in body
+                )
+                >= 2
+            )
         ):
             extents[col].append(model_box(c["bbox"], page))
     if any(len(extents[col]) < 10 for col in range(cols)):
@@ -138,6 +149,29 @@ def recover(item, page):
         return item
     admitted = {id(c) for c in chars}
     word_columns = {}
+    label_cells = [
+        c
+        for c in body
+        if c.get("bbox")
+        and c["start_col_offset_idx"] == 0
+        and c["text"].strip()
+        and (
+            c["col_span"] == 1
+            or not any(
+                other is not c
+                and other["start_row_offset_idx"] == c["start_row_offset_idx"]
+                and other["text"].strip()
+                for other in body
+            )
+        )
+    ]
+    word_owners = defaultdict(list)
+    allowed_labels = {id(cell) for cell in label_cells}
+    for cell in body:
+        if not cell.get("bbox") or not cell["text"].strip():
+            continue
+        for token in {canonical(token) for token in cell["text"].split()}:
+            word_owners[token].append((cell, model_box(cell["bbox"], page)))
     for word in page.extract_words(x_tolerance=1.5, y_tolerance=2, return_chars=True):
         active = [c for c in word["chars"] if c["text"].strip()]
         if not active or not any(id(c) in admitted for c in active):
@@ -148,10 +182,23 @@ def recover(item, page):
         col = next(
             (i for i, (l, r) in enumerate(zip(cuts, cuts[1:])) if l <= center < r), None
         )
-        if (
-            col is None
-            or word["x0"] < cuts[col] - height * 0.3
-            or word["x1"] > cuts[col + 1] + height * 0.3
+        y = (word["top"] + word["bottom"]) / 2
+        owners = [
+            cell
+            for cell, b in word_owners[canonical(word["text"])]
+            if b[0] - 1 <= center <= b[2] + 1 and b[1] - 1 <= y <= b[3] + 1
+        ]
+        label_owner = bool(owners) and all(
+            id(cell) in allowed_labels for cell in owners
+        )
+        if label_owner:
+            col = 0
+        if col is None or (
+            not label_owner
+            and (
+                word["x0"] < cuts[col] - height * 0.3
+                or word["x1"] > cuts[col + 1] + height * 0.3
+            )
         ):
             return item
         word_columns.update({id(c): col for c in active})
@@ -195,17 +242,48 @@ def recover(item, page):
         bold = all(any(s in n.lower() for s in ["bold", "demi"]) for n in line["fonts"])
         following = lines[i + 1] if i + 1 < len(lines) else None
         outdent = previous and line["x"] < previous["x"] - height * 0.4
+        section_continuation = (
+            previous
+            and not previous["dense"]
+            and 0 < line["y"] - previous["y"] <= height * 1.5
+            and line["x"] > previous["x"] + height * 0.4
+            and line["fonts"] == previous["fonts"]
+            and any(
+                canonical(previous["values"][0] + line["values"][0])
+                in canonical(cell["text"])
+                and model_box(cell["bbox"], page)[1]
+                <= previous["y"]
+                < line["y"]
+                <= model_box(cell["bbox"], page)[3]
+                for cell in label_cells
+            )
+        )
         section = (
             bold
             or previous is None
             or outdent
+            or (
+                previous["dense"]
+                and line["y"] - previous["y"] > height * 1.5
+                and following
+                and following["dense"]
+                and following["x"] > line["x"] + height * 0.4
+                and any(
+                    canonical(cell["text"]) == canonical(line["values"][0])
+                    for cell in label_cells
+                )
+            )
             or (
                 not previous["dense"]
                 and following
                 and following["x"] > line["x"] + height * 0.4
             )
         )
-        if section:
+        if section_continuation:
+            previous["parts"][0].extend(line["parts"][0])
+            previous["values"][0] += "\n" + line["values"][0]
+            continuations += 1
+        elif section:
             sections += 1
             rows.append(line)
         elif (

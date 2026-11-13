@@ -15,6 +15,9 @@ from openpyxl.worksheet.pagebreak import Break
 from text_tables import aligned_tables, conservative_aligned_tables
 from layout_typography import apply_source_typography, readable_header_widths
 from layout_blank import restore_blank_merges
+from layout_fragmented_grid import restore_fragmented_rows
+from layout_trailing_blank import recover as restore_trailing_blank_rows
+from source_bidi import recover as restore_bidi_reading_order, reading_order
 from layout_alternating import recover_alternating_tables
 from layout_forms import recover as recover_form, control_rectangles
 from form_workbook import shared_columns, form_preview
@@ -68,7 +71,7 @@ def clean(text):
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
 
 
-def table_from_pdf(table):
+def table_from_pdf(table, preserve_empty_rows=False):
     cells = table.cells
     xs = sorted(set(round(x, 2) for b in cells for x in (b[0], b[2])))
     ys = sorted(set(round(y, 2) for b in cells for y in (b[1], b[3])))
@@ -106,7 +109,7 @@ def table_from_pdf(table):
             )
         occupied.update(region)
     # Text strategy invents spacer rows. Remove only wholly empty rows with no spans.
-    if not any(e["rs"] > 1 for e in entries):
+    if not preserve_empty_rows and not any(e["rs"] > 1 for e in entries):
         used = sorted({e["r"] for e in entries if e["text"].strip()})
         if len(used) < len(ys) - 1:
             entries = [dict(e, r=used.index(e["r"])) for e in entries if e["r"] in used]
@@ -568,6 +571,7 @@ def write_workbook(tables, output, layout):
                 ),
                 wrap_text=not t.get("coordinateGrid"),
                 textRotation=e.get("rotation", 0),
+                readingOrder=reading_order(e["text"]),
             )
             c.border = border
             if e["r"] < t.get("headerRows", 1):
@@ -678,6 +682,18 @@ def convert(source, output, options):
     from source_fonts import prepared_source
 
     with prepared_source(source, reader, output.parent) as prepared:
+        if os.environ.get("PDF_EXCEL_MODELS"):
+            from source_orientation import upright_source
+
+            with upright_source(prepared, selected, output.parent) as (upright, pages):
+                result = convert_pages(upright, output, selected, count, layout, ocr)
+                if pages:
+                    result["warnings"].append(
+                        "Sideways page content was rotated upright on pages: "
+                        + ", ".join(map(str, pages))
+                        + ". Check table headers and number formatting."
+                    )
+                return result
         return convert_pages(prepared, output, selected, count, layout, ocr)
 
 
@@ -804,6 +820,9 @@ def convert_pages(source, output, selected, count, layout, ocr):
             for j, t in enumerate(found):
                 if t.get("method", "").startswith("layout"):
                     t = restore_blank_merges(t, page, ruled_tables)
+                    t = restore_fragmented_rows(t, page, table_from_pdf)
+                t = restore_bidi_reading_order(t, page, ruled_tables)
+                t = restore_trailing_blank_rows(t, page, table_from_pdf)
                 if t.get("bbox"):
                     b = t["bbox"]
                     sizes = [

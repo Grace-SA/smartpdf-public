@@ -5,6 +5,59 @@ from statistics import median
 import unicodedata
 
 
+def restore_line_order(text, original, chars):
+    """Recover visual line order only for an exact permutation of complete lines."""
+    from itertools import permutations
+
+    lines = [line.strip() for line in original.splitlines() if line.strip()]
+    if not 2 <= len(lines) <= 4 or not any(ch.isalpha() for ch in original):
+        return None
+    keys = [canonical(line) for line in lines]
+    if len(set(keys)) != len(keys) or any(not key for key in keys):
+        return None
+    sizes = [ch.get("size") for ch in chars if ch["text"].strip()]
+    if (
+        not sizes
+        or any(
+            not isinstance(s, (int, float)) or not math.isfinite(s) or s <= 0
+            for s in sizes
+        )
+        or max(sizes) > min(sizes) * 1.2
+    ):
+        return None
+    # A clipped model box can contain text from adjacent columns. Disjoint
+    # horizontal extents are not evidence of a multi-line phrase.
+    from pdfplumber.utils import cluster_objects
+
+    ink = [ch for ch in chars if ch["text"].strip()]
+    if any(
+        not isinstance(ch.get(k), (int, float)) or not math.isfinite(ch[k])
+        for ch in ink
+        for k in ["x0", "x1", "top", "bottom"]
+    ):
+        return None
+    groups = cluster_objects(ink, lambda ch: ch["top"], 3)
+    if len(groups) != len(lines):
+        return None
+    spans = [
+        (min(ch["x0"] for ch in group), max(ch["x1"] for ch in group))
+        for group in groups
+    ]
+    if max(left for left, right in spans) >= min(right for left, right in spans):
+        return None
+    wanted = canonical(text)
+    if wanted == "".join(keys):
+        return None
+    matching = [
+        order
+        for order in permutations(range(len(lines)))
+        if "".join(keys[i] for i in order) == wanted
+    ]
+    if len(matching) != 1:
+        return None
+    return ("\n" if "\n" in text else " ").join(lines)
+
+
 def canonical(text):
     return "".join(
         unicodedata.normalize("NFKC", text)

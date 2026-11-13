@@ -73,7 +73,7 @@ def visible_glyphs(chars):
             math.floor(ch["top"] / 16), math.floor(ch["bottom"] / 16) + 1
         ):
             bands[band].append(ch)
-    removed = set()
+    removed = overprinted_phrase_blanks(chars, eligible)
     for ch in chars:
         if ch["text"].strip() or not eligible(ch):
             continue
@@ -87,6 +87,70 @@ def visible_glyphs(chars):
         ):
             removed.add(id(ch))
     return [ch for ch in chars if id(ch) not in removed]
+
+
+def overprinted_phrase_blanks(chars, eligible):
+    """Ignore an earlier blank-only run underneath a later ordinary phrase.
+
+    This does not remove single spaces between overhanging letters. The later
+    phrase must contain its own word separators; all its glyphs stay intact.
+    """
+    removed = set()
+    index = 0
+    while index < len(chars):
+        start = index
+        while index < len(chars) and not chars[index]["text"].strip():
+            index += 1
+        if index == start:
+            index += 1
+            continue
+        blanks = chars[start:index]
+        if not 8 <= len(blanks) <= 512 or not all(eligible(c) for c in blanks):
+            continue
+        first = blanks[0]
+        height = first["bottom"] - first["top"]
+        center = (first["top"] + first["bottom"]) / 2
+        font = first.get("fontname")
+        if not font or any(
+            c.get("fontname") != font
+            or abs((c["top"] + c["bottom"]) / 2 - center) > height * 0.1
+            or abs(c["bottom"] - c["top"] - height) > height * 0.05
+            for c in blanks
+        ):
+            continue
+        if any(
+            b["x0"] <= a["x0"] or abs(b["x0"] - a["x1"]) > height * 0.25
+            for a, b in zip(blanks, blanks[1:])
+        ):
+            continue
+        left, right = first["x0"], blanks[-1]["x1"]
+        later = []
+        for c in chars[index : index + 256]:
+            if (
+                not eligible(c)
+                or c.get("fontname") != font
+                or abs((c["top"] + c["bottom"]) / 2 - center) > height * 0.1
+                or not left <= (c["x0"] + c["x1"]) / 2 <= right
+            ):
+                break
+            later.append(c)
+        phrase = "".join(c["text"] for c in later).strip()
+        if not re.fullmatch(r"[A-Za-z]+(?: +[A-Za-z]+){2,}", phrase):
+            continue
+        ink = [c for c in later if c["text"].strip()]
+        covered = [
+            c
+            for c in blanks
+            if any(
+                g["x0"] < (c["x0"] + c["x1"]) / 2 < g["x1"]
+                and min(g["bottom"], c["bottom"]) - max(g["top"], c["top"])
+                >= height * 0.8
+                for g in ink
+            )
+        ]
+        if len(covered) >= max(6, len(ink) * 0.5):
+            removed.update(id(c) for c in covered)
+    return removed
 
 
 def without_overprinted_blanks(page):

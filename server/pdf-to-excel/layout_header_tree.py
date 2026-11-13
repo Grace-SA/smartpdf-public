@@ -12,6 +12,32 @@ from layout_tables import model_box, local_box, physical_page, visible_box
 from source_phrases import canonical
 
 
+def source_header_edges(page):
+    """Treat the two edges of a thin filled underline as one source rule."""
+    physical = physical_page(page)
+    edges = [dict(edge) for edge in physical.edges]
+    for rect in getattr(physical, "rects", []):
+        if not rect.get("fill") or rect.get("stroke"):
+            continue
+        x0, x1, top, bottom = [
+            rect.get(k, math.nan) for k in ("x0", "x1", "top", "bottom")
+        ]
+        if not all(
+            isinstance(v, (int, float)) and math.isfinite(v)
+            for v in (x0, x1, top, bottom)
+        ) or not (0 < bottom - top <= 1.5 and x1 - x0 >= 10):
+            continue
+        for edge in edges:
+            if (
+                edge["orientation"] == "h"
+                and abs(edge["x0"] - x0) <= 0.25
+                and abs(edge["x1"] - x1) <= 0.25
+                and top - 0.01 <= edge["top"] <= bottom + 0.01
+            ):
+                edge["top"] = edge["bottom"] = (top + bottom) / 2
+    return edges
+
+
 def recover(item, page):
     # Keep the already verified path before trying whole-word recovery.
     original = _recover(item, page, False)
@@ -79,7 +105,7 @@ def _recover(item, page, complete_words):
     rules = []
     edges = [
         e
-        for e in physical_page(page).edges
+        for e in source_header_edges(page)
         if e["orientation"] == "h"
         and bounds[1] - 3 <= e["top"] <= bodytop
         and e["x1"] > bounds[0]
@@ -111,8 +137,10 @@ def _recover(item, page, complete_words):
         if len(r["columns"]) < cols and start + 0.5 < r["top"] < end - 0.5
     ]
     levels = cluster_objects(internal, lambda r: r["top"], 0.5)
-    if len(levels) != header_end - 1:
+    source_header_end = len(levels) + 1
+    if not 2 <= source_header_end <= header_end:
         return item
+    reducing = source_header_end < header_end
     cuts = [start] + [median(r["top"] for r in group) for group in levels] + [end]
     if any(b - a < 5 for a, b in zip(cuts, cuts[1:])):
         return item
@@ -190,6 +218,10 @@ def _recover(item, page, complete_words):
                 or (complete_words and re.fullmatch(r"[0-9]{4}", text.strip()))
             ):
                 return item
+            if reducing and not any(
+                canonical(text) in canonical(cell["text"]) for cell in headers
+            ):
+                return item
             current = set(rule["columns"])
             for parent in new:
                 ancestor = set(
@@ -217,6 +249,24 @@ def _recover(item, page, complete_words):
         if complete_words
         else []
     )
+    word_owners = {}
+    if complete_words:
+        for word in words:
+            x = (word["x0"] + word["x1"]) / 2
+            y = (word["top"] + word["bottom"]) / 2
+            candidates = set()
+            for cell in headers:
+                if cell["col_span"] != 1 or not cell.get("bbox"):
+                    continue
+                if canonical(word["text"]) not in {
+                    canonical(token) for token in cell["text"].split()
+                }:
+                    continue
+                b = model_box(cell["bbox"], page)
+                if b[0] - 1 <= x <= b[2] + 1 and b[1] - 1 <= y <= b[3] + 1:
+                    candidates.add(cell["start_col_offset_idx"])
+            if len(candidates) == 1:
+                word_owners[id(word)] = candidates.pop()
     for col, (left, right) in enumerate(zip(borders, borders[1:])):
         first = max(
             (
@@ -231,7 +281,11 @@ def _recover(item, page, complete_words):
             leaf_words = [
                 w
                 for w in words
-                if left <= (w["x0"] + w["x1"]) / 2 < right
+                if (
+                    word_owners[id(w)] == col
+                    if id(w) in word_owners
+                    else left <= (w["x0"] + w["x1"]) / 2 < right
+                )
                 and all(id(c) not in used for c in w["chars"] if c["text"].strip())
             ]
             part = [c for w in leaf_words for c in w["chars"] if id(c) in admitted]
@@ -273,7 +327,10 @@ def _recover(item, page, complete_words):
         prior = " ".join(
             c["text"]
             for c in headers
-            if c["start_col_offset_idx"] == col and c["col_span"] == 1
+            if c["start_col_offset_idx"] <= col < c["end_col_offset_idx"]
+            and (
+                c["col_span"] == 1 or c["start_row_offset_idx"] >= source_header_end - 1
+            )
         )
         # Model fragments may place the middle line after the first/last lines.
         # Only complete source words present in this same column may be reordered.
@@ -295,9 +352,9 @@ def _recover(item, page, complete_words):
             for e in edges
         ):
             return item
-        if not add(text, part, first, col, header_end - first, 1):
+        if not add(text, part, first, col, source_header_end - first, 1):
             return item
-    if len(occupied) != cols * header_end or any(
+    if len(occupied) != cols * source_header_end or any(
         c["text"].strip() and id(c) not in used for c in chars
     ):
         return item
@@ -317,5 +374,10 @@ def _recover(item, page, complete_words):
     if signature(new) == signature(headers):
         return item
     result = deepcopy(item)
-    result["data"]["table_cells"] = deepcopy(body) + new
+    shifted = deepcopy(body)
+    for cell in shifted:
+        cell["start_row_offset_idx"] += source_header_end - header_end
+        cell["end_row_offset_idx"] += source_header_end - header_end
+    result["data"]["table_cells"] = shifted + new
+    result["data"]["num_rows"] += source_header_end - header_end
     return result

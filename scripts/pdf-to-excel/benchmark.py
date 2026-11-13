@@ -4,10 +4,13 @@ import concurrent.futures, hashlib, json, os, subprocess, sys, time
 from pathlib import Path
 from xml.etree import ElementTree as ET
 import zipfile
+from benchmark_process import parse_reply
 
 root = Path(sys.argv[1])
 output = root / "outputs"
 output.mkdir(exist_ok=True)
+diagnostics = root / "diagnostics"
+diagnostics.mkdir(exist_ok=True)
 manifest = json.loads((root / "corpus/manifest.json").read_text())
 runner = Path(__file__).resolve().parents[2] / "server/pdf-to-excel/convert.py"
 timeout = int(os.environ.get("PDF_EXCEL_BENCHMARK_TIMEOUT", "35"))
@@ -32,11 +35,17 @@ def fingerprint():
             "layout_alternating.py",
             "layout_typography.py",
             "layout_blank.py",
+            "layout_fragmented_grid.py",
+            "layout_partition.py",
+            "layout_section_labels.py",
+            "layout_trailing_blank.py",
+            "source_bidi.py",
             "source_glyphs.py",
             "layout_dense_rows.py",
             "layout_source_rows.py",
             "source_phrases.py",
             "source_fonts.py",
+            "source_orientation.py",
             "cff_names.py",
             "layout_header_tree.py",
             "layout_section_rows.py",
@@ -78,25 +87,27 @@ def case(item):
         out.unlink(missing_ok=True)
         if hashlib.sha256(source.read_bytes()).hexdigest() != item["sha256"]:
             raise ValueError("Source hash mismatch")
-        p = subprocess.run(
-            [
-                sys.executable,
-                str(runner),
-                str(source),
-                str(out),
-                json.dumps({"ocr": True}),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout,
-            env=dict(os.environ, OMP_NUM_THREADS="2"),
-        )
-        result = json.loads(p.stdout.decode().strip().split("\n")[-1])
-        if p.returncode:
-            row.update(
-                status="refused", reason=result.get("error", "conversion failed")
+        with (diagnostics / (item["id"] + ".stderr.log")).open("wb") as log:
+            p = subprocess.run(
+                [
+                    sys.executable,
+                    str(runner),
+                    str(source),
+                    str(out),
+                    json.dumps({"ocr": True}),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=log,
+                timeout=timeout,
+                env=dict(os.environ, OMP_NUM_THREADS="2", PYTHONFAULTHANDLER="1"),
             )
+        (diagnostics / (item["id"] + ".stdout.log")).write_bytes(p.stdout)
+        row["processExitCode"] = p.returncode
+        reply = parse_reply(p.returncode, p.stdout)
+        if reply["status"] != "converted":
+            row.update(reply)
         else:
+            result = reply["result"]
             with zipfile.ZipFile(out) as z:
                 sheets = [
                     ET.fromstring(z.read(n))
@@ -125,7 +136,8 @@ def case(item):
                 bytes=out.stat().st_size,
                 outputSha256=hashlib.sha256(out.read_bytes()).hexdigest(),
             )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as error:
+        (diagnostics / (item["id"] + ".stdout.log")).write_bytes(error.stdout or b"")
         row.update(
             status="timeout",
             reason=f"{timeout}-second benchmark budget (service budget is 180 seconds)",
@@ -145,7 +157,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         (root / "benchmark.json").write_text(
             json.dumps(
                 {
-                    "scope": "200 public PDFs; no ground-truth accuracy claim",
+                    "scope": f"{len(manifest)} PDFs; no ground-truth accuracy claim",
                     "runtime": runtime,
                     "results": results,
                 },

@@ -25,13 +25,13 @@ def output_font_widths(cell):
     return FONT_METRICS[key][1]
 
 
-def valid_glyph(ch):
+def valid_glyph(ch, minimum_size=4):
     vals = [ch.get(k, math.nan) for k in ("x0", "x1", "top", "bottom", "size", "width")]
     if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals):
         return False
     if (
         not ch.get("upright")
-        or not 4 <= ch["size"] <= 72
+        or not minimum_size <= ch["size"] <= 72
         or not 0 < ch["width"] <= 512
         or ch["bottom"] <= ch["top"]
     ):
@@ -47,7 +47,7 @@ def valid_glyph(ch):
 
 
 def family(name):
-    name = name.split("+")[-1].lower()
+    name = name.split("+")[-1].lower().replace(" ", "")
     if name.startswith(("timesnewroman", "times-")) or name == "times":
         return "Times New Roman"
     if name.startswith(("helvetica", "arial")):
@@ -71,7 +71,10 @@ def apply_source_typography(table, page):
         return 0
     xs = list(accumulate(table["widths"], initial=table["bbox"][0]))
     ys = list(accumulate(table["heights"], initial=table["bbox"][1]))
-    glyphs = [ch for ch in page.chars if valid_glyph(ch) and ch["text"].strip()]
+    minimum_size = 3 if table.get("sourceGeometry") and table.get("closedGrid") else 4
+    glyphs = [
+        ch for ch in page.chars if valid_glyph(ch, minimum_size) and ch["text"].strip()
+    ]
     bands = defaultdict(list)
     for ch in glyphs:
         bands[math.floor((ch["top"] + ch["bottom"]) / 32)].append(ch)
@@ -113,7 +116,7 @@ def apply_source_typography(table, page):
         if (
             None in names
             or len(names) != 1
-            or min(sizes) < 4
+            or min(sizes) < minimum_size
             or max(sizes) > 72
             or max(sizes) > min(sizes) * 1.05
         ):

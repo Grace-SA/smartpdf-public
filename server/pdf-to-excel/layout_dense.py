@@ -17,7 +17,9 @@ def dense_grid(page, native):
         return None
     if sum(bool(c["text"].strip()) for c in cells) < rows * cols * 0.95:
         return None
-    if sum("\n" in c["text"] for c in cells) > len(cells) * 0.05:
+    if sum("\n" in c["text"] for c in cells) > len(
+        cells
+    ) * 0.05 and not enumerated_rows(t):
         return None
     columns = [[c["text"] for c in cells if c["c"] == col] for col in range(cols)]
     numeric = sum(
@@ -78,4 +80,15 @@ def dense_grid(page, native):
                 if c["r"] == 0
             )
         ),
+    )
+
+
+def enumerated_rows(table):
+    """Allow wrapped records only when every physical row has its own serial."""
+    rows = len(table["heights"])
+    serial = {c["r"]: c["text"].strip() for c in table["cells"] if c["c"] == 0}
+    return (
+        len(serial) == rows
+        and any(ch.isalpha() for ch in serial.get(0, ""))
+        and all(serial.get(r) == str(r) for r in range(1, rows))
     )

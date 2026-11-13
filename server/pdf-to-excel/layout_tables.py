@@ -170,6 +170,11 @@ def source_cell_text(text, box, page):
 
         value = original if "\n" in text else original.replace("\n", " ")
         return restore_range_spaces(text, value, chars)
+    from source_phrases import restore_line_order
+
+    ordered = restore_line_order(text, original, chars)
+    if ordered is not None:
+        return ordered
     # Some predicted boxes clip the first/last glyph of one complete word.
     # Recover that word only with exact canonical content and a unique centre
     # inside the prediction. Never recover words crossing the visible crop.
@@ -364,7 +369,9 @@ def prefer_native(model, native):
             restored = restore_native_spans(model, candidate)
             if restored is not model:
                 return restored
-    return model
+    from layout_partition import recover_partition
+
+    return recover_partition(model, native)
 
 
 def restore_native_spans(model, physical):
@@ -675,8 +682,9 @@ def refine_predictions(item, page):
     from layout_columns import recover as recover_columns
     from layout_paragraph_rows import recover as recover_paragraphs
     from layout_header_spans import recover as recover_header_spans
+    from layout_section_labels import recover as recover_section_labels
 
-    return [
+    refined = [
         recover_header_spans(
             recover_paragraphs(
                 recover_columns(
@@ -691,6 +699,7 @@ def refine_predictions(item, page):
         )
         for part in result
     ]
+    return [recover_section_labels(part, page) for part in refined]
 
 
 def restore_stub_header(data, page):

@@ -73,10 +73,12 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_literal_text_merges_and_line_wrap(self):
         self.assertEqual(scorer.check_workbook(self.output, self.reference), [])
-        for changed in ["LRibs", "123", "=1+1"]:
+        for changed in ["LRibs", "L R i b s", "123", "=1+1"]:
             with self.subTest(changed=changed):
                 book = load_workbook(self.output)
-                book.active["A2" if changed == "LRibs" else "B2"] = changed
+                book.active["A2" if changed in ("LRibs", "L R i b s") else "B2"] = (
+                    changed
+                )
                 path = self.root / "changed.xlsx"
                 book.save(path)
                 failures = scorer.check_workbook(path, self.reference)
