@@ -11,13 +11,14 @@ import shutil
 import re
 import tempfile
 import unicodedata
+import math
 import pypdfium2 as pdfium
 from pptx import Presentation
 from pptx.util import Pt
 from .config import ConversionError
 from .font_embedding import bundled_payloads,embed_noto,PORTABLE_FAMILIES,STYLES
 FAMILIES=PORTABLE_FAMILIES
-from .ocr_fit import observed_boxes,fit_shape
+from .ocr_fit import observed_boxes,fit_shape,fit_local,local_box
 from .quality import normalized,shape_text
 from .render_gate import render_presentations,metric,accept_candidate
 
@@ -50,7 +51,8 @@ def split_script_shapes(prs,rendered,small_text_pages=()):
                     for char in normalized(chr(code)):text+=char;boxes.append(tp.get_charbox(i))
                 def bounds(bs):return (min(b[0] for b in bs),height-max(b[3] for b in bs),max(b[2] for b in bs),height-min(b[1] for b in bs))
                 for shape in list(slide.shapes):
-                    if not shape.has_text_frame or shape.rotation or len(shape.text_frame.paragraphs)!=1:continue
+                    if not shape.has_text_frame or len(shape.text_frame.paragraphs)!=1:continue
+                    if min(abs(shape.rotation-k) for k in (0,90,180,270,360))>8:continue
                     runs=shape.text_frame.paragraphs[0].runs
                     if len(runs)!=1 or runs[0].font.size is None:continue
                     if runs[0].font.name in ('Noto Sans SC','Noto Serif SC','SmartPDF Sans100','SmartPDF Serif200'):
@@ -62,26 +64,48 @@ def split_script_shapes(prs,rendered,small_text_pages=()):
                     else:continue
                     needle=normalized(shape.text)
                     if len(chunks)<2 or len(chunks)>200 or not needle:continue
+                    char_indices=None
+                    if shape.rotation:
+                        cx=(shape.left+shape.width/2)/12700;cy=(shape.top+shape.height/2)/12700
+                        located=[]
+                        for j,b in enumerate(boxes):
+                            if j in used:continue
+                            local=local_box(bounds([b]),cx,cy,shape.rotation)
+                            x,y=(local[0]+local[2])/2,(local[1]+local[3])/2
+                            if shape.left/12700-2<=x<=(shape.left+shape.width)/12700+2 and shape.top/12700-2<=y<=(shape.top+shape.height)/12700+2:
+                                located.append((x,j))
+                        located.sort()
+                        if ''.join(text[j] for _,j in located)!=needle:continue
+                        char_indices=[j for _,j in located]
                     matches=[];start=0
                     while (start:=text.find(needle,start))>=0:
                         end=start+len(needle);box=bounds(boxes[start:end])
                         distance=abs(box[0]-shape.left/12700)+abs(box[1]-shape.top/12700)
                         if not used.intersection(range(start,end)):matches.append((distance,start,end))
                         start+=1
-                    if not matches:continue
-                    distance,start,end=min(matches)
-                    if distance>max(24,runs[0].font.size.pt*4):continue
-                    used.update(range(start,end));cursor=start
+                    if char_indices is None:
+                        if not matches:continue
+                        distance,start,end=min(matches)
+                        if distance>max(24,runs[0].font.size.pt*4):continue
+                        char_indices=list(range(start,end))
+                    used.update(char_indices);cursor=0
                     for chunk in chunks:
                         length=len(normalized(chunk))
                         if not length:continue
-                        desired=bounds(boxes[cursor:cursor+length]);cursor+=length
+                        desired=bounds([boxes[j] for j in char_indices[cursor:cursor+length]]);cursor+=length
                         element=deepcopy(shape._element);nonvisual=element.find('.//{http://schemas.openxmlformats.org/presentationml/2006/main}cNvPr')
                         ident=slide.shapes._next_shape_id;nonvisual.set('id',str(ident));nonvisual.set('name',f'Positioned text {ident}')
                         shape._element.addprevious(element)
                         new=next(s for s in slide.shapes if s._element is element)
                         new.text_frame.paragraphs[0].runs[0].text=chunk
-                        new.left=Pt(desired[0]);new.width=Pt(desired[2]-desired[0]+runs[0].font.size.pt)
+                        if shape.rotation:
+                            local=local_box(desired,cx,cy,shape.rotation)
+                            width=local[2]-local[0]+runs[0].font.size.pt;box_height=new.height/12700
+                            nx=local[0]+width/2;ny=shape.top/12700+box_height/2
+                            c,s=math.cos(math.radians(shape.rotation)),math.sin(math.radians(shape.rotation))
+                            x=cx+(nx-cx)*c-(ny-cy)*s;y=cy+(nx-cx)*s+(ny-cy)*c
+                            new.left=Pt(x-width/2);new.top=Pt(y-box_height/2);new.width=Pt(width)
+                        else:new.left=Pt(desired[0]);new.width=Pt(desired[2]-desired[0]+runs[0].font.size.pt)
                         selected.append((element,desired,kind))
                     shape._element.getparent().remove(shape._element)
             if selected:
@@ -119,7 +143,12 @@ def finalize_portable_fonts(source,target,report,settings):
             for index,rows in targets.items():
                 with closing(doc[index]) as page:observed=observed_boxes(page,prs.slides[index],rows)
                 for row in rows:
-                    if row['shape'] in observed:fit_shape(prs.slides[index].shapes[row['shape']],row['bbox'],observed[row['shape']])
+                    if row['shape'] in observed:
+                        shape=prs.slides[index].shapes[row['shape']]
+                        if shape.rotation in (0,90,180,270):fit_shape(shape,row['bbox'],observed[row['shape']])
+                        else:
+                            cx=(shape.left+shape.width/2)/12700;cy=(shape.top+shape.height/2)/12700
+                            fit_local(shape,local_box(row['bbox'],cx,cy,shape.rotation),local_box(observed[row['shape']],cx,cy,shape.rotation))
         fitted=folder/'fitted.pptx';prs.save(fitted);rendered=render_presentations([fitted],folder,settings)[0]
         restored=[]
         with pdfium.PdfDocument(rendered) as doc:

@@ -44,6 +44,7 @@ async function poll(epoch) {
           else if (page.route === 'native-regions') detail = `${page.editable_runs} text runs are editable. Other text and graphics remain images. Review fonts, numbers and reading order.`;
           else if (page.route === 'paddle-ocr') detail = `${page.editable_lines} of ${page.detected_lines} detected text lines are editable. Check scanned text against the source.`;
           else if (page.route === 'stirling-table') detail = 'Check table rows, columns and merged cells.';
+          else if (page.text_granularity === 'word') detail = 'Text is editable in separate text boxes. Tables are not editable as cells; charts and graphics remain images.';
           if (detail) { const item = document.createElement('li'); item.textContent = `Page ${page.page}: ${detail}`; $('page-review').append(item); }
         }
         if (data.report.assistance.pages.some(p => p.route === 'paddle-ocr' && p.editable_lines < p.detected_lines)) {

@@ -31,11 +31,14 @@ def test_finer_strategy_must_keep_footer_occurrence_on_each_page(tmp_path,monkey
   result,warnings=objects(page,grouped=grouped,word_regions=word_regions)
   if not word_regions:result=[o for o in result if all(r['box'][3]<100 for r in o[1])]
   return result,warnings
- def boxes(prs,number,page,objects,pdf):
-  result=geometry(prs,number,page,objects,pdf)
+ def boxes(prs,number,page,objects,pdf,**kwargs):
+  result=geometry(prs,number,page,objects,pdf,**kwargs)
   # Simulate a failed footer fit on page two. The identical body occurrence
   # must never stand in for this source occurrence in the coverage check.
   if number==2:
+   # Also reject all new words in an extension; its retained footer is never
+   # re-fitted, so a failed footer replacement alone should not reject it.
+   if kwargs.get('shape_offset'):return [None]*len(objects)
    for i,(_,runs) in enumerate(objects):
     if all(r['box'][3]<100 for r in runs):result[i]=None
   return result

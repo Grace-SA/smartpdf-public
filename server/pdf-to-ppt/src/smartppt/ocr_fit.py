@@ -1,7 +1,7 @@
 """Measure actual Office glyphs before accepting scan font/spacing correction."""
 from contextlib import closing
 from copy import deepcopy
-import math,shutil,tempfile
+import math,shutil,tempfile,ctypes
 from pathlib import Path
 import pypdfium2 as pdfium
 import numpy as np
@@ -9,6 +9,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.util import Pt
 from .quality import normalized
+from .config import ConversionError
 from .render_gate import render_presentations,metric,accept_candidate
 
 
@@ -17,6 +18,11 @@ def observed_boxes(page,slide,targets):
         chars=[];boxes=[]
         for i in range(tp.count_chars()):
             code=pdfium.raw.FPDFText_GetUnicode(tp,i)
+            # PDFium marks a real line-end hyphen as U+0002 when later text
+            # makes it infer a wrapped word. Recover only its explicit hyphen
+            # marker in rendered-output measurement, never arbitrary controls
+            # or source/OCR content. Keep its original glyph box and index.
+            if code==2 and pdfium.raw.FPDFText_IsHyphen(tp,i)==1:code=ord('-')
             if not code:continue
             for char in normalized(chr(code)):
                 chars.append(char);boxes.append(tp.get_charbox(i))
@@ -95,6 +101,33 @@ def fit_local(shape,d,a):
     return True
 
 
+def editable_ink_image(page,image,scale):
+    """Separate editable glyph pixels from unchanged raster neighbors."""
+    disabled=[]
+    try:
+        for obj in page.get_objects(filter=[pdfium.raw.FPDF_PAGEOBJ_TEXT]):
+            active=ctypes.c_int()
+            if not pdfium.raw.FPDFPageObj_GetIsActive(obj,ctypes.byref(active)):
+                raise ValueError('text visibility unavailable')
+            if not active.value:continue
+            disabled.append(obj)
+            if not pdfium.raw.FPDFPageObj_SetIsActive(obj,False):
+                raise ValueError('text visibility change failed')
+        if not disabled:return None
+        with closing(page.render(scale=scale)) as bitmap:
+            background=bitmap.to_pil().convert('RGB').copy()
+    except (pdfium.PdfiumError,ValueError,RuntimeError,OSError):
+        return None
+    finally:
+        restored=True
+        for obj in disabled:
+            restored=bool(pdfium.raw.FPDFPageObj_SetIsActive(obj,True)) and restored
+        if not restored:raise ConversionError('ocr_geometry_measurement_failed')
+    if background.size!=image.size:return None
+    difference=np.max(np.abs(np.asarray(image,dtype=float)-np.asarray(background,dtype=float)),axis=2)
+    return Image.fromarray((255-difference).astype(np.uint8)).convert('RGB')
+
+
 def raster_bounds(page,slide,targets,observed):
     """Measure actual ink in each unique text region after undoing its rotation.
 
@@ -103,7 +136,7 @@ def raster_bounds(page,slide,targets,observed):
     """
     scale=min(2.0,2400/max(page.get_size()))
     with closing(page.render(scale=scale)) as bitmap:image=bitmap.to_pil().convert('RGB').copy()
-    out={}
+    out={};differential=None;difference_attempted=False
     for row in targets:
         n=row['shape']
         if n not in observed or not row.get('quad'):continue
@@ -126,7 +159,17 @@ def raster_bounds(page,slide,targets,observed):
             if l<0 or t<0 or r>image.width or b>image.height:continue
             working=image.crop((l,t,r,b))
         crop=np.asarray(working,dtype=float);border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]));background=np.median(border,axis=0)
-        if np.quantile(np.abs(border-background),.95)>12:continue
+        if np.quantile(np.abs(border-background),.95)>12:
+            # A nearby word still in the source raster can touch the sampling
+            # border. Measure only pixels contributed by real PDF text objects,
+            # preserving the same source bounds, matching and 2pt threshold.
+            if not difference_attempted:
+                differential=editable_ink_image(page,image,scale);difference_attempted=True
+            if differential is None:continue
+            working=(differential.transform((r-l,b-t),Image.Transform.AFFINE,(c,-s,x0,s,c,y0),resample=Image.Resampling.BICUBIC)
+                     if angle else differential.crop((l,t,r,b)))
+            crop=np.asarray(working,dtype=float);border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]));background=np.median(border,axis=0)
+            if np.quantile(np.abs(border-background),.95)>12:continue
         mask=np.max(np.abs(crop-background),axis=2)>30;padded=np.pad(mask.astype(np.uint8),1)
         neighbors=sum(padded[y:y+mask.shape[0],x:x+mask.shape[1]] for y in range(3) for x in range(3));ink=np.argwhere(mask&(neighbors>=3))
         if not len(ink):continue

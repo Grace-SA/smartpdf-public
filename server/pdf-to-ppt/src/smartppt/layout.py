@@ -148,8 +148,30 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
             char=chr(value)
             try:
                 box=tp.get_charbox(i);size=float(raw.FPDFText_GetFontSize(tp,i))
-                matrix=obj.get_matrix();size*=math.hypot(matrix.c,matrix.d)
-                angle=(float(raw.FPDFText_GetCharAngle(tp,i))+math.radians(rotation)+math.pi)%(2*math.pi)-math.pi
+                matrix=raw.FS_MATRIX()
+                transform_index=i
+                if char.isspace() and raw.FPDFText_IsGenerated(tp,i)==1:
+                    # PDFium inserts spaces for positioned glyph gaps, with an
+                    # identity matrix even when the text object is scaled.
+                    # Only inherit an adjacent real glyph in this same object;
+                    # an object matrix alone would omit enclosing form transforms.
+                    neighbors=[]
+                    for neighbor in (i-1,i+1):
+                        if not 0<=neighbor<tp.count_chars() or raw.FPDFText_IsGenerated(tp,neighbor)!=0:continue
+                        adjacent=tp.get_textobj(neighbor)
+                        if adjacent is not None and ctypes.cast(adjacent.raw,ctypes.c_void_p).value==pointer:
+                            neighbors.append(neighbor)
+                    if not neighbors:raise ValueError('generated space has no adjacent source glyph')
+                    transform_index=neighbors[0]
+                    size=float(raw.FPDFText_GetFontSize(tp,transform_index))
+                if not raw.FPDFText_GetMatrix(tp,transform_index,ctypes.byref(matrix)):raise ValueError('missing effective character transform')
+                horizontal=math.hypot(matrix.a,matrix.b);det=matrix.a*matrix.d-matrix.b*matrix.c
+                if horizontal<=0 or det<=0:raise ValueError('mirrored or degenerate text transform')
+                size*=det/horizontal
+                shear=(matrix.a*matrix.c+matrix.b*matrix.d)/det
+                # CharAngle uses atan2(c,a), which mistakes synthetic italic
+                # shear for baseline rotation. The horizontal basis is (a,b).
+                angle=(-math.atan2(matrix.b,matrix.a)+math.radians(rotation)+math.pi)%(2*math.pi)-math.pi
                 box=rotate_box(box)
             except Exception:
                 unsupported.append('unresolved_character');incomplete.add(pointer);continue
@@ -159,15 +181,17 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 clipped.add(pointer)
             objects[pointer]=obj
             origin_x_value,origin_y_value=ctypes.c_double(),ctypes.c_double()
-            baseline=None
-            if raw.FPDFText_GetCharOrigin(tp,i,origin_x_value,origin_y_value):
-                baseline=rotate_box((origin_x_value.value,origin_y_value.value,origin_x_value.value,origin_y_value.value))[1]
+            baseline=None;baseline_point=None
+            if raw.FPDFText_GetCharOrigin(tp,transform_index,origin_x_value,origin_y_value) and all(math.isfinite(v.value) for v in (origin_x_value,origin_y_value)):
+                baseline_point=rotate_box((origin_x_value.value,origin_y_value.value,origin_x_value.value,origin_y_value.value))[:2]
+                baseline=baseline_point[1]
             # Group glyphs along the text's own baseline, including quarter
             # turns. Page-space boxes remain authoritative for reconstruction.
             l,b,r,t=box;c,s=math.cos(angle),math.sin(angle)
             pts=[(x*c+y*s,-x*s+y*c) for x,y in [(l,ph-t),(r,ph-t),(r,ph-b),(l,ph-b)]]
             line_box=(min(x for x,y in pts),-max(y for x,y in pts),max(x for x,y in pts),-min(y for x,y in pts))
-            groups[pointer].append({'text':char,'box':box,'line_box':line_box,'size':size,'angle':angle,'index':i,'baseline':baseline})
+            line_baseline=baseline_point[0]*s-(ph-baseline_point[1])*c if baseline_point is not None else None
+            groups[pointer].append({'text':char,'box':box,'line_box':line_box,'line_baseline':line_baseline,'size':size,'angle':angle,'shear':shear,'index':i,'baseline':baseline})
         runs=[];remove=[]
         for pointer,chars in groups.items():
             obj=objects[pointer]
@@ -186,6 +210,9 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 return abs(angle-round(angle/(math.pi/2))*(math.pi/2))>.01 if allow_quarter_turns else abs(angle)>.01
             if any(unsupported_angle(c['angle']) for c in chars):
                 unsupported.append('rotated_text_kept_as_graphic');continue
+            shears=[c['shear'] for c in chars]
+            if any(abs(x)>.03 and not .10<=x<=.36 for x in shears):
+                unsupported.append('unsupported_text_shear_kept_as_graphic');continue
             ambiguous=[c for c in chars if unicodedata.category(c['text']) in ('Cc','Co') and not c['text'].isspace()]
             if ambiguous:
                 unsupported.append('unmapped_glyph_kept_as_graphic')
@@ -198,6 +225,7 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
             font=obj.get_font();name=font.get_family_name()
             flags=max(0,raw.FPDFFont_GetFlags(font))
             bold,italic=font_style(font.get_base_name(),font.get_weight(),flags)
+            italic=italic or any(x>=.10 for x in shears)
             color=[ctypes.c_uint() for _ in range(4)]
             ok=raw.FPDFPageObj_GetFillColor(obj,*color)
             rgb=tuple(c.value for c in color[:3]) if ok else (0,0,0)
@@ -224,7 +252,12 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 if pending:
                     previous=pending[-1];size=char['size']
                     gap=char['line_box'][0]-previous['line_box'][2]
-                    if abs(char['line_box'][1]-previous['line_box'][1])>size*.45 or gap>size*.8 or gap < -size:
+                    # Quotes and descenders have different ink bottoms on the
+                    # same baseline. Use the source origin when it is known;
+                    # otherwise keep the conservative ink-bound fallback.
+                    a,b=char['line_baseline'],previous['line_baseline']
+                    different_line=abs(a-b)>size*.2 if a is not None and b is not None else abs(char['line_box'][1]-previous['line_box'][1])>size*.45
+                    if different_line or abs(char['size']-previous['size'])>size*.05 or gap>size*.8 or gap < -size:
                         flush();pending=[]
                 pending.append(char)
             flush();remove.append(obj)

@@ -122,19 +122,35 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         if r-l<2 or b-t<2:continue
         if line['confidence']<.9:
             warnings.append('low_confidence_text_kept_as_image');continue
-        # Uniform light backgrounds, including tinted paper. Compare each RGB channel
+        # Uniform backgrounds, including dark headers. Compare each RGB channel
         # to its median; a uniformly colored border is not inherently nonuniform.
         crop=pixels[t:b,l:r];border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]))
         background=np.median(border,axis=0)
-        if background.min()<180 or np.quantile(np.abs(border.astype(float)-background),.95)>12:
+        if np.quantile(np.abs(border.astype(float)-background),.95)>12:
             warnings.append('nonuniform_background_kept_as_image');continue
-        ink_mask=np.max(background-crop.astype(float),axis=2)>65
+        contrast=np.max(np.abs(background-crop.astype(float)),axis=2)
+        light_background=background.min()>=180
+        ink_mask=(np.max(background-crop.astype(float),axis=2)>65) if light_background else contrast>65
         ink=np.argwhere(coherent_ink(ink_mask))
         if not len(ink):
             warnings.append('no_visible_ink_kept_as_image');continue
         bounds=(l,t,r,b)
         if len(ink):bounds=(l+int(ink[:,1].min()),t+int(ink[:,0].min()),l+int(ink[:,1].max())+1,t+int(ink[:,0].max())+1)
-        color=tuple(int(x) for x in np.quantile(crop[ink_mask],.2,axis=0))
+        strong=ink_mask & (contrast>=np.quantile(contrast[ink_mask],.8))
+        color=tuple(int(x) for x in (np.quantile(crop[ink_mask],.2,axis=0) if light_background else np.median(crop[strong],axis=0)))
+        if not light_background:
+            # A single PPT run cannot retain a multicolored source line.
+            # Antialiasing must lie along the background-to-foreground RGB axis;
+            # reject coherent pixels from other colors before erasing anything.
+            delta=np.asarray(color,dtype=float)-background
+            strength=float(delta@delta)
+            if strength<=65**2:
+                warnings.append('ambiguous_foreground_kept_as_image');continue
+            samples=crop[coherent_ink(ink_mask)].astype(float)-background
+            alpha=(samples@delta)/strength
+            residual=np.max(np.abs(samples-alpha[:,None]*delta),axis=1)
+            if np.quantile(residual,.99)>12 or residual.max()>32:
+                warnings.append('multicolor_text_kept_as_image');continue
         choice=latin_font(line['text'],working.crop(bounds),background,os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))
         if choice and choice['error']>.30:
             warnings.append('font_shape_unverified_kept_as_image');continue

@@ -13,6 +13,7 @@ from .layout import extract_native
 from .quality import normalized
 from .regional import draw_objects,calibrate_runs,rendered_word_regions
 from .render_gate import render_presentations,metric,accept_candidate
+from .selected_render import render_selected,location,page_metric
 
 
 def join_word_fragments(runs):
@@ -44,11 +45,16 @@ def join_word_fragments(runs):
     return result
 
 
-def repair_native_words(source,target,report,settings):
+def repair_native_words(source,target,report,settings,trim_spacing=False):
     eligible=[p for p in report['pages'] if p['route'] in ('native-coordinate','stirling-table','stirling-retained','stirling-retained-visual','source-image-fallback','native-regions') and p.get('text_granularity')!='word']
+    if trim_spacing:eligible=[p for p in eligible if p.get('word_layout_attempt',{}).get('accepted') is False]
     if not eligible:return report
     with tempfile.TemporaryDirectory(prefix='smartppt-word-layout-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
         folder=Path(tmp);prs=Presentation(target);pages={};candidates={}
+        def render(files):
+            selection=tuple(sorted(candidates))
+            if len(selection)<len(doc):return render_selected(files,folder,settings,selection)
+            return render_presentations(files,folder,settings)
         try:
             for item in eligible:
                 number=item['page'];page=pages[number]=doc[number-1]
@@ -66,13 +72,14 @@ def repair_native_words(source,target,report,settings):
             if not candidates:return report
             before=folder/'before.pptx';candidate=folder/'candidate.pptx'
             shutil.copyfile(target,before);prs.save(candidate)
-            baseline_pdf,rendered=render_presentations([before,candidate],folder,settings)
+            baseline_pdf,rendered=render([before,candidate])
             fallback=Presentation(target)
             # Keep already-correct paragraphs and semantic tables. Word boxes
             # are a repair for misplaced text, not a blanket conversion policy.
             for number,(parts,_) in list(candidates.items()):
                 geometry=rendered_word_regions(prs,number,pages[number],parts,baseline_pdf)
-                with pdfium.PdfDocument(baseline_pdf) as base,closing(base[number-1]) as page,closing(page.get_textpage()) as tp:
+                baseline_path,baseline_index=location(baseline_pdf,number)
+                with pdfium.PdfDocument(baseline_path) as base,closing(base[baseline_index]) as page,closing(page.get_textpage()) as tp:
                     reference=''.join(r['text'] for _,runs in parts for r in runs)
                     complete=Counter(normalized(tp.get_text_range()))==Counter(normalized(reference))
                 if complete and all(boxes is not None for boxes in geometry):
@@ -83,19 +90,19 @@ def repair_native_words(source,target,report,settings):
                         slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
             if not candidates:return report
             for number,(parts,_) in candidates.items():
-                calibrate_runs(prs,number,pages[number],parts,rendered)
+                calibrate_runs(prs,number,pages[number],parts,rendered,trim_spacing=trim_spacing)
                 draw_objects(prs,prs.slides[number-1],pages[number],parts)
             calibrated=folder/'calibrated.pptx';prs.save(calibrated)
-            rendered=render_presentations([calibrated],folder,settings)[0]
+            rendered=render([calibrated])[0]
             accepted=0
             for item in eligible:
                 number=item['page']
                 if number not in candidates:continue
                 parts,warnings=candidates[number]
                 geometry=rendered_word_regions(prs,number,pages[number],parts,rendered)
-                old,new=metric(source,baseline_pdf,number-1),metric(source,rendered,number-1)
+                old,new=page_metric(source,baseline_pdf,number),page_metric(source,rendered,number)
                 passed=all(boxes is not None for boxes in geometry) and accept_candidate(old,new)
-                evidence={'accepted':passed,'words':len(parts),'position_passed':sum(b is not None for b in geometry),'position_tolerance_points':2,'baseline':old,'candidate':new}
+                evidence={'spacing_retry':trim_spacing,'accepted':passed,'words':len(parts),'position_passed':sum(b is not None for b in geometry),'position_tolerance_points':2,'baseline':old,'candidate':new}
                 if not passed:
                     slide=prs.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
@@ -125,4 +132,10 @@ def try_native_words(source,target,report,settings):
         report['word_layout_error']=error.code
         return report
     report.clear();report.update(pending)
+    refined=deepcopy(report)
+    try:repair_native_words(source,target,refined,settings,trim_spacing=True)
+    except ConversionError as error:
+        report['word_spacing_retry_error']=error.code
+        return report
+    report.clear();report.update(refined)
     return report

@@ -21,17 +21,21 @@ def test_renderer_uses_exact_static_family_instead_of_variable_regular(tmp_path,
  assert (tmp_path/'approved-static-fonts').is_dir()
 
 
-def test_static_words_preserve_complete_numbers_and_skip_rotated_lines(tmp_path):
+def test_static_words_preserve_numbers_with_skew_and_skip_unsupported_rotation(tmp_path):
  if not os.getenv('SMARTPPT_CJK_FONT') or not os.getenv('SMARTPPT_TEST_RENDERER'):pytest.skip('pinned font and actual renderer required')
  from smartppt.portable_fonts import split_script_shapes
  p=Presentation();s=p.slides.add_slide(p.slide_layouts[6])
  text='Revenue -123.45 Total 678.90%'
  add_text(s,text,30,40,600,40,18,'SmartPDF Sans100')
  rotated=add_text(s,'Rotated 234.56 text',30,140,500,40,18,'SmartPDF Sans100');rotated.rotation=2
- original=rotated._element.xml;target=tmp_path/'words.pptx';p.save(target)
+ unsupported=add_text(s,'Untouched',300,300,100,30,18,'SmartPDF Sans100');unsupported.rotation=45
+ original=unsupported._element.xml;target=tmp_path/'words.pptx';p.save(target)
  pdf=render_presentations([target],tmp_path,Settings(renderer_path=os.environ['SMARTPPT_TEST_RENDERER']))[0]
  targets=split_script_shapes(p,pdf)
- assert len(targets[0])==4 and all(row['kind']=='font-words' for row in targets[0])
+ assert len(targets[0])==7 and all(row['kind']=='font-words' for row in targets[0])
  assert [shape.text.strip() for shape in s.shapes if not shape.rotation]==['Revenue','-123.45','Total','678.90%']
- assert rotated._element.xml==original
+ assert [shape.text.strip() for shape in s.shapes if shape.rotation==2]==['Rotated','234.56','text']
+ assert unsupported._element.xml==original
+ for row in targets[0]:
+  l,t,r,b=row['bbox'];assert 0<=l<r<=720 and 0<=t<b<=540
  assert len({shape.shape_id for shape in s.shapes})==len(s.shapes)

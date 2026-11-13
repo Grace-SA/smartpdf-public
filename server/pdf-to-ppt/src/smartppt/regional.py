@@ -8,6 +8,7 @@ from collections import defaultdict
 from contextlib import closing
 from copy import deepcopy
 import ctypes
+from io import BytesIO
 import math
 import shutil
 from pathlib import Path
@@ -15,11 +16,13 @@ import tempfile
 import unicodedata
 import numpy as np
 import pypdfium2 as pdfium
+from PIL import Image
 from pptx import Presentation
 from pptx.util import Pt
 from .layout import extract_native, merge_native_runs, page_background, add_background, add_text
 from .pdf import render_page
 from .render_gate import render_presentations
+from .selected_render import render_selected,location,page_image
 
 
 def aligned_source(page, size):
@@ -148,13 +151,72 @@ def regional_background(page,objects):
     return original
 
 
-def draw_objects(prs,slide,page,objects):
+def extension_seed(prs,slide,page,rendered=None,number=1):
+    """Only extend our own simple raster-plus-text layout, preserving its XML."""
+    if not slide.shapes or not all(s.has_text_frame for s in list(slide.shapes)[1:]):return None
+    picture=slide.shapes[0]
+    if not hasattr(picture,'image') or picture.rotation or any((picture.crop_left,picture.crop_right,picture.crop_top,picture.crop_bottom)):return None
+    w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
+    scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
+    if max(abs(a-b) for a,b in zip((picture.left/12700,picture.top/12700,picture.width/12700,picture.height/12700),(ox,oy,w*scale,h*scale)))>.001:return None
+    with Image.open(BytesIO(picture.image.blob)) as image:background=image.convert('RGB').copy()
+    raster_scale=min(2.0,2200/max(w,h))
+    if background.size!=(math.ceil(w*raster_scale),math.ceil(h*raster_scale)):return None
+    observed=None
+    if rendered is not None:
+        from .ocr_fit import observed_boxes
+        targets=[{'shape':i,'bbox':(s.left/12700,s.top/12700,(s.left+s.width)/12700,(s.top+s.height)/12700)}
+                 for i,s in enumerate(slide.shapes) if s.has_text_frame]
+        path,index=location(rendered,number)
+        with pdfium.PdfDocument(path) as doc,closing(doc[index]) as actual:observed=observed_boxes(actual,slide,targets)
+        if len(observed)!=len(targets):return None
+    protected=[];protected_points=[]
+    for i,shape in enumerate(list(slide.shapes)[1:],1):
+        x,y,width,height=(v/12700 for v in (shape.left,shape.top,shape.width,shape.height))
+        angle=math.radians(shape.rotation);c,s=abs(math.cos(angle)),abs(math.sin(angle))
+        rw,rh=width*c+height*s,width*s+height*c;cx,cy=x+width/2,y+height/2
+        l,t,r,b=observed[i] if observed is not None else (cx-rw/2,cy-rh/2,cx+rw/2,cy+rh/2)
+        protected_points.append((l,t,r,b))
+        # Patches must not touch the retained textbox, including its rotation.
+        protected.append(((l-ox)/scale*raster_scale-2,(t-oy)/scale*raster_scale-2,
+                          (r-ox)/scale*raster_scale+2,(b-oy)/scale*raster_scale+2))
+    return {'background':background,'shapes':[deepcopy(s._element) for s in list(slide.shapes)[1:]],
+            'protected':protected,'protected_points':protected_points}
+
+
+def retained_pixels_unchanged(seed,baseline,actual,prs):
+    """An extension may not cover or alter the verified text it retains."""
+    if baseline.size!=actual.size:return False
+    for box in seed['protected_points']:
+        bounds=region_box(box,actual.size,prs)
+        if bounds is None or baseline.crop(bounds).tobytes()!=actual.crop(bounds).tobytes():return False
+    return True
+
+
+def extension_candidates(page,objects,prior,seed):
+    # Source occurrences, rather than identical text elsewhere, determine overlap.
+    return [obj for obj in objects
+            if not any(prior.intersection(range(r['index'],r['end_index'])) for r in obj[1])
+            and not any(intersects(word_pixel_box(r['box'],page.get_size()),b) for r in obj[1] for b in seed['protected'])]
+
+
+def draw_objects(prs,slide,page,objects,seed=None):
     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
     # Match the content gate's source-image sampling. Otherwise untouched parts
     # of the page acquire new antialiasing and fail the whole-page comparison.
-    add_background(slide,regional_background(page,objects),w*scale,h*scale,(ox,oy))
+    background=regional_background(page,objects)
+    if seed is not None:
+        patched=seed['background'].copy()
+        for _,runs in objects:
+            for run in runs:
+                box=word_pixel_box(run['box'],page.get_size())
+                patched.paste(background.crop(box),box[:2])
+        background=patched
+    add_background(slide,background,w*scale,h*scale,(ox,oy))
+    if seed is not None:
+        for element in seed['shapes']:slide.shapes._spTree.insert_element_before(deepcopy(element),'p:extLst')
     regions=[]
     for _,runs in objects:
         boxes=[]
@@ -188,7 +250,7 @@ def region_box(box, size, prs):
     return max(0,math.floor(l*sx)-2),max(0,math.floor(t*sy)-2),min(size[0],math.ceil(r*sx)+2),min(size[1],math.ceil(b*sy)+2)
 
 
-def rendered_word_regions(prs,number,page,objects,rendered):
+def rendered_word_regions(prs,number,page,objects,rendered,shape_offset=0):
     """Bound actual rendered glyphs, not the textbox's empty line-height area.
 
     Text must be found once near its source location, and every edge must be
@@ -200,8 +262,9 @@ def rendered_word_regions(prs,number,page,objects,rendered):
     targets=[]
     for _,runs in objects:
         for run in runs:
-            l,b,r,t=run['box'];targets.append({'shape':len(targets)+1,'bbox':(ox+l*scale,oy+(h-t)*scale,ox+r*scale,oy+(h-b)*scale)})
-    with pdfium.PdfDocument(rendered) as doc,closing(doc[number-1]) as actual:
+            l,b,r,t=run['box'];targets.append({'shape':len(targets)+1+shape_offset,'bbox':(ox+l*scale,oy+(h-t)*scale,ox+r*scale,oy+(h-b)*scale)})
+    path,index=location(rendered,number)
+    with pdfium.PdfDocument(path) as doc,closing(doc[index]) as actual:
         found=observed_boxes(actual,prs.slides[number-1],targets)
     regions=[];index=0
     for _,runs in objects:
@@ -215,7 +278,7 @@ def rendered_word_regions(prs,number,page,objects,rendered):
     return regions
 
 
-def calibrate_runs(prs, number, page, objects, rendered):
+def calibrate_runs(prs, number, page, objects, rendered,trim_spacing=False,shape_offset=0):
     """Measure the office renderer's glyph placement, then fit source ink bounds.
 
     Numeric/character content is never edited. Ambiguous or implausible matches
@@ -223,10 +286,11 @@ def calibrate_runs(prs, number, page, objects, rendered):
     """
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
-    with pdfium.PdfDocument(rendered) as doc,closing(doc[number-1]) as actual,closing(actual.get_textpage()) as tp:
+    path,index=location(rendered,number)
+    with pdfium.PdfDocument(path) as doc,closing(doc[index]) as actual,closing(actual.get_textpage()) as tp:
         from .ocr_fit import observed_boxes,fit_shape
         flat=[r for _,runs in objects for r in runs];targets=[]
-        for i,run in enumerate(flat,1):
+        for i,run in enumerate(flat,1+shape_offset):
             if not run.get('rotation'):continue
             l,b,r,t=run['box'];targets.append({'shape':i,'bbox':(ox+l*scale,oy+(h-t)*scale,ox+r*scale,oy+(h-b)*scale)})
         rotated=observed_boxes(actual,prs.slides[number-1],targets) if targets else {}
@@ -238,8 +302,8 @@ def calibrate_runs(prs, number, page, objects, rendered):
             for c in value:
                 if not c.isspace():chars.append(c);boxes.append(tp.get_charbox(i))
         text=''.join(chars);used=set()
-        shapes=iter(s for s in prs.slides[number-1].shapes if s.has_text_frame)
-        shape_index=0
+        shapes=iter([s for s in prs.slides[number-1].shapes if s.has_text_frame][shape_offset:])
+        shape_index=shape_offset
         for _,runs in objects:
             for run in runs:
                 shape=next(shapes);shape_index+=1
@@ -273,12 +337,16 @@ def calibrate_runs(prs, number, page, objects, rendered):
                 # Nominal point sizes are not comparable across font families:
                 # CJK faces can have much taller Latin capitals. Allow bounded
                 # optical sizing; final 2pt glyph and pixel gates are unchanged.
-                if not .65<=ratio<=1.5 or not .7<=dw/(aw*ratio)<=1.3:continue
-                count=len(run['text'])
-                spacing=(dw-aw*ratio)/max(1,count-1)
+                count=len(run['text'].strip()) if trim_spacing else len(run['text'])
+                if not .65<=ratio<=1.5:continue
+                single=trim_spacing and count==1
+                if single:
+                    if abs(dw-aw*ratio)>4:continue
+                elif not .7<=dw/(aw*ratio)<=1.3:continue
+                spacing=0 if single else (dw-aw*ratio)/max(1,count-1)
                 size=shape.text_frame.paragraphs[0].runs[0].font.size/12700*ratio
                 if abs(spacing)>size*.2:continue
-                run['fit']={'x':desired[0]-(observed[0]-shape.left/12700)*ratio,
+                run['fit']={'x':desired[0]+((dw-aw*ratio)/2 if single else 0)-(observed[0]-shape.left/12700)*ratio,
                     'y':desired[1]-(observed[1]-shape.top/12700)*ratio,
                     'width':dw+size,'height':size*1.8,'size':size,'spacing':round(spacing*100)}
 
@@ -306,37 +374,56 @@ def compact_source_ranges(indices):
     return ranges
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None):
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
+    if extend and not word_regions:raise ValueError('extensions require isolated words')
     reports={};minimum_coverage=minimum_coverage or {}
     prior={n:{i for a,b in report['source_ranges'] for i in range(a,b)} for n,report in minimum_coverage.items()}
     with tempfile.TemporaryDirectory(prefix='smartppt-regions-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
-        folder=Path(tmp);prs=Presentation(target);pages={};candidates={};regions={}
+        folder=Path(tmp);prs=Presentation(target);pages={};candidates={};regions={};seeds={}
+        baseline=folder/'baseline.pptx';shutil.copyfile(target,baseline)
+        baseline_pdf=None
+        selection=tuple(sorted(set(page_numbers)))
+        def render(files):
+            if len(selection)<len(doc):return render_selected(files,folder,settings,selection)
+            return render_presentations(files,folder,settings)
+        def draw(presentation,number,objects):
+            return draw_objects(presentation,presentation.slides[number-1],pages[number],objects,**({'seed':seeds[number]} if number in seeds else {}))
+        def geometry(presentation,number,objects,rendered):
+            return rendered_word_regions(presentation,number,pages[number],objects,rendered,**({'shape_offset':len(seeds[number]['shapes'])} if number in seeds else {}))
         # Keep page handles alive: PDF object identities must not cross a reopen.
         try:
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
                 objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions)
+                if extend:
+                    if number not in prior:continue
+                    if not covered_source_indices(page,objects)-prior[number]:continue
+                    if baseline_pdf is None:baseline_pdf=render([baseline])[0]
+                    seed=extension_seed(prs,prs.slides[number-1],page,baseline_pdf,number)
+                    if seed is None:continue
+                    seeds[number]=seed;objects=extension_candidates(page,objects,prior[number],seed)
                 if number in prior:
                     potential=covered_source_indices(page,objects)
+                    if extend:potential|=prior[number]
                     if not prior[number]<potential:continue
                 if objects:
                     candidates[number]=objects
-                    regions[number]=draw_objects(prs,prs.slides[number-1],page,objects)
+                    regions[number]=draw(prs,number,objects)
             if not candidates:return {}
             candidate=folder/'candidate.pptx';prs.save(candidate)
-            baseline=folder/'baseline.pptx';shutil.copyfile(target,baseline)
-            baseline_pdf,rendered=render_presentations([baseline,candidate],folder,settings)
+            if extend:rendered=render([candidate])[0]
+            else:baseline_pdf,rendered=render([baseline,candidate])
             for number,objects in candidates.items():
-                calibrate_runs(prs,number,pages[number],objects,rendered)
-                regions[number]=draw_objects(prs,prs.slides[number-1],pages[number],objects)
+                calibrate_runs(prs,number,pages[number],objects,rendered,**({'shape_offset':len(seeds[number]['shapes']),'trim_spacing':spacing_retry} if extend else {}))
+                regions[number]=draw(prs,number,objects)
             calibrated=folder/'calibrated.pptx';prs.save(calibrated)
-            rendered=render_presentations([calibrated],folder,settings)[0]
+            rendered=render([calibrated])[0]
             selected={};scores={}
             for number,objects in candidates.items():
-                if word_regions:regions[number]=rendered_word_regions(prs,number,pages[number],objects,rendered)
-                actual=render_page(rendered,number-1,max_side=1800)
+                if word_regions:regions[number]=geometry(prs,number,objects,rendered)
+                actual=page_image(rendered,number,max_side=1800)
                 expected=aligned_source(pages[number],actual.size)
                 chosen=[];measurements=[]
                 for obj,boxes in zip(objects,regions[number]):
@@ -348,9 +435,9 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             # any unverified candidate shapes or newly referenced images.
             final=Presentation(target);fallback=Presentation(target)
             for number,objects in selected.items():
-                draw_objects(final,final.slides[number-1],pages[number],objects)
+                draw(final,number,objects)
             verified=folder/'verified.pptx';final.save(verified)
-            final_pdf=render_presentations([verified],folder,settings)[0]
+            final_pdf=render([verified])[0]
             if word_regions:
                 # A selected word can interact with a neighboring word left as
                 # raster. Prune failures and re-render; never approve a changed
@@ -358,14 +445,14 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                 for iteration in range(2):
                     changed=False
                     for number,objects in list(selected.items()):
-                        actual=render_page(final_pdf,number-1,max_side=1800)
+                        actual=page_image(final_pdf,number,max_side=1800)
                         expected=aligned_source(pages[number],actual.size)
-                        boxes=rendered_word_regions(final,number,pages[number],objects,final_pdf)
+                        boxes=geometry(final,number,objects,final_pdf)
                         kept=[obj for obj,box in zip(objects,boxes) if box and score_regions(expected,actual,box,final)]
                         if len(kept)==len(objects):continue
                         changed=True
                         if kept:
-                            selected[number]=kept;draw_objects(final,final.slides[number-1],pages[number],kept)
+                            selected[number]=kept;draw(final,number,kept)
                         else:
                             del selected[number]
                             slide=final.slides[number-1]
@@ -374,23 +461,30 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                                 slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
                     if not changed:break
                     verified=folder/f'pruned-{iteration}.pptx';final.save(verified)
-                    final_pdf=render_presentations([verified],folder,settings)[0]
+                    final_pdf=render([verified])[0]
             # A second whole-page check catches interactions between text objects,
             # clipping, shared resources and pixels outside their measured boxes.
             for number,objects in selected.items():
                 coverage=covered_source_indices(pages[number],objects)
+                if extend:coverage|=prior[number]
                 improves=number not in prior or prior[number]<coverage
-                actual=render_page(final_pdf,number-1,max_side=1800)
+                actual=page_image(final_pdf,number,max_side=1800)
                 expected=aligned_source(pages[number],actual.size)
                 score=pixel_score(expected,actual)
-                baseline_score=pixel_score(expected,render_page(baseline_pdf,number-1,max_side=1800))
+                baseline_image=page_image(baseline_pdf,number,max_side=1800)
+                baseline_score=pixel_score(expected,baseline_image)
+                # Several bounded retries must not accumulate the page-error
+                # allowance. Every replacement/extension uses the first gate's
+                # source comparison, while retention checks use the last PPT.
+                gate_baseline=minimum_coverage.get(number,{}).get('baseline_render',baseline_score)
                 final_scores=[];regions_valid=True
+                if extend:regions_valid=retained_pixels_unchanged(seeds[number],baseline_image,actual,final)
                 if word_regions:
-                    for boxes in rendered_word_regions(final,number,pages[number],objects,final_pdf):
+                    for boxes in geometry(final,number,objects,final_pdf):
                         measured=score_regions(expected,actual,boxes,final) if boxes else None
                         if measured:final_scores.extend(measured)
                         else:regions_valid=False
-                if not improves or not regions_valid or not acceptable_page(baseline_score,score):
+                if not improves or not regions_valid or not acceptable_page(gate_baseline,score):
                     slide=final.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
                     for shape in fallback.slides[number-1].shapes:
@@ -402,12 +496,27 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                 reports[number]={'route':'native-regions','editable_runs':len(runs),'editable_objects':object_count(objects),
                     'candidate_objects':object_count(candidates[number]),'candidate_regions':len(candidates[number]),'source_text_characters':sum(len(r['text']) for r in runs),
                     'regional_strategy':'source-words' if word_regions else 'joined-glyphs' if grouped else 'source-objects',
+                    'source_run_indices':[run['index'] for run in runs],
                     'source_ranges':compact_source_ranges(coverage),
                     'covered_source_glyphs':len(coverage),
                     'font_substitutions':sorted({r['source_font']+' → '+r['font'] for r in runs if r['substituted']}),
-                    'region_scores':scores[number],'final_render':score,'baseline_render':baseline_score,
+                    'region_scores':scores[number],'final_render':score,'baseline_render':gate_baseline,
                     'warnings':['partial_native_editability','unrecovered_content_kept_as_graphic'],
                     'graphics':'raster; not editable'}
+                if extend:
+                    previous=minimum_coverage[number];report=reports[number]
+                    report['regional_strategy']='source-words-extended'
+                    report['extension_spacing_retry']=spacing_retry
+                    report['retained_regions']=deepcopy(previous)
+                    report['added_source_ranges']=compact_source_ranges(coverage-prior[number])
+                    report['added_editable_runs']=len(runs)
+                    report['source_run_indices']=previous['source_run_indices']+report['source_run_indices']
+                    report['editable_runs']+=previous['editable_runs']
+                    report['source_text_characters']+=previous['source_text_characters']
+                    # Objects may contribute both retained and added words.
+                    with closing(pages[number].get_textpage()) as textpage:
+                        report['editable_objects']=len({ctypes.cast(obj.raw,ctypes.c_void_p).value for i in coverage if (obj:=textpage.get_textobj(i)) is not None})
+                    report['font_substitutions']=sorted(set(report['font_substitutions']+previous['font_substitutions']))
             if reports:final.save(target)
         finally:
             for page in pages.values():page.close()
@@ -428,4 +537,15 @@ def recover_regions(source,target,page_numbers,settings):
             if not reports:raise
             for report in reports.values():report['warnings'].append(f'additional_{label}_recovery_unavailable')
             break
+    # A rejected replacement must not discard disjoint words that could safely
+    # extend the verified package. Keep every existing textbox byte-for-byte.
+    remaining=[n for n,r in reports.items() if r.get('source_ranges') and r.get('regional_strategy')!='source-words']
+    if remaining:
+        for spacing_retry in (True,False):
+            try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=spacing_retry))
+            except ConversionError:
+                for n in remaining:reports[n]['warnings'].append('additional_word_extension_unavailable')
+                break
+    from .regional_order import restore_source_order
+    restore_source_order(source,target,reports,settings)
     return reports

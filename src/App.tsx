@@ -344,6 +344,27 @@ export function App() {
   function openPreview(file: File) {
     if (engine.current) setPreviewFile({ file, engine: engine.current });
   }
+  const approvedDocumentNavigation = useRef(false);
+  function commitLocalPath(path: string, reuse = false) {
+    if (window.location.pathname === path) return true;
+    try {
+      window.history.pushState({}, "", path);
+      return true;
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== "SecurityError")
+        throw error;
+      // WebKit limits rapid history writes. Commit the URL before changing
+      // the task, and use a normal navigation only after the leave guard.
+      if (reuse) {
+        setMessage("Please wait a moment, then choose the tool again.");
+      } else {
+        approvedDocumentNavigation.current = true;
+        resourceController.current?.abort();
+        window.location.assign(path);
+      }
+      return false;
+    }
+  }
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
     guard(() => {
@@ -354,6 +375,7 @@ export function App() {
         window.location.assign(toolPaths[next]);
         return;
       }
+      if (next !== "read" && !commitLocalPath(toolPaths[next], reuse)) return;
       if (!reuse) resetTask();
       completed.current = false;
       setTaskKey((key) => key + 1);
@@ -371,11 +393,6 @@ export function App() {
       toolRef.current = next;
       setTool(next);
       setScreen("task");
-      if (next !== "read") {
-        const path = toolPaths[next];
-        if (window.location.pathname !== path)
-          window.history.pushState({}, "", path);
-      }
       setMessage("");
       setPhotos(false);
       setCombining(false);
@@ -400,6 +417,7 @@ export function App() {
     guard(abandonToHome);
   }
   function abandonToHome() {
+    if (!commitLocalPath("/")) return;
     setPhotos(false);
     setCombining(false);
     setOrganizing(false);
@@ -407,7 +425,6 @@ export function App() {
     setCompressing(false);
     resetTask();
     setScreen("home");
-    if (window.location.pathname !== "/") window.history.pushState({}, "", "/");
   }
   const navigateHistory = useEffectEvent(() => {
     // Empty and completed tasks can change routes without tearing down the app.
@@ -562,6 +579,7 @@ export function App() {
   }
   useEffect(() => {
     const before = (event: BeforeUnloadEvent) => {
+      if (approvedDocumentNavigation.current) return;
       if (
         photoDirty ||
         hasGenerated ||
