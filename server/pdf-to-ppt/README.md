@@ -205,3 +205,5 @@ A final additive collision-component pass can omit a single PDFium-generated ter
 ### Offline canvas quantization diagnosis
 
 `tools/public-native-quantization.py` can explain the exact PPT EMU → LibreOffice hundredth-millimetre page-size conversion using immutable PDFs and the actual PPT dimensions, then measure unchanged four-resolution visual nonregression. It never authorizes conversion and does not change default production guards. Raw numeric precision, page boxes, units, pixel-grid boundaries and expanded ROIs must all pass. See [round 21 evidence](../../docs/pdf-to-ppt-quality-round21-2026-11-13.md).
+
+Licensed substitute-font trials and their limits are recorded in [round 22](../../docs/pdf-to-ppt-quality-round22-2026-11-13.md). These are offline experiments, not a production coverage claim.
