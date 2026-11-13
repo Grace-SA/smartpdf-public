@@ -150,7 +150,21 @@ def attach(path, tables, placements=None):
         ):
             raise ValueError("Existing drawing or relationship must not be replaced")
         members[name] = tostring(drawing._write())
-        ET.SubElement(sheet, f"{{{NS}}}drawing", {f"{{{REL}}}id": "rIdFormRules"})
+        # CT_Worksheet orders drawing before legacyDrawing (comment VML),
+        # tableParts and the other trailing worksheet elements. Appending here
+        # produces invalid order when a shared sheet already contains comments.
+        element = ET.Element(f"{{{NS}}}drawing", {f"{{{REL}}}id": "rIdFormRules"})
+        following = {
+            f"{{{NS}}}{name}"
+            for name in (
+                "legacyDrawing", "legacyDrawingHF", "picture", "oleObjects",
+                "controls", "webPublishItems", "tableParts", "extLst",
+            )
+        }
+        position = next(
+            (i for i, child in enumerate(sheet) if child.tag in following), len(sheet)
+        )
+        sheet.insert(position, element)
         members[sheetname] = ET.tostring(sheet)
         ET.SubElement(
             rels,
@@ -182,3 +196,4 @@ def attach(path, tables, placements=None):
         temp.replace(path)
     finally:
         temp.unlink(missing_ok=True)
+

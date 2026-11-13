@@ -12,7 +12,7 @@ from pypdf.generic import RectangleObject
 from reportlab.pdfgen import canvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server/pdf-to-excel"))
-from convert import convert
+from convert import ConversionError, convert
 from source_rotation import prepared_rotation
 
 
@@ -151,6 +151,16 @@ class RotationTests(unittest.TestCase):
             with prepared_rotation(source, [0], self.root) as (path, pages):
                 self.assertEqual(path, source)
                 self.assertEqual(pages, [])
+
+    def test_mixed_rotation_still_refuses_without_conversion_server(self):
+        source = self.source(90, mixed=True)
+        output = self.root / "mixed.xlsx"
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            self.assertRaisesRegex(ConversionError, "Rotated tables need"),
+        ):
+            convert(source, output, {})
+        self.assertFalse(output.exists())
 
     def test_unselected_rotation_is_not_changed(self):
         source = self.source(90)

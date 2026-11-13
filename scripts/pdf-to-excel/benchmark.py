@@ -38,6 +38,7 @@ def fingerprint():
             "source_phrases.py",
             "source_fonts.py",
             "source_rotation.py",
+            "source_context.py",
             "cff_names.py",
             "layout_header_tree.py",
             "layout_section_rows.py",
