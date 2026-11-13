@@ -420,8 +420,38 @@ def native_page(page):
     # Aligned numeric rows without ruling are ambiguous in native extraction.
     # Ask the layout model instead of quietly exporting a table as prose.
     aligned = {}
+    # Require an indented continuation line, not just a nearby word: a compact
+    # row-number / label / status grid is otherwise indistinguishable from lists.
+    baseline_for = {id(word): i for i, row in enumerate(baselines) for word in row}
+
+    def continued_list_marker(word):
+        if not re.fullmatch(r"\d+[.)]", word["text"]):
+            return False
+        index = baseline_for[id(word)]
+        row = baselines[index]
+        following = [v for v in row if 0 <= v["x0"] - word["x1"] <= 12]
+        if not following:
+            return False
+        first = min(following, key=lambda v: v["x0"])
+        if not first["text"][:1].isalpha():
+            return False
+        height = max(1, word["bottom"] - word["top"])
+        for continuation in baselines[index + 1:index + 9]:
+            gap = continuation[0]["top"] - word["top"]
+            if gap > height * 1.8:
+                break
+            if gap < height * 0.8:
+                continue
+            # No new marker or text may occupy the marker's hanging indent.
+            if any(word["x0"] - 2 <= v["x0"] < first["x0"] - 3 for v in continuation):
+                continue
+            if any(abs(v["x0"] - first["x0"]) <= 3 and v["text"][:1].isalpha()
+                   for v in continuation):
+                return True
+        return False
+
     for w in remaining:
-        if re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", w["text"]):
+        if not continued_list_marker(w) and re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", w["text"]):
             key = round(w["x1"] / 8)
             aligned.setdefault(key, set()).add(round(w["top"] / 5))
     if any(len(rows) >= 3 for rows in aligned.values()):
