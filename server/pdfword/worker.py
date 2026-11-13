@@ -144,6 +144,34 @@ def needs_ocr(page):
     )
 
 
+def raster_regions_need_ocr(blocks, width, height):
+    """Count collective raster coverage, without double-counting overlap.
+
+    A native title must not make a tiled scan silently remain image-only. Bound
+    the geometry work and use the guarded recognition path for excessive regions.
+    """
+    boxes = [[max(0, min(width, b["bbox"][0])), max(0, min(height, b["bbox"][1])),
+              max(0, min(width, b["bbox"][2])), max(0, min(height, b["bbox"][3]))]
+             for b in blocks if b["kind"] == "image"]
+    boxes = [b for b in boxes if b[0] < b[2] and b[1] < b[3]]
+    if len(boxes) > 512:
+        return True
+    xs = sorted({x for b in boxes for x in (max(0, b[0]), min(width, b[2]))})
+    area = 0
+    for left, right in zip(xs, xs[1:]):
+        intervals = sorted((max(0, b[1]), min(height, b[3]))
+                           for b in boxes if b[0] < right and b[2] > left)
+        covered = 0
+        end = 0
+        for top, bottom in intervals:
+            covered += max(0, bottom - max(top, end))
+            end = max(end, bottom)
+        area += (right - left) * covered
+        if area > width * height * 0.65:
+            return True
+    return False
+
+
 def raster_scale(page):
     width, height = page.get_size()
     return min(2.5, math.sqrt(16000000 / (width * height)))
@@ -257,13 +285,7 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                                 v - (l if n % 2 == 0 else top)
                                 for n, v in enumerate(block["bbox"])
                             ]
-                    use_ocr = use_ocr or any(
-                        b["kind"] == "image"
-                        and (b["bbox"][2] - b["bbox"][0])
-                        * (b["bbox"][3] - b["bbox"][1])
-                        > width * height * 0.65
-                        for b in blocks
-                    )
+                    use_ocr = use_ocr or raster_regions_need_ocr(blocks, width, height)
                     # Outlined glyphs and image-only regions must be recognized, not silently omitted.
                     use_ocr = use_ocr or (not visible and bool(blocks))
                 if use_ocr:
