@@ -3,8 +3,10 @@
 import math
 import re
 from statistics import median
+from collections import Counter
 from model import Rejected, table_header_rows
 from columns import independent_baselines
+from fonts import font_family
 
 
 def contains(a, b, pad=0):
@@ -123,6 +125,7 @@ def words_to_blocks(words, width, height, split_columns=True):
                 runs.append(
                     dict(
                         text=prefix + w["text"],
+                        font=font_family(Counter(names).most_common(1)[0][0]) if names else "Arial",
                         size=(
                             median(c.get("size", size) for c in letters)
                             if letters
@@ -160,20 +163,33 @@ def words_to_blocks(words, width, height, split_columns=True):
                     source="native",
                 )
             )
+            if kind == "list":
+                ordered_words = sorted(group, key=lambda w: w["x0"])
+                if len(ordered_words) > 1 and re.fullmatch(r"[•●▪]|[-–]|\d+[.)]|[a-zA-Z][.)]", ordered_words[0]["text"]):
+                    blocks[-1]["list_indent"] = ordered_words[1]["x0"] - bounds[0]
     ordered = order_blocks(blocks)
     result = []
     for block in ordered:
         prev = result[-1] if result else None
         if (
             prev
-            and prev["kind"] == block["kind"] == "paragraph"
-            and abs(prev["bbox"][0] - block["bbox"][0]) < max(4, normal * 0.5)
+            and (
+                (prev["kind"] == block["kind"] == "paragraph"
+                 and abs(prev["bbox"][0] - block["bbox"][0]) < max(4, normal * 0.5))
+                or (prev["kind"] == block["kind"] == "heading"
+                    and abs(prev["bbox"][0] - block["bbox"][0]) < 3
+                    and block["bbox"][1] - prev["bbox"][3] <= prev["size"] * 0.35)
+                or (prev["kind"] == "list" and block["kind"] == "paragraph"
+                    and "list_indent" in prev
+                    and abs(prev["bbox"][0] + prev["list_indent"] - block["bbox"][0]) < 3)
+            )
             and abs(prev["size"] - block["size"]) < 1
             and prev["bold"] == block["bold"]
             and 0 <= block["bbox"][1] - prev["bbox"][3] <= normal * 0.75
-            and abs(prev["bbox"][2] - block["bbox"][2]) < width * 0.25
+            and (prev["kind"] == "heading" or abs(prev["bbox"][2] - block["bbox"][2]) < width * 0.25)
         ):
             separator = (
+                "\n" if prev["kind"] == "heading" else
                 ""
                 if re.search(r"[\u2e80-\u9fff]$", prev["text"])
                 and re.match(r"[\u2e80-\u9fff]", block["text"])

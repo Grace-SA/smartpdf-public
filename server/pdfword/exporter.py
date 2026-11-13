@@ -15,6 +15,7 @@ from docx.shared import Pt, RGBColor
 from model import Rejected, validate, content_text, table_header_rows
 from math_export import segments
 from columns import column_flow
+from fonts import SAFE_FAMILIES
 
 
 def set_columns(section, count=1, widths=None):
@@ -63,7 +64,7 @@ def run_text(paragraph, text, block):
 
 def plain_run(paragraph, text, block):
     run = paragraph.add_run(text)
-    run.font.name = "Arial"
+    run.font.name = block.get("font") if block.get("font") in SAFE_FAMILIES else "Arial"
     run.font.size = Pt(max(6, min(36, block.get("size", 11))))
     run.bold = block.get("bold", False)
     run.italic = block.get("italic", False)
@@ -348,8 +349,12 @@ def export_word(model, destination, assets):
                 # Retain the original ordinal, punctuation and restart. Word's default
                 # List Number silently renumbers non-contiguous source lists.
                 paragraph.style = "List Paragraph"
-                paragraph.paragraph_format.left_indent = Pt(14)
-                paragraph.paragraph_format.first_line_indent = Pt(-14)
+                indent = block.get("list_indent", 14)
+                if not isinstance(indent, (int, float)) or not math.isfinite(indent):
+                    raise Rejected("Invalid list indentation.")
+                indent = max(0, min(72, indent))
+                paragraph.paragraph_format.left_indent = Pt(indent)
+                paragraph.paragraph_format.first_line_indent = Pt(-indent)
             value = block.get("text", "")
             if block.get("runs"):
                 if "".join(r["text"] for r in block["runs"]) != value:
