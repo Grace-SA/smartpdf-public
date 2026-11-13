@@ -10,7 +10,8 @@ from contextlib import closing
 from pathlib import Path
 import pdfplumber
 import pypdfium2 as pdf
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NullObject
 from model import Rejected, validate, box
 from layout import native_page, repeated_margins, link_tables
 from exporter import export_word
@@ -154,10 +155,68 @@ def render(page, path):
         bitmap.to_pil().convert("RGB").save(path)
 
 
+def normalize_page_rotations(source, work, cancel=None):
+    """Flatten page-view rotation, not visible text orientation, before geometry.
+
+    Some producers encode upright landscape/portrait text as inverse content
+    rotation plus /Rotate. Such pages need no recognition. Visible side-on text
+    remains rotated after this operation and still takes the guarded OCR path.
+    Call only after original-source preflight; never rewrite the user's input.
+    """
+    reader = PdfReader(source, strict=True)
+    rotations = [page.rotation for page in reader.pages]
+    if any(rotation % 90 or not -(2**31) <= rotation < 2**31 for rotation in rotations):
+        raise Rejected("Unsupported page rotation.")
+    # pypdf transforms page content/boxes, not annotation appearance geometry.
+    # Preserve annotated pages verbatim so visible link borders cannot move.
+    rotations = [0 if page.get("/Annots") else rotation for page, rotation in zip(reader.pages, rotations)]
+    if not any(rotation % 360 for rotation in rotations):
+        return source
+    writer = PdfWriter()
+    expanded_bytes = 0
+    for page, rotation in zip(reader.pages, rotations):
+        if cancel and Path(cancel).exists():
+            raise Rejected("Conversion cancelled.")
+        if rotation % 360:
+            # Bound expanded page instructions before pypdf parses/copies them.
+            # Image/font streams are not expanded by this normalization step.
+            contents = page.get("/Contents")
+            contents = contents.get_object() if contents is not None else []
+            streams = contents if isinstance(contents, list) else [contents]
+            page_bytes = 0
+            for stream in streams:
+                stream = stream.get_object()
+                if isinstance(stream, NullObject):
+                    continue
+                page_bytes += len(stream.get_data())
+                if page_bytes > 8 * 1024**2:
+                    raise Rejected("Rotated page instructions exceed the task budget.")
+            expanded_bytes += page_bytes
+            if expanded_bytes > 64 * 1024**2:
+                raise Rejected("Rotated document instructions exceed the task budget.")
+        cloned = writer.add_page(page)
+        if rotation % 360:
+            cloned.rotation = rotation % 360
+            cloned.transfer_rotation_to_content()
+            cloned.compress_content_streams(level=1)
+    with tempfile.NamedTemporaryFile(prefix="rotation-", suffix=".pdf", dir=work, delete=False) as output:
+        result = Path(output.name)
+        try:
+            writer.write(output)
+        except BaseException:
+            result.unlink(missing_ok=True)
+            raise
+    if result.stat().st_size > 60 * 1024**2:
+        result.unlink(missing_ok=True)
+        raise Rejected("Normalized PDF exceeds the task budget.")
+    return result
+
+
 def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
     source = Path(source)
     work = Path(work)
     count = preflight(source)
+    source = normalize_page_rotations(source, work, cancel)
     model = dict(schema=2, pages=[], warnings=[])
     pixels = 0
     with pdf.PdfDocument(source) as doc, pdfplumber.open(source) as textdoc:
@@ -356,3 +415,4 @@ if __name__ == "__main__":
             )
         )
         raise SystemExit(3)
+
