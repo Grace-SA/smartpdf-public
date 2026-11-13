@@ -3,6 +3,8 @@
 import os
 import re
 import tempfile
+import math
+import unicodedata
 from pathlib import Path
 from docx import Document
 from docx.enum.section import WD_SECTION_START, WD_ORIENT
@@ -72,6 +74,28 @@ def plain_run(paragraph, text, block):
     return run
 
 
+def content_column_weights(block):
+    """Balance unmeasured OCR grids by text density rather than equal widths.
+
+    A square-root demand balances long prose against short dates and IDs.
+    Merged cells contribute across their full span; a merged title must not
+    make its first column wider than the rest of the table.
+    """
+    weights = [6.0] * block["cols"]
+    for cell in block["cells"]:
+        units = sum(
+            2 if unicodedata.east_asian_width(char) in {"W", "F"} else 1
+            for char in cell["text"]
+        )
+        demand = max(6, min(36, cell.get("size", 10))) * math.sqrt(
+            max(1, units) / cell["rowspan"]
+        )
+        share = demand / cell["colspan"]
+        for column in range(cell["col"], cell["col"] + cell["colspan"]):
+            weights[column] = max(weights[column], share)
+    return weights
+
+
 def add_table(document, block, width, existing=None):
     # Word merges adjacent w:tbl elements when opening/saving a document.
     # Separate independent tables, while explicit continuations reuse one table.
@@ -89,10 +113,16 @@ def add_table(document, block, width, existing=None):
         else document.add_table(rows=0, cols=block["cols"])
     )
     table.style = "Table Grid"
-    # Native geometry has measured widths. OCR HTML often has none: let Word
-    # distribute that space by content instead of locking every column equally.
+    # Word does not reliably rebalance an equal OCR grid on open. Supply
+    # content-weighted preferred widths when source geometry is unavailable.
     table.autofit = "widths" not in block
-    widths = block.get("widths", [1] * block["cols"])
+    widths = block.get("widths")
+    if widths is None:
+        widths = (
+            [column.width.pt for column in existing.columns]
+            if existing is not None
+            else content_column_weights(block)
+        )
     total = sum(widths)
     column_widths = [width * w / total for w in widths]
     if min(column_widths) < 2:

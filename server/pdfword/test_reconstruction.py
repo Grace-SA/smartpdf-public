@@ -104,6 +104,53 @@ class ReconstructionTests(unittest.TestCase):
         self.assertEqual(result.cell(0, 0)._tc, result.cell(0, 1)._tc)
         self.assertEqual(result.cell(1, 2).text, "123.45")
 
+    def test_ocr_grid_gives_long_notes_room_without_distorting_merged_title(self):
+        notes = "Review the reported values and retain the complete explanation. " * 8
+        table = table_from_html(
+            '<table><tr><th colspan="3">Inspection results</th></tr>'
+            "<tr><th>ID</th><th>Date</th><th>Notes</th></tr>"
+            f"<tr><td>001</td><td>2026-01-02</td><td>{notes}</td></tr></table>"
+        )
+        table.update(id="notes", kind="table", bbox=[36, 36, 576, 360])
+        export_word(
+            dict(
+                schema=2, pages=[dict(index=0, width=612, height=792, blocks=[table])]
+            ),
+            self.output,
+            self.root,
+        )
+        result = Document(self.output).tables[0]
+        widths = [c.width.pt for c in result.columns]
+        self.assertAlmostEqual(sum(widths), 540, delta=0.15)
+        self.assertGreater(widths[2], 3 * widths[0])
+        self.assertGreater(widths[2], 2 * widths[1])
+        self.assertEqual(result.cell(0, 0)._tc, result.cell(0, 2)._tc)
+        self.assertEqual(result.cell(2, 0).text, "001")
+        self.assertEqual(result.cell(2, 1).text, "2026-01-02")
+        self.assertEqual(result.cell(2, 2).text, notes.strip())
+
+    def test_ocr_continuation_keeps_one_consistent_preferred_grid(self):
+        from exporter import add_table
+
+        document = Document()
+        first = table_from_html(
+            "<table><tr><th>ID</th><th>Notes</th></tr>"
+            "<tr><td>001</td><td>Short note</td></tr></table>"
+        )
+        second = table_from_html(
+            "<table><tr><th>ID</th><th>Notes</th></tr>"
+            "<tr><td>002</td><td>" + "Long explanation. " * 30 + "</td></tr></table>"
+        )
+        second["repeat_header"] = True
+        table = add_table(document, first, 540)
+        widths = [column.width for column in table.columns]
+        add_table(document, second, 540, table)
+        self.assertEqual([column.width for column in table.columns], widths)
+        self.assertEqual(len(table.rows), 3)
+        for row in table.rows:
+            self.assertEqual([cell.width for cell in row.cells], widths)
+        self.assertEqual(table.cell(2, 0).text, "002")
+
     def test_hidden_layer_is_replaced_by_ocr_once(self):
         fixture(
             self.source,
