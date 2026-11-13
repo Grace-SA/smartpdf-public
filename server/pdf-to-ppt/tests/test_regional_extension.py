@@ -126,7 +126,8 @@ def test_observed_ink_protects_text_without_blocking_empty_textbox_space(tmp_pat
 
 
 def test_source_words_route_still_gets_bounded_spacing_extension(monkeypatch):
- from smartppt import regional_order
+ from smartppt import regional_order,light_font
+ monkeypatch.setattr(light_font,'capability',lambda:True)
  calls=[]
  prior={'source_ranges':[[10,20]],'regional_strategy':'source-words','warnings':[]}
  def recover(*args,**kwargs):
@@ -138,9 +139,12 @@ def test_source_words_route_still_gets_bounded_spacing_extension(monkeypatch):
  monkeypatch.setattr(regional_order,'restore_source_order',lambda *args:None)
  assert regional.recover_regions(None,None,[1],None)=={1:prior}
  retries=[c for c in calls if c.get('extend')]
- assert [c['spacing_retry'] for c in retries]==[True,False,True,True,True,True,True,True,True]
- assert [c.get('character_fit',False) for c in retries]==[False,False,True,True,False,True,False,True,False]
- assert [c.get('alternative_font') for c in retries]==[None,None,None,'base-sans','base-sans',None,None,'base-sans','base-sans']
- assert [c.get('word_clusters',False) for c in retries]==[False]*5+[True]*4
+ assert [c['spacing_retry'] for c in retries]==[True,False,True,True,True,True,True,True,True,True,True,True,True]
+ assert [c.get('character_fit',False) for c in retries]==[False,False,True,True,False,True,False,True,False,True,True,False,False]
+ assert [c.get('alternative_font') for c in retries]==[None,None,None,'base-sans','base-sans',None,None,'base-sans','base-sans','cmu-light','cmu-light','cmu-light','cmu-light']
+ assert [c.get('word_clusters',False) for c in retries]==[False]*5+[True]*4+[False]*4
  assert all(c['cluster_mode']=='collision' for c in retries if c.get('word_clusters'))
  assert all(c['word_regions'] for c in retries)
+
+ assert [c['light_shift'] for c in retries if c.get('alternative_font')=='cmu-light']==[0,.1,0,.1]
+ assert len({c['light_guard_deadline'] for c in retries if c.get('alternative_font')=='cmu-light'})==1

@@ -8,7 +8,8 @@ from .font_embedding import bundled_payloads,CMU_FACES
 
 from .base_font import FAMILY as BASE_FAMILY
 from .termes_font import FAMILY as TERMES_FAMILY
-VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY,TERMES_FAMILY,*CMU_FACES)
+from .light_font import FAMILY as LIGHT_FAMILY
+VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY,TERMES_FAMILY,LIGHT_FAMILY,*CMU_FACES)
 
 def materialize_variant_fonts(files,folder):
     required=set()

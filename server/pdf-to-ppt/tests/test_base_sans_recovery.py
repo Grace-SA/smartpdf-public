@@ -48,7 +48,8 @@ def test_alternative_cannot_replace_existing_layout(kwargs):
 
 
 def test_optional_font_failure_preserves_prior_and_stops_bounded_retry(monkeypatch):
- from smartppt import regional_order
+ from smartppt import regional_order,light_font
+ monkeypatch.setattr(light_font,'capability',lambda:False) # Isolate this existing substitute's retry contract.
  prior={'source_ranges':[[0,5]],'warnings':[]};calls=[]
  def recover(*args,**kwargs):
   calls.append(kwargs)

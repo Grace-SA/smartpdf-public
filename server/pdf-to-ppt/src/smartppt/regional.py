@@ -15,6 +15,7 @@ import re
 import shutil
 from pathlib import Path
 import tempfile
+import time
 import unicodedata
 import numpy as np
 import pypdfium2 as pdfium
@@ -459,14 +460,35 @@ def alternative_base_sans(objects):
     return selected
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None,word_clusters=False,cluster_mode='adjacent'):
+def alternative_cmu_light(objects):
+    """Explicit regular typewriter sources only; substitute, not font identity."""
+    from .light_font import FAMILY,approved_cmap
+    def eligible(run):
+        name=re.sub(r'^[A-Z]{6}\+','',run.get('source_base_font','')).lower().replace(' ','')
+        return (bool(re.fullmatch(r'(?:sftt\d{4}|cmtt\d+|cmutypewritertext(?:[-,]regular)?)',name)) and
+                run['font']=='CMU Typewriter Text' and not run.get('rotation') and
+                not run['bold'] and not run['italic'] and bool(run['text'].strip()))
+    possible=[(group,runs) for group,runs in objects if runs and all(eligible(run) for run in runs)]
+    if not possible:return []
+    # Validate once per candidate pass, not once per word. Actual renderer and
+    # embedding revalidate the operator bytes again before using the font.
+    cmap=approved_cmap()
+    return [(group,[dict(run,font=FAMILY,substituted=True) for run in runs])
+            for group,runs in possible if all(all(ord(c) in cmap for c in
+                run['text']+unicodedata.normalize('NFKC',run['text'])) for run in runs)]
+
+
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None,word_clusters=False,cluster_mode='adjacent',light_shift=0,light_guard_deadline=None):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
     if extend and not word_regions:raise ValueError('extensions require regional words')
     if word_clusters and not (extend and word_regions):raise ValueError('word clusters require additive regional recovery')
     if character_fit and not (extend and spacing_retry):raise ValueError('character fitting requires additive spacing extension')
-    if alternative_font is not None and (alternative_font!='base-sans' or not (extend and spacing_retry)):
+    if alternative_font is not None and (alternative_font not in ('base-sans','cmu-light') or not (extend and spacing_retry)):
         raise ValueError('alternative font requires approved additive spacing extension')
+    if light_shift not in (0,.1) or (light_shift and alternative_font!='cmu-light'):
+        raise ValueError('unsupported optional Light vertical trial')
+    if alternative_font=='cmu-light' and light_guard_deadline is not None and time.monotonic()>=light_guard_deadline:return {}
     reports={};minimum_coverage=minimum_coverage or {}
     prior={n:{i for a,b in report['source_ranges'] for i in range(a,b)} for n,report in minimum_coverage.items()}
     with tempfile.TemporaryDirectory(prefix='smartppt-regions-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
@@ -492,7 +514,8 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                     if previous is not None and 'word_cluster_resource_limit' not in previous['warnings']:
                         previous['warnings'].append('word_cluster_resource_limit')
                     continue
-                if alternative_font:objects=alternative_base_sans(objects)
+                if alternative_font:
+                    objects=(alternative_base_sans if alternative_font=='base-sans' else alternative_cmu_light)(objects)
                 if character_fit:objects=[(group,runs) for group,runs in objects if not any(r.get('rotation') for r in runs)]
                 if extend:
                     if number not in prior:continue
@@ -514,10 +537,16 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             else:baseline_pdf,rendered=render([baseline,candidate])
             for number,objects in list(candidates.items()):
                 calibrate_runs(prs,number,pages[number],objects,rendered,**({'shape_offset':len(seeds[number]['shapes']),'trim_spacing':spacing_retry,'character_fit':character_fit} if extend else {}))
+                if light_shift:
+                    objects=[(group,runs) for group,runs in objects if all(r.get('fit') for r in runs)]
+                    for _,runs in objects:
+                        for run in runs:run['fit']['y']+=light_shift
+                    if objects:candidates[number]=objects
+                    else:candidates.pop(number,None)
                 if character_fit:
                     objects=[(group,runs) for group,runs in objects if all(r.get('fit',{}).get('calibration_mode')=='median-character-height' for r in runs)]
                     if objects:candidates[number]=objects
-                    else:del candidates[number]
+                    else:candidates.pop(number,None)
                 regions[number]=draw(prs,number,objects)
             if not candidates:return {}
             calibrated=folder/'calibrated.pptx';prs.save(calibrated)
@@ -586,6 +615,13 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                         measured=score_regions(expected,actual,boxes,final) if boxes else None
                         if measured:final_scores.extend(measured)
                         else:regions_valid=False
+                if regions_valid and alternative_font=='cmu-light':
+                    from .light_visual_guard import verify
+                    old_path,old_index=location(baseline_pdf,number)
+                    new_path,new_index=location(final_pdf,number)
+                    regions_valid=verify(source,number-1,old_path,old_index,new_path,new_index,
+                                         pages[number].get_size(),[run['box'] for _,runs in objects for run in runs],
+                                         timeout=min(120,light_guard_deadline-time.monotonic()) if light_guard_deadline is not None else 120)
                 if not improves or not regions_valid or not acceptable_page(gate_baseline,score):
                     slide=final.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
@@ -615,9 +651,15 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                     report['extension_spacing_retry']=spacing_retry
                     report['extension_calibration_mode']='median-character-height' if character_fit else 'word-bounds'
                     if alternative_font:
-                        from .base_font import FAMILY
-                        report['extension_font_strategy']='base-sans-substitute'
+                        if alternative_font=='base-sans':
+                            from .base_font import FAMILY
+                        else:
+                            from .light_font import FAMILY
+                        report['extension_font_strategy']=alternative_font+'-substitute'
                         report['calibration_font']=FAMILY
+                        if alternative_font=='cmu-light':
+                            report['light_vertical_trial_points']=light_shift
+                            report['light_cross_renderer_dpis']=[144,216,288,432]
                         if 'reviewed_font_substitute_not_source_identity' not in report['warnings']:
                             report['warnings'].append('reviewed_font_substitute_not_source_identity')
                     report['retained_regions']=deepcopy(previous)
@@ -687,6 +729,17 @@ def recover_regions(source,target,page_numbers,settings):
                     for n in remaining:
                         warning='additional_word_cluster_extension_unavailable'
                         if warning not in reports[n]['warnings']:reports[n]['warnings'].append(warning)
+                    break
+        # Optional regular Light substitute is additive only, after all prior
+        # passes, and never changes an accepted textbox or source coverage.
+        from .light_font import capability
+        if capability():
+            light_guard_deadline=time.monotonic()+120
+            for character_fit,light_shift in ((True,0),(True,.1),(False,0),(False,.1)):
+                if time.monotonic()>=light_guard_deadline:break
+                try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=character_fit,alternative_font='cmu-light',light_shift=light_shift,light_guard_deadline=light_guard_deadline))
+                except ConversionError:
+                    for n in remaining:reports[n]['warnings'].append('additional_cmu_light_extension_unavailable')
                     break
     from .regional_order import restore_source_order
     restore_source_order(source,target,reports,settings)

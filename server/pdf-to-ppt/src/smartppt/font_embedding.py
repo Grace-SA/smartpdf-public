@@ -26,7 +26,8 @@ FAMILIES['SmartPDF Serif200']=FAMILIES['Noto Serif SC']
 CMU_FACES=json.loads(Path(__file__).with_name('cmu-fonts.json').read_text())['families']
 from .base_font import FAMILY as BASE_FAMILY
 from .termes_font import FAMILY as TERMES_FAMILY
-PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)|{BASE_FAMILY,TERMES_FAMILY}
+from .light_font import FAMILY as LIGHT_FAMILY
+PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)|{BASE_FAMILY,TERMES_FAMILY,LIGHT_FAMILY}
 STYLES=('regular','bold','italic','boldItalic')
 P='http://schemas.openxmlformats.org/presentationml/2006/main'
 R='http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -123,6 +124,12 @@ def cmu_payload(data,family,style):
 
 
 def bundled_payloads(bold=False,family='Noto Sans SC',styles=None):
+    if family==LIGHT_FAMILY:
+        if bold or set(styles or ())-{'regular'}:raise ConversionError('portable_light_style_unsupported')
+        from .light_font import ttf_bytes
+        from fontTools.ttLib import TTFont
+        data=ttf_bytes()
+        with TTFont(BytesIO(data)) as font:return {'regular':eot_payload(font,data)}
     if family==TERMES_FAMILY:
         from .termes_font import ttf_bytes
         from fontTools.ttLib import TTFont
