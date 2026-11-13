@@ -145,6 +145,7 @@ private-samples/
 !/server/pdfword/
 !/docs/pdfword-report.md
 !/docs/pdfword-general-progress.md
+!/docs/pdfword-stirling-evaluation.md
 /server/ppt/__pycache__/
 !/docs/ux/ppt-to-pdf-research-2026-11-05.md
 !/docs/ppt-report.md
