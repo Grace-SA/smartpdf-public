@@ -94,19 +94,27 @@ def needs_ocr(page):
     visible = 0
     images = 0
     unsafe = False
-    # Top-level objects have page-space bounds and are yielded in paint order.
-    # Extraction can expose characters that a later graphic partly conceals.
+    # Objects are yielded in paint order, but Form descendants have local bounds.
+    # Compose ancestor transforms before comparing text and later graphics.
     text_bounds = []
     overlap_checks = 0
+    ancestors = {0: pdf.PdfMatrix()}
     with closing(page.get_textpage()) as tp:
         objects = 0
         for obj in page.get_objects(max_depth=8, textpage=tp):
             objects += 1
             if objects > 10000:
                 raise Rejected("Page exceeds object limit.")
+            parent_matrix = ancestors[obj.level]
+            bounds = parent_matrix.on_rect(*obj.get_bounds())
+            if obj.type == pdf.raw.FPDF_PAGEOBJ_FORM:
+                ancestors[obj.level + 1] = obj.get_matrix().multiply(parent_matrix)
+                if obj.level == 7:
+                    # get_objects stops descending here; unseen content is unsafe.
+                    unsafe = True
             if obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE:
                 images += 1
-            if obj.level == 0 and obj.type in (
+            if obj.type in (
                 pdf.raw.FPDF_PAGEOBJ_PATH, pdf.raw.FPDF_PAGEOBJ_IMAGE,
             ):
                 painted = obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE
@@ -117,8 +125,12 @@ def needs_ocr(page):
                     )
                     # Unknown drawing state is not evidence of transparency.
                     painted = not known or fill_mode.value != pdf.raw.FPDF_FILLMODE_NONE
+                    # A single stroked line can obscure a value just like a fill.
+                    # Complex path strokes need separate contour/join analysis.
+                    if known and stroke.value and pdf.raw.FPDFPath_CountSegments(obj) == 2:
+                        segment = pdf.raw.FPDFPath_GetPathSegment(obj, 1)
+                        painted |= pdf.raw.FPDFPathSegment_GetType(segment) == pdf.raw.FPDF_SEGMENT_LINETO
                 if painted and text_bounds:
-                    bounds = obj.get_bounds()
                     overlap_checks += len(text_bounds)
                     if overlap_checks > 100000:
                         unsafe = True
@@ -140,8 +152,7 @@ def needs_ocr(page):
                 unsafe = True
                 continue
             visible += len(value)
-            if obj.level == 0:
-                text_bounds.append(obj.get_bounds())
+            text_bounds.append(bounds)
             unsafe |= (
                 not ok
                 or rgba[3].value != 255
@@ -150,7 +161,7 @@ def needs_ocr(page):
             )
             unsafe |= any(unicodedata.category(c) in ("Co", "Cn", "Cs") for c in value)
             unsafe |= clips_text(obj)
-            l, b, r, t = obj.get_bounds()
+            l, b, r, t = bounds
             crop = page.get_bbox()
             unsafe |= (
                 l < crop[0] - 0.5
@@ -158,7 +169,7 @@ def needs_ocr(page):
                 or r > crop[2] + 0.5
                 or t > crop[3] + 0.5
             )
-            matrix = obj.get_matrix()
+            matrix = obj.get_matrix().multiply(parent_matrix)
             unsafe |= (
                 abs(matrix.b) > 0.001
                 or abs(matrix.c) > 0.001
