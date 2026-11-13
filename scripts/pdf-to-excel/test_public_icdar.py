@@ -29,6 +29,79 @@ class PublicCorpusTests(unittest.TestCase):
             for kind in ("pdf", "reference"):
                 self.assertRegex(item[kind]["gitBlobSha1"], r"^[0-9a-f]{40}$")
 
+    def test_next_manifest_preserves_preselected_ids_and_provenance_exclusions(self):
+        data = json.loads(
+            Path(__file__).with_name("icdar-next-public-manifest.json").read_text()
+        )
+        original = [f"{region}-{i:03}" for region in ("eu", "us") for i in range(7, 13)]
+        missing = ["eu-009", "us-011"]
+        self.assertEqual(data["preselection"]["originalSelection"], original)
+        self.assertEqual(data["preselection"]["missingExactPairs"], missing)
+        self.assertTrue(data["preselection"]["selectedBeforeQualityInspection"])
+        self.assertEqual(
+            [x["id"] for x in data["files"]], [x for x in original if x not in missing]
+        )
+        self.assertEqual(data["commit"], "92777b852e00933a5c4b9ba642601784604356cd")
+        for item in data["files"]:
+            for kind in ("pdf", "reference"):
+                self.assertRegex(item[kind]["gitBlobSha1"], r"^[a-f0-9]{40}$")
+
+    def test_explicit_manifest_selects_only_requested_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data = json.loads(prepare_icdar.MANIFEST.read_text())
+            data["files"] = data["files"][1:2]
+            manifest = root / "explicit.json"
+            manifest.write_text(json.dumps(data))
+            with patch.object(
+                prepare_icdar, "verified_download", return_value="a" * 64
+            ) as fetch:
+                rows = prepare_icdar.prepare(root / "run", manifest)
+            self.assertEqual([row["id"] for row in rows], ["eu-002"])
+            self.assertEqual(fetch.call_count, 2)
+            self.assertTrue(
+                all("eu-002" in call.args[0] for call in fetch.call_args_list)
+            )
+
+    def test_invalid_selections_fail_before_any_download_or_output(self):
+        original = json.loads(prepare_icdar.MANIFEST.read_text())
+        variants = []
+        for change in (
+            "empty",
+            "duplicate",
+            "late_bad_path",
+            "late_bad_blob",
+            "bad_id",
+            "repository",
+            "commit",
+        ):
+            data = json.loads(json.dumps(original))
+            if change == "empty":
+                data["files"] = []
+            elif change == "duplicate":
+                data["files"].append(data["files"][0])
+            elif change == "late_bad_path":
+                data["files"][-1]["pdf"]["path"] = "../outside.pdf"
+            elif change == "late_bad_blob":
+                data["files"][-1]["reference"]["gitBlobSha1"] = "invalid"
+            elif change == "bad_id":
+                data["files"][-1]["id"] = "../outside"
+            elif change == "repository":
+                data["repository"] = "other/repo"
+            else:
+                data["commit"] = "main"
+            variants.append((change, data))
+        for name, data in variants:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                manifest = root / "input.json"
+                manifest.write_text(json.dumps(data))
+                with patch.object(prepare_icdar, "verified_download") as fetch:
+                    with self.assertRaises(ValueError):
+                        prepare_icdar.prepare(root / "run", manifest)
+                    fetch.assert_not_called()
+                self.assertFalse((root / "run").exists())
+
     def test_verified_cache_never_needs_network(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "fixture.pdf"

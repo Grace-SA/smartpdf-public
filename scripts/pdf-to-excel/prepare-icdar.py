@@ -1,14 +1,14 @@
 """Download a fixed publicly annotated research corpus; never put inputs in Git.
 
-Usage: python prepare-icdar.py /local/research-directory
+Usage: python prepare-icdar.py /local/research-directory [--manifest manifest.json]
 Then run benchmark.py and evaluate-cells.py on that directory. Annotations are
 used only by the separate scorer, never provided to the conversion process.
 """
 
+import argparse
 import hashlib
 import json
 import re
-import sys
 import urllib.request
 from pathlib import Path
 
@@ -36,27 +36,40 @@ def verified_download(url, output, expected_blob):
     return hashlib.sha256(data).hexdigest()
 
 
-def prepare(root):
-    manifest = json.loads(MANIFEST.read_text())
+def prepare(root, manifest_path=None):
+    manifest = json.loads(Path(manifest_path or MANIFEST).read_text())
     if manifest["repository"] != "camelot-dev/camelot" or not re.fullmatch(
         r"[a-f0-9]{40}", manifest["commit"]
     ):
         raise ValueError("Unsupported public reference repository")
-    corpus, references = root / "corpus", root / "references"
-    corpus.mkdir(parents=True, exist_ok=True)
-    references.mkdir(exist_ok=True)
-    rows = []
-    base = f"https://raw.githubusercontent.com/{manifest['repository']}/{manifest['commit']}/"
-    for item in manifest["files"]:
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("Public fixture selection must be nonempty")
+    seen = set()
+    for item in files:
         name = item["id"]
-        if not re.fullmatch(r"(?:eu|us)-\d{3}", name):
+        if not isinstance(name, str) or not re.fullmatch(r"(?:eu|us)-\d{3}", name):
             raise ValueError("Invalid public fixture ID")
+        if name in seen:
+            raise ValueError("Duplicate public fixture ID")
+        seen.add(name)
         expected_base = f"tests/files/tabula/icdar2013-dataset/competition-dataset-{name[:2]}/{name}"
         if (
             item["pdf"]["path"] != expected_base + ".pdf"
             or item["reference"]["path"] != expected_base + "-str.xml"
         ):
             raise ValueError("Unexpected public fixture path")
+        for kind in ("pdf", "reference"):
+            digest = item[kind].get("gitBlobSha1")
+            if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{40}", digest):
+                raise ValueError("Invalid public fixture blob identity")
+    corpus, references = root / "corpus", root / "references"
+    corpus.mkdir(parents=True, exist_ok=True)
+    references.mkdir(exist_ok=True)
+    rows = []
+    base = f"https://raw.githubusercontent.com/{manifest['repository']}/{manifest['commit']}/"
+    for item in files:
+        name = item["id"]
         pdf_hash = verified_download(
             base + item["pdf"]["path"],
             corpus / (name + ".pdf"),
@@ -84,4 +97,8 @@ def prepare(root):
 
 
 if __name__ == "__main__":
-    print(json.dumps({"prepared": len(prepare(Path(sys.argv[1])))}))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=Path)
+    parser.add_argument("--manifest", type=Path, default=None)
+    args = parser.parse_args()
+    print(json.dumps({"prepared": len(prepare(args.root, args.manifest))}))
