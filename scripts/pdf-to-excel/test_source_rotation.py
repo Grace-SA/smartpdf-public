@@ -104,6 +104,41 @@ class RotationTests(unittest.TestCase):
                     self.assertEqual(before.size, after.size)
                     self.assertIsNone(ImageChops.difference(before, after).getbbox())
 
+    def test_content_stream_quarter_turns_preserve_cells_and_pixels(self):
+        import pypdfium2 as pdfium
+        from PIL import ImageChops
+
+        for content_rotation in (90, 180, 270):
+            for crop in (False, True):
+                source = self.source(content_rotation, crop=crop)
+                writer = PdfWriter(clone_from=source)
+                writer.pages[0].transfer_rotation_to_content()
+                writer.pages[0].rotation = 180
+                encoded = self.root / "encoded.pdf"
+                writer.write(encoded)
+                with (
+                    prepared_rotation(encoded, [0], self.root) as (normalized, pages),
+                    pdfium.PdfDocument(encoded) as original,
+                    pdfium.PdfDocument(normalized) as upright,
+                ):
+                    self.assertEqual(pages, [1])
+                    before = (
+                        original[0]
+                        .render(scale=2, rotation=(180 - content_rotation) % 360)
+                        .to_pil()
+                    )
+                    after = upright[0].render(scale=2).to_pil()
+                    self.assertEqual(before.size, after.size)
+                    self.assertIsNone(ImageChops.difference(before, after).getbbox())
+                output = self.root / "encoded.xlsx"
+                with patch.dict(os.environ, {}, clear=True):
+                    convert(encoded, output, {})
+                book = load_workbook(output)
+                try:
+                    self.assertEqual(list(book.active.values), self.expected)
+                finally:
+                    book.close()
+
     def test_unrotated_source_is_unchanged(self):
         source = self.source(0)
         with prepared_rotation(source, [0], self.root) as (path, pages):

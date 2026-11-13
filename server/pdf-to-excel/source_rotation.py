@@ -22,29 +22,40 @@ def visible_chars(page):
     ]
 
 
-def horizontal(chars):
+def quarter_turn(chars):
+    """Find one exact common native baseline orientation, never majority-vote."""
     if len(chars) < 10:
-        return False
+        return None
+    directions = set()
     for char in chars:
         matrix = char.get("matrix")
-        if not matrix or len(matrix) != 6:
-            return False
+        if not matrix or len(matrix) != 6 or not all(math.isfinite(v) for v in matrix):
+            return None
         a, b, c, d, _, _ = matrix
-        if not all(math.isfinite(v) for v in matrix):
-            return False
-        scale = max(abs(a), abs(d), 1e-9)
-        if a <= 0 or d <= 0 or abs(b) > scale * 0.001 or abs(c) > scale * 0.001:
-            return False
-    return True
+        tolerance = max(abs(a), abs(b), abs(c), abs(d), 1e-9) * 0.001
+        if abs(b) <= tolerance and abs(c) <= tolerance:
+            direction = 0 if a > 0 and d > 0 else 180 if a < 0 and d < 0 else None
+        elif abs(a) <= tolerance and abs(d) <= tolerance:
+            direction = 90 if b > 0 and c < 0 else 270 if b < 0 and c > 0 else None
+        else:
+            return None
+        if direction is None:
+            return None
+        directions.add(direction)
+    return directions.pop() if len(directions) == 1 else None
+
+
+def horizontal(chars):
+    return quarter_turn(chars) == 0
 
 
 @contextmanager
 def prepared_rotation(source, selected, output_directory):
-    """Remove /Rotate only when all visible native glyphs become horizontal.
+    """Orient pages only when all visible native glyphs share a quarter-turn.
 
     No OCR, arbitrary deskew or text reconstruction is performed. Retain the
-    original media/crop boxes and require identical complete glyph multisets. The unchanged PDF crop box
-    selects the same source region before and after changing display orientation.
+    source view by rotating its media/crop boxes together with its contents.
+    Require identical complete glyph multisets and horizontal output baselines.
     Mixed/image pages and pages with differently oriented text stay unchanged.
     """
     reader = PdfReader(source)
@@ -60,7 +71,7 @@ def prepared_rotation(source, selected, output_directory):
         for i in candidates:
             writer.pages[i].rotation = 0
         writer.write(trial)
-        accepted = []
+        accepted = {}
         with pdfplumber.open(source) as original, pdfplumber.open(trial) as normalized:
             for i in candidates:
                 before, after = original.pages[i], normalized.pages[i]
@@ -75,21 +86,31 @@ def prepared_rotation(source, selected, output_directory):
                     # The conversion entry point rejects this page with its
                     # normal dimension error; do not parse its content first.
                     continue
-                new_chars = visible_chars(after)
+                direction = quarter_turn(visible_chars(after))
                 if (
                     not before.images
                     and not after.images
-                    and horizontal(new_chars)
+                    and direction is not None
                     and Counter(c["text"] for c in before.chars)
                     == Counter(c["text"] for c in after.chars)
                 ):
-                    accepted.append(i)
+                    accepted[i] = direction
         if not accepted:
             yield source, []
             return
         for i in candidates:
             if i not in accepted:
                 writer.pages[i].rotation = reader.pages[i].rotation
+            elif accepted[i]:
+                writer.pages[i].rotation = accepted[i]
+                writer.pages[i].transfer_rotation_to_content()
         target = Path(tmp) / "normalized.pdf"
         writer.write(target)
+        with pdfplumber.open(source) as original, pdfplumber.open(target) as normalized:
+            for i in accepted:
+                if not horizontal(visible_chars(normalized.pages[i])) or Counter(
+                    c["text"] for c in original.pages[i].chars
+                ) != Counter(c["text"] for c in normalized.pages[i].chars):
+                    yield source, []
+                    return
         yield target, [i + 1 for i in accepted]
