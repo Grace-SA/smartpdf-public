@@ -23,13 +23,13 @@ class AtomicWorkbookTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.output = self.root / "output.xlsx"
         self.tables = [
-            dict(
-                page=1,
-                index=1,
-                widths=[80, 80],
-                heights=[20, 20],
-                cells=[dict(r=0, c=0, rs=1, cs=1, text="00123")],
-            )
+            {
+                "page": 1,
+                "index": 1,
+                "widths": [80, 80],
+                "heights": [20, 20],
+                "cells": [{"r": 0, "c": 0, "rs": 1, "cs": 1, "text": "00123"}],
+            }
         ]
 
     def assert_clean(self):

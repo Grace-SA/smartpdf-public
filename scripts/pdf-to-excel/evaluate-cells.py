@@ -6,9 +6,9 @@ counted as a miss. No reference data is used by the conversion engine.
 """
 
 import collections
+import hashlib
 import json
 import re
-import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from openpyxl import load_workbook
@@ -93,15 +93,90 @@ def aligned_cell_scores(reference, prediction):
     return result
 
 
-def evaluate(root):
-    statuses = {
-        r["id"]: r["status"]
-        for r in json.loads((root / "benchmark.json").read_text())["results"]
+def verified_inputs(root, benchmark):
+    """Bind every scored reference and successful output to declared bytes."""
+    manifest_path = root / "corpus/manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError("Verified evaluation requires corpus/manifest.json")
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+
+    def keyed(rows, label):
+        result = {}
+        for row in rows:
+            identity = row.get("id")
+            if not isinstance(identity, str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]+", identity
+            ):
+                raise ValueError(f"Invalid {label} ID")
+            if identity in result:
+                raise ValueError(f"Duplicate {label} ID: {identity}")
+            result[identity] = row
+        return result
+
+    declared = keyed(manifest, "manifest")
+    runs = keyed(benchmark["results"], "benchmark")
+    if set(runs) != set(declared):
+        raise ValueError("Benchmark IDs must exactly match the complete manifest")
+    references = {k: v for k, v in declared.items() if "referenceSha256" in v}
+    if not references:
+        raise ValueError("Verified evaluation requires declared referenceSha256 labels")
+    files = {
+        f.name.removesuffix("-str.xml"): f
+        for f in (root / "references").glob("*-str.xml")
     }
+    if set(files) != set(references):
+        raise ValueError("Reference file IDs must exactly match declared labels")
+
+    def verify(path, expected, label):
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise ValueError(f"Missing or invalid {label} SHA256")
+        if (
+            not path.is_file()
+            or hashlib.sha256(path.read_bytes()).hexdigest() != expected
+        ):
+            raise ValueError(f"{label} hash mismatch: {path.name}")
+
+    for identity, item in declared.items():
+        source_name = item.get("file")
+        if not isinstance(source_name, str) or Path(source_name).name != source_name:
+            raise ValueError("Invalid source filename")
+        verify(root / "corpus" / source_name, item.get("sha256"), "Source")
+        run = runs[identity]
+        if run.get("sha256") != item["sha256"]:
+            raise ValueError(f"Benchmark source hash mismatch: {identity}")
+        if run.get("status") not in {"converted", "refused", "timeout", "error"}:
+            raise ValueError(f"Missing or invalid benchmark status: {identity}")
+        if run["status"] == "converted":
+            verify(
+                root / "outputs" / (identity + ".xlsx"),
+                run.get("outputSha256"),
+                "Output",
+            )
+    for identity, item in references.items():
+        verify(files[identity], item["referenceSha256"], "Reference")
+    return (
+        [files[k] for k in sorted(files)],
+        {k: references[k]["referenceSha256"] for k in sorted(references)},
+        hashlib.sha256(manifest_bytes).hexdigest(),
+    )
+
+
+def evaluate(root, *, allow_unverified=False):
+    root = Path(root)
+    benchmark_bytes = (root / "benchmark.json").read_bytes()
+    benchmark = json.loads(benchmark_bytes)
+    if allow_unverified:
+        files = sorted((root / "references").glob("*-str.xml"))
+        reference_hashes = {}
+        manifest_hash = None
+    else:
+        files, reference_hashes, manifest_hash = verified_inputs(root, benchmark)
+    statuses = {r["id"]: r["status"] for r in benchmark["results"]}
     rows = []
     totals = collections.Counter()
     invalid_boxes = 0
-    for file in sorted((root / "references").glob("*-str.xml")):
+    for file in files:
         sample = file.name.removesuffix("-str.xml")
         expected = collections.defaultdict(list)
         for table in ET.parse(file).findall(".//table"):
@@ -237,7 +312,15 @@ def evaluate(root):
         totals.update(scores)
         rows.append({"id": sample, "status": statuses.get(sample), **scores})
     report = {
-        "evaluationVersion": 2,
+        "evaluationVersion": 2 if allow_unverified else 3,
+        "integrityMode": "unverified-legacy"
+        if allow_unverified
+        else "verified-manifest",
+        "referenceSha256": reference_hashes,
+        "benchmarkSha256": None
+        if allow_unverified
+        else hashlib.sha256(benchmark_bytes).hexdigest(),
+        "manifestSha256": manifest_hash,
         "scope": "Table/page regions combined using annotation increments; annotated cells: raw position plus order-preserving row alignment for blank rows/captions; no column reordering; not official ICDAR score or population accuracy",
         "files": len(rows),
         "invalidReferenceBoxesIgnoredForOrdering": invalid_boxes,
@@ -249,4 +332,14 @@ def evaluate(root):
 
 
 if __name__ == "__main__":
-    evaluate(Path(sys.argv[1]))
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=Path)
+    parser.add_argument(
+        "--allow-unverified",
+        action="store_true",
+        help="Explicit legacy mode: no corpus/reference/output integrity checks",
+    )
+    args = parser.parse_args()
+    evaluate(args.root, allow_unverified=args.allow_unverified)

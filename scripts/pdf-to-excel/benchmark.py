@@ -39,6 +39,7 @@ def fingerprint():
             "source_fonts.py",
             "source_rotation.py",
             "source_context.py",
+            "source_leaders.py",
             "cff_names.py",
             "layout_header_tree.py",
             "layout_section_rows.py",
@@ -148,7 +149,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         (root / "benchmark.json").write_text(
             json.dumps(
                 {
-                    "scope": "200 public PDFs; no ground-truth accuracy claim",
+                    "scope": f"{len(manifest)} public PDF files; successful export is not an accuracy claim",
                     "runtime": runtime,
                     "results": results,
                 },

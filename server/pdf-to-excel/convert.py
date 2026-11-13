@@ -747,6 +747,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
     missing = []
     ocr_pages = []
     aligned_pages = []
+    leader_pages = set()
     with pdfplumber.open(source) as doc:
         if len(doc.pages) != count:
             raise ConversionError("The PDF has an inconsistent page structure.")
@@ -873,6 +874,12 @@ def convert_pages(source, output, selected, count, layout, ocr):
             for j, t in enumerate(found):
                 if t.get("method", "").startswith("layout"):
                     t = restore_blank_merges(t, page, ruled_tables)
+                    from source_leaders import recover as recover_native_leaders
+
+                    recovered = recover_native_leaders(t, page)
+                    if recovered is not t:
+                        leader_pages.add(index + 1)
+                    t = recovered
                 if t.get("bbox"):
                     b = t["bbox"]
                     sizes = [
@@ -918,6 +925,12 @@ def convert_pages(source, output, selected, count, layout, ocr):
             "OCR used on pages: "
             + ", ".join(map(str, ocr_pages))
             + ". Check every number and merged cell against the original."
+        )
+    if leader_pages:
+        warnings.append(
+            "Native dot-leader glyphs were kept with row labels on pages: "
+            + ", ".join(map(str, sorted(leader_pages)))
+            + ". Check label and numeric column boundaries against the PDF."
         )
     if aligned_pages:
         warnings.append(
