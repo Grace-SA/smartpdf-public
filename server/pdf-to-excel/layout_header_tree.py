@@ -110,7 +110,56 @@ def _recover(item, page, complete_words):
         for r in rules
         if len(r["columns"]) < cols and start + 0.5 < r["top"] < end - 0.5
     ]
-    levels = cluster_objects(internal, lambda r: r["top"], 0.5)
+    # Collapse a line/rectangle pair only with matching spans and no text between.
+    unique = []
+    duplicates = 0
+    for r in sorted(
+        internal
+        if header_end == 3 and len(internal) <= 120 and len(page.chars) <= 50000
+        else [],
+        key=lambda r: r["top"],
+    ):
+        prior = next(
+            (
+                q
+                for q in unique
+                if q["columns"] == r["columns"]
+                and abs(q["x0"] - r["x0"]) <= 0.1
+                and abs(q["x1"] - r["x1"]) <= 0.1
+                and 0 < r["top"] - q["top"] <= 1.2
+                and {q["object_type"], r["object_type"]} == {"line", "rect_edge"}
+                and not any(
+                    c["text"].strip()
+                    and c["top"] < r["top"]
+                    and c["bottom"] > q["top"]
+                    and c["x0"] < q["x1"]
+                    and c["x1"] > q["x0"]
+                    for c in page.chars
+                )
+            ),
+            None,
+        )
+        if prior is None:
+            unique.append(r)
+        else:
+            duplicates += 1
+            unique[unique.index(prior)] = dict(prior, top=r["top"])
+    levels = cluster_objects(unique, lambda r: r["top"], 0.5)
+    original_header_end = header_end
+    normalized_levels = bool(duplicates and header_end == 3 and len(levels) == 1)
+    if normalized_levels:
+        if not complete_words:
+            return item
+        header_end = 2
+        stubs = [c for c in headers if c["start_col_offset_idx"] == 0]
+        if len(stubs) != 1 or stubs[0]["col_span"] != 1 or not stubs[0].get("bbox"):
+            return item
+        stub_box = model_box(stubs[0]["bbox"], page)
+        if not all(math.isfinite(v) for v in stub_box):
+            return item
+    else:
+        # Do not change previously supported multi-level headers.
+        levels = cluster_objects(internal, lambda r: r["top"], 0.5)
     if len(levels) != header_end - 1:
         return item
     cuts = [start] + [median(r["top"] for r in group) for group in levels] + [end]
@@ -231,9 +280,26 @@ def _recover(item, page, complete_words):
             leaf_words = [
                 w
                 for w in words
-                if left <= (w["x0"] + w["x1"]) / 2 < right
+                if (
+                    stub_box[0] - 1 <= (w["x0"] + w["x1"]) / 2 <= stub_box[2] + 1
+                    and stub_box[1] - 1
+                    <= (w["top"] + w["bottom"]) / 2
+                    <= stub_box[3] + 1
+                    if normalized_levels and col == 0
+                    else left <= (w["x0"] + w["x1"]) / 2 < right
+                )
                 and all(id(c) not in used for c in w["chars"] if c["text"].strip())
             ]
+            if (
+                normalized_levels
+                and col
+                and any(
+                    min(abs((w["x0"] + w["x1"]) / 2 - edge) for edge in (left, right))
+                    < 1
+                    for w in leaf_words
+                )
+            ):
+                return item
             part = [c for w in leaf_words for c in w["chars"] if id(c) in admitted]
             if not part or any(
                 (c["top"] + c["bottom"]) / 2 < cuts[first] for c in part
@@ -273,7 +339,11 @@ def _recover(item, page, complete_words):
         prior = " ".join(
             c["text"]
             for c in headers
-            if c["start_col_offset_idx"] == col and c["col_span"] == 1
+            if (
+                c["start_col_offset_idx"] <= col < c["end_col_offset_idx"]
+                if normalized_levels
+                else c["start_col_offset_idx"] == col and c["col_span"] == 1
+            )
         )
         # Model fragments may place the middle line after the first/last lines.
         # Only complete source words present in this same column may be reordered.
@@ -317,5 +387,11 @@ def _recover(item, page, complete_words):
     if signature(new) == signature(headers):
         return item
     result = deepcopy(item)
-    result["data"]["table_cells"] = deepcopy(body) + new
+    adjusted_body = deepcopy(body)
+    delta = original_header_end - header_end
+    for c in adjusted_body:
+        c["start_row_offset_idx"] -= delta
+        c["end_row_offset_idx"] -= delta
+    result["data"]["num_rows"] -= delta
+    result["data"]["table_cells"] = adjusted_body + new
     return result

@@ -43,6 +43,7 @@ def fingerprint():
             "cff_names.py",
             "layout_header_tree.py",
             "layout_section_rows.py",
+            "layout_local_sections.py",
             "layout_columns.py",
             "layout_paragraph_rows.py",
             "layout_header_spans.py",
