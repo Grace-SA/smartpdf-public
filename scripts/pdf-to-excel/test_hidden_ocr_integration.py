@@ -359,6 +359,67 @@ class HiddenOCRIntegrationTests(unittest.TestCase):
                 convert(source, protected_target, {"ocr": True})
             self.assertFalse(protected_target.exists())
 
+    def test_hidden_form_wrong_number_uses_visible_scan(self):
+        import io
+
+        from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import (
+            ArrayObject,
+            DecodedStreamObject,
+            DictionaryObject,
+            NameObject,
+            NumberObject,
+        )
+
+        reader = PdfReader(io.BytesIO(scanned_table(False)))
+        page = reader.pages[0]
+        resources = page["/Resources"]
+        image_name = next(iter(resources["/XObject"]))
+        form = DecodedStreamObject()
+        form[NameObject("/Type")] = NameObject("/XObject")
+        form[NameObject("/Subtype")] = NameObject("/Form")
+        form[NameObject("/BBox")] = ArrayObject(
+            [NumberObject(v) for v in (0, 0, 600, 600)]
+        )
+        form[NameObject("/Resources")] = DictionaryObject(
+            {NameObject("/Font"): resources["/Font"]}
+        )
+        rows = [
+            ("Code", "Amount"),
+            ("123", "19.50"),
+            ("007", "18.00"),
+            ("321", "25.30"),
+            ("555", "10.00"),
+        ]
+        operations = []
+        for row, values in enumerate(rows):
+            for col, value in enumerate(values):
+                operations.append(
+                    f"BT /F1 14 Tf 3 Tr 1 0 0 1 {110 + 150 * col} {480 - 40 * row} Tm ({value}) Tj ET"
+                )
+        form.set_data("\n".join(operations).encode())
+        resources["/XObject"][NameObject("/OCR")] = form
+        content = DecodedStreamObject()
+        content.set_data(f"q 600 0 0 600 0 0 cm {image_name} Do Q /OCR Do".encode())
+        page[NameObject("/Contents")] = content
+        writer = PdfWriter()
+        writer.add_page(page)
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder) / "form.pdf", Path(folder) / "out.xlsx"
+            writer.write(source)
+            result = convert(source, target, {"ocr": True})
+            self.assertEqual(result["ocrPages"], [1])
+            book = load_workbook(target)
+            try:
+                expected = list(rows)
+                expected[1] = ("123", "12.50")
+                self.assertEqual(list(book.active.values), expected)
+            finally:
+                book.close()
+            with self.assertRaisesRegex(ConversionError, "needs OCR"):
+                convert(source, Path(folder) / "denied.xlsx", {"ocr": False})
+            self.assertFalse((Path(folder) / "denied.xlsx").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -88,6 +88,33 @@ def scanned_table(hidden=True, ruled=True):
     return buf.getvalue()
 
 
+def form_fixture(
+    content=b"BT /F1 12 Tf 3 Tr (layer) Tj ET", parent=b"BT /F1 12 Tf 3 Tr ET"
+):
+    from pypdf.generic import DictionaryObject, NumberObject
+
+    page = fixture(parent)
+    form = DecodedStreamObject()
+    form.set_data(content)
+    form.update(
+        {
+            NameObject("/Type"): NameObject("/XObject"),
+            NameObject("/Subtype"): NameObject("/Form"),
+            NameObject("/FormType"): NumberObject(1),
+            NameObject("/BBox"): ArrayObject(
+                [NumberObject(v) for v in (0, 0, 300, 200)]
+            ),
+            NameObject("/Resources"): DictionaryObject(
+                {NameObject("/Font"): page["/Resources"]["/Font"]}
+            ),
+        }
+    )
+    page["/Resources"]["/XObject"][NameObject("/OCR")] = form
+    stream = page["/Contents"]
+    stream.set_data(stream.get_data() + b"\n/OCR Do\n")
+    return page, form
+
+
 class HiddenOCRTests(unittest.TestCase):
     def test_original_scanned_table_has_identical_visible_pixels(self):
         import pypdfium2 as pdfium
@@ -117,6 +144,105 @@ class HiddenOCRTests(unittest.TestCase):
             image[NameObject(key)] = DictionaryObject()
             with self.subTest(key=key):
                 self.assertEqual(m.classify(page), "unsupported")
+
+    def test_hidden_text_only_form_and_inherited_state(self):
+        for content in (b"BT /F1 12 Tf 3 Tr (hidden) Tj ET", b"BT (inherited) Tj ET"):
+            self.assertEqual(m.classify(form_fixture(content)[0]), "hidden")
+        self.assertEqual(
+            m.classify(form_fixture(b"BT (visible) Tj ET", b"BT /F1 12 Tf ET")[0]),
+            "unsupported",
+        )
+
+    def test_form_visible_mixed_and_invalid_font(self):
+        for content in (
+            b"BT /F1 12 Tf 0 Tr (visible) Tj ET",
+            b"BT /F1 12 Tf 3 Tr (hidden) Tj 0 Tr (visible) Tj ET",
+            b"BT /Missing 12 Tf 3 Tr (hidden) Tj ET",
+            b"BT (missing font) Tj ET",
+        ):
+            self.assertEqual(m.classify(form_fixture(content, b"")[0]), "unsupported")
+
+    def test_form_resource_shadow_does_not_rebind_inherited_font(self):
+        from pypdf.generic import DictionaryObject
+
+        page, form = form_fixture(b"BT (inherited) Tj ET")
+        form["/Resources"][NameObject("/Font")] = DictionaryObject(
+            {
+                NameObject("/F1"): DictionaryObject(
+                    {NameObject("/Subtype"): NameObject("/Type3")}
+                )
+            }
+        )
+        self.assertEqual(m.classify(page), "hidden")
+        form.set_data(b"BT /F1 12 Tf 3 Tr (local Type3) Tj ET")
+        self.assertEqual(m.classify(page), "unsupported")
+
+    def test_form_state_does_not_leak(self):
+        page, form = form_fixture(parent=b"BT /F1 12 Tf 0 Tr ET")
+        stream = page["/Contents"]
+        stream.set_data(stream.get_data() + b"BT (visible parent) Tj ET")
+        self.assertEqual(m.classify(page), "other")
+        page, form = form_fixture(
+            b"20 0 0 20 100 100 cm BT /F1 12 Tf 3 Tr (hidden) Tj ET", parent=b""
+        )
+        stream = page["/Contents"]
+        stream.set_data(b"/OCR Do\n" + stream.get_data().replace(b"/OCR Do", b""))
+        self.assertEqual(m.classify(page), "hidden")
+        form.set_data(b"q BT /F1 12 Tf 3 Tr (unbalanced) Tj ET")
+        self.assertEqual(m.classify(page), "unsupported")
+
+    def test_form_nested_objects_and_graphics_rejected(self):
+        for content in (
+            b"/OCR Do",
+            b"/Image Do",
+            b"0 0 1 1 re f",
+            b"/GS0 gs",
+            b"/Sh0 sh",
+            b"0 0 300 200 re W n",
+            b"/OC /Prop BDC EMC",
+        ):
+            with self.subTest(content=content):
+                self.assertEqual(m.classify(form_fixture(content)[0]), "unsupported")
+
+    def test_form_attributes_and_geometry_rejected(self):
+        from pypdf.generic import DictionaryObject, FloatObject, NumberObject
+
+        for key in ("/Group", "/OC", "/Ref", "/F", "/SMask", "/DecodeParms"):
+            page, form = form_fixture()
+            form[NameObject(key)] = DictionaryObject()
+            self.assertEqual(m.classify(page), "unsupported")
+        for box in ((0, 0, 0, 100), (0, 0, 100), (0, 0, float("nan"), 100)):
+            page, form = form_fixture()
+            form[NameObject("/BBox")] = ArrayObject([FloatObject(v) for v in box])
+            self.assertEqual(m.classify(page), "unsupported")
+        page, form = form_fixture()
+        form[NameObject("/Matrix")] = ArrayObject(
+            [NumberObject(v) for v in (1, 0, 0, 1, 1, 0)]
+        )
+        self.assertEqual(m.classify(page), "unsupported")
+        page, form = form_fixture()
+        form[NameObject("/Type")] = NameObject("/Page")
+        self.assertEqual(m.classify(page), "unsupported")
+        page, form = form_fixture()
+        del form["/Resources"]
+        self.assertEqual(m.classify(page), "unsupported")
+
+    def test_form_budgets_shared_with_page_and_repeated_calls(self):
+        page, form = form_fixture()
+        parent_size = len(page["/Contents"].get_data()) + 1
+        with patch.object(m, "MAX_BYTES", parent_size + len(form.get_data())):
+            self.assertEqual(m.classify(page), "unsupported")
+        with patch.object(m, "MAX_STREAMS", 1):
+            self.assertEqual(m.classify(page), "unsupported")
+        from pypdf.generic import ContentStream
+
+        count = len(ContentStream(page["/Contents"], page.pdf).operations)
+        count += len(ContentStream(form, page.pdf).operations)
+        with patch.object(m, "MAX_OPS", count - 1):
+            self.assertEqual(m.classify(page), "unsupported")
+        stream = page["/Contents"]
+        stream.set_data(stream.get_data() + b"/OCR Do\n" * m.MAX_FORMS)
+        self.assertEqual(m.classify(page), "unsupported")
 
     def test_simple_hidden_scan(self):
         self.assertEqual(m.classify(fixture()), "hidden")

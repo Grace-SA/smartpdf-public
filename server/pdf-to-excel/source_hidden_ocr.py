@@ -1,7 +1,8 @@
 """Recognize a narrow full-page scan with an entirely Tr=3 text layer.
 
 This is content-stream evidence, not a general visibility detector. White text,
-alpha, occlusion, clipping, Forms and arbitrary mixed pages are not inferred.
+alpha, occlusion, clipping and arbitrary mixed pages are not inferred.
+Only bounded, non-nested, text-only Forms with identity Matrix are supported.
 ``other`` means a supported stream did not satisfy the rule; ``unsupported``
 means it could not be proved. Neither result authorizes discarding native text.
 """
@@ -28,6 +29,8 @@ MAX_BYTES = 2 * 1024 * 1024
 MAX_OPS = 20000
 MAX_STACK = 64
 MAX_RESOURCES = 256
+MAX_FORMS = 8
+IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
 
 class Unsupported(ValueError):
@@ -152,31 +155,88 @@ def _classify(page):
     resources = resolve(page.get("/Resources"))
     if not isinstance(resources, DictionaryObject) or len(resources) > MAX_RESOURCES:
         return "unsupported"
-    # Concatenation preserves graphics/text state across Contents streams.
+    # All invoked streams share budgets, including repeated Form invocations.
+    budget = {"bytes": 0, "streams": 0, "ops": 0, "forms": 0}
     raw = resolve(page.get("/Contents"))
     streams = list(raw) if isinstance(raw, ArrayObject) else [raw]
-    if len(streams) > MAX_STREAMS:
-        return "unsupported"
+    operations = read_operations(streams, page.pdf, budget)
+    images, modes = interpret(operations, resources, page.pdf, budget)
+    if len(images) != 1 or not modes or any(mode != 3 for mode in modes):
+        return "other"
+    box = images[0]
+    return "hidden" if all(abs(a - b) <= 0.01 for a, b in zip(box, view)) else "other"
+
+
+def read_operations(streams, pdf, budget):
+    """Concatenate page streams without resetting state; budget Forms too."""
+    if len(streams) > MAX_STREAMS - budget["streams"]:
+        raise Unsupported("Content stream budget")
+    budget["streams"] += len(streams)
     pieces = []
-    size = 0
     for stream in streams:
-        stream = resolve(stream)
-        data = bounded_content(stream, MAX_BYTES - size - 1)
-        size += len(data) + 1
+        data = bounded_content(resolve(stream), MAX_BYTES - budget["bytes"] - 1)
+        budget["bytes"] += len(data) + 1
         pieces.append(data)
     decoded = DecodedStreamObject()
     decoded.set_data(b"\n".join(pieces))
-    content = ContentStream(decoded, page.pdf)
-    operations = content.operations
-    if len(operations) > MAX_OPS:
-        return "unsupported"
-    matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-    mode, font, in_text = 0, None, False
+    operations = ContentStream(decoded, pdf).operations
+    budget["ops"] += len(operations)
+    if budget["ops"] > MAX_OPS:
+        raise Unsupported("Content operator budget")
+    return operations
+
+
+def form_resources(obj):
+    # Unknown dictionary entries can introduce reference XObjects, optional
+    # content or transparency behavior. Decline instead of ignoring them.
+    allowed = {
+        "/Type",
+        "/Subtype",
+        "/FormType",
+        "/BBox",
+        "/Matrix",
+        "/Resources",
+        "/Length",
+        "/Filter",
+    }
+    if obj.get("/Type", "/XObject") != "/XObject":
+        raise Unsupported("Invalid Form object type")
+    if set(obj) - allowed:
+        raise Unsupported("Unsupported Form attributes")
+    (form_type,) = numbers([obj.get("/FormType", 1)], 1)
+    if form_type != 1:
+        raise Unsupported("Unsupported Form type")
+    box = numbers(resolve(obj.get("/BBox")), 4)
+    if box[2] <= box[0] or box[3] <= box[1]:
+        raise Unsupported("Invalid Form bounding box")
+    matrix = numbers(resolve(obj.get("/Matrix", IDENTITY)), 6)
+    if matrix != IDENTITY:
+        raise Unsupported("Non-identity Form Matrix")
+    resources = resolve(obj.get("/Resources"))
+    if not isinstance(resources, DictionaryObject) or len(resources) > MAX_RESOURCES:
+        raise Unsupported("Explicit Form resources required")
+    return resources
+
+
+def interpret(
+    operations,
+    resources,
+    pdf,
+    budget,
+    matrix=IDENTITY,
+    mode=0,
+    font=None,
+    form=False,
+    stack_base=0,
+):
+    # Font is the resolved font object, not its resource name: an inherited
+    # font stays bound to the parent's object despite Form resource shadowing.
+    in_text = False
     stack, images, modes = [], [], []
     for args, op in operations:
         if op == b"q":
             numbers(args, 0)
-            if len(stack) >= MAX_STACK:
+            if stack_base + len(stack) >= MAX_STACK:
                 raise Unsupported("Graphics stack budget")
             stack.append((matrix, mode, font))
         elif op == b"Q":
@@ -221,7 +281,7 @@ def _classify(page):
                 "/Type0",
             ):
                 raise Unsupported("Unsupported font")
-            font = args[0]
+            font = selected
         elif op in (b"Tj", b"TJ", b"'", b'"'):
             if not in_text or font is None:
                 raise Unsupported("Text without a valid font")
@@ -247,6 +307,8 @@ def _classify(page):
                 else:
                     raise Unsupported("Invalid text operand")
             if nonempty:
+                if form and mode != 3:
+                    raise Unsupported("Form has non-hidden text")
                 modes.append(mode)
         elif op in (b"Tm", b"Td", b"TD", b"T*", b"Tc", b"Tw", b"Tz", b"TL", b"Ts"):
             if not in_text:
@@ -257,9 +319,35 @@ def _classify(page):
             if any(v < 0 or v > 1 for v in color):
                 raise Unsupported("Invalid color")
         elif op == b"Do":
+            if form:
+                raise Unsupported("Nested XObjects in Form unsupported")
             if in_text or len(args) != 1:
-                raise Unsupported("Invalid image invocation")
+                raise Unsupported("Invalid XObject invocation")
             image = resource(resources, "/XObject", args[0])
+            if image.get("/Subtype") == "/Form":
+                budget["forms"] += 1
+                if (
+                    budget["forms"] > MAX_FORMS
+                    or stack_base + len(stack) + 1 > MAX_STACK
+                ):
+                    raise Unsupported("Form invocation budget")
+                local_resources = form_resources(image)
+                local_ops = read_operations([image], pdf, budget)
+                _, local_modes = interpret(
+                    local_ops,
+                    local_resources,
+                    pdf,
+                    budget,
+                    matrix,
+                    mode,
+                    font,
+                    form=True,
+                    stack_base=stack_base + len(stack) + 1,
+                )
+                # Form execution is an implicit save/restore. No local text
+                # or graphics state leaks into the following page operations.
+                modes.extend(local_modes)
+                continue
             if image.get("/Subtype") != "/Image" or any(
                 k in image
                 for k in ("/SMask", "/SMaskInData", "/Mask", "/ImageMask", "/OC")
@@ -278,12 +366,9 @@ def _classify(page):
                 raise Unsupported("Non-axis-aligned image")
             images.append((e, f, e + a, f + d))
         else:
-            # Includes gs, sh, Forms, inline images, paths, clipping and
+            # Includes gs, sh, inline images, paths, clipping and
             # marked-content/optional-content state. Never silently skip them.
             raise Unsupported("Unsupported operator")
     if stack or in_text:
-        return "unsupported"
-    if len(images) != 1 or not modes or any(mode != 3 for mode in modes):
-        return "other"
-    box = images[0]
-    return "hidden" if all(abs(a - b) <= 0.01 for a, b in zip(box, view)) else "other"
+        raise Unsupported("Unbalanced stream state")
+    return images, modes
