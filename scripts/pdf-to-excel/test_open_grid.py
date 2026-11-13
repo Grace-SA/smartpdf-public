@@ -72,6 +72,25 @@ class OpenTests(unittest.TestCase):
                 [("Group A", 2), ("Group B", 2)],
             )
 
+    def test_nonfinite_or_inverted_prediction_does_not_enter_geometry_recovery(self):
+        from unittest.mock import patch
+
+        doc, values = self.fixture()
+        with doc:
+            page = doc.pages[0]
+            for change in [
+                dict(l=float("nan")),
+                dict(r=float("inf")),
+                dict(l=350),
+                dict(t=180),
+            ]:
+                item = self.item(page, values)
+                item["prov"][0]["bbox"].update(change)
+                with patch.object(
+                    page, "crop", side_effect=AssertionError("invalid crop")
+                ):
+                    self.assertIsNone(repair(item, page))
+
     def test_changed_value_and_unruled_page_do_not_replace_model(self):
         doc, values = self.fixture()
         with doc:

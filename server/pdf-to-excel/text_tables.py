@@ -6,6 +6,7 @@ three consecutive rows with matching column starts and visible inter-cell gaps.
 
 from statistics import median
 import re
+from source_glyphs import without_overprinted_blanks
 
 NUMERIC = re.compile(r"[+\-−($€£¥]?\d[\d\s.,%()\-]*")
 
@@ -18,7 +19,7 @@ def numeric_page_tables(page):
     """
     if any(getattr(page, key, []) for key in ("images", "lines", "rects", "curves")):
         return []
-    words = page.extract_words(x_tolerance=2, y_tolerance=3)
+    words = without_overprinted_blanks(page).extract_words(x_tolerance=2, y_tolerance=3)
     if len(words) < 15 or any(not NUMERIC.fullmatch(w["text"]) for w in words):
         return []
     bands = []
@@ -72,7 +73,7 @@ def conservative_aligned_tables(page):
 
 
 def aligned_tables(page, excluded=()):
-    words = page.extract_words(x_tolerance=2, y_tolerance=3)
+    words = without_overprinted_blanks(page).extract_words(x_tolerance=2, y_tolerance=3)
     return aligned_words(words, excluded)
 
 

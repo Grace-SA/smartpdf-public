@@ -12,6 +12,9 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from text_tables import aligned_tables, conservative_aligned_tables
+from layout_typography import apply_source_typography, readable_header_widths
+from layout_blank import restore_blank_merges
+from layout_alternating import recover_alternating_tables
 from layout_tables import (
     extract_layout_tables,
     LayoutError,
@@ -366,7 +369,9 @@ def scan_tables(page):
 
 
 def readable_heights(table, widths, font_size):
-    source_geometry = table.get("sourceGeometry", False)
+    source_geometry = table.get("sourceGeometry", False) or table.get(
+        "sourceTypography", False
+    )
     heights = [min(409, max(1 if source_geometry else 20, h)) for h in table["heights"]]
 
     def width(text):
@@ -386,14 +391,20 @@ def readable_heights(table, widths, font_size):
                 factor = 0.72
             else:
                 factor = 0.61
-            total += factor * font_size
+            total += cell.get("glyphWidths", {}).get(char, factor * cell_size)
         return total
 
     for cell in table["cells"]:
+        cell_size = cell.get("fontSize", font_size)
+        verified = cell.get("sourceFont", False)
         if source_geometry and not cell["text"].strip():
             continue
-        available = max(12, sum(widths[cell["c"] : cell["c"] + cell["cs"]]) * 5.25 - 8)
-        if cell["r"] == 0:
+        available = max(
+            12,
+            sum(widths[cell["c"] : cell["c"] + cell["cs"]]) * 5.25
+            - (4 if verified else 8),
+        )
+        if cell["r"] == 0 and not verified:
             available /= 1.08
         lines = 0
         for paragraph in cell["text"].split("\n"):
@@ -413,7 +424,9 @@ def readable_heights(table, widths, font_size):
                     used = measured - (count - 1) * available
                 else:
                     used += measured
-        required = lines * font_size * 1.32 + 6
+        required = lines * cell_size * (1.15 if verified else 1.32) + (
+            1 if verified else 6
+        )
         if cell.get("rotation") in (90, 180):
             required = max(width(line) for line in cell["text"].split("\n")) + 6
         indices = range(cell["r"], cell["r"] + cell["rs"])
@@ -453,7 +466,7 @@ def write_workbook(tables, output, layout):
         cols = len(t["widths"])
         if offset + rows > 1048576 or cols > 16384:
             raise ConversionError("The result exceeds Excel worksheet limits.")
-        for col, width in enumerate(t["widths"], 1):
+        for col, width in enumerate(readable_header_widths(t), 1):
             key = get_column_letter(col)
             existing = s.column_dimensions.get(key)
             minimum = 3 if t.get("sourceGeometry") else 8
@@ -490,10 +503,11 @@ def write_workbook(tables, output, layout):
                 name=(
                     "Noto Sans CJK SC"
                     if re.search(r"[\u3400-\u9fff]", e["text"])
-                    else "Arial"
+                    else e.get("fontName", "Arial")
                 ),
-                size=font_size,
+                size=e.get("fontSize", font_size),
                 bold=e.get("bold", False),
+                italic=e.get("italic", False),
             )
             c.alignment = Alignment(
                 vertical="top", wrap_text=True, textRotation=e.get("rotation", 0)
@@ -501,7 +515,11 @@ def write_workbook(tables, output, layout):
             c.border = border
             if e["r"] < t.get("headerRows", 1):
                 c.font = Font(
-                    name=c.font.name, size=font_size, bold=True, color="174B39"
+                    name=c.font.name,
+                    size=c.font.sz,
+                    bold=c.font.bold if e.get("sourceFont") else True,
+                    italic=c.font.italic,
+                    color="174B39",
                 )
                 c.fill = PatternFill("solid", fgColor="EDF5EF")
             if e["rs"] > 1 or e["cs"] > 1:
@@ -518,6 +536,8 @@ def write_workbook(tables, output, layout):
         s.sheet_properties.pageSetUpPr.fitToPage = True
         s.page_setup.fitToWidth = 1
         s.page_setup.fitToHeight = 0
+        s.page_margins.left = s.page_margins.right = 0.25
+        s.page_margins.top = s.page_margins.bottom = 0.25
         s.page_setup.orientation = "landscape" if sum(t["widths"]) > 500 else "portrait"
         if len(preview) < 8:
             preview.append(
@@ -656,11 +676,15 @@ def convert(source, output, options):
                     from layout_dates import recover_date_tables
 
                     found = recover_date_tables(page)
+                if not found:
+                    found = recover_alternating_tables(page)
             if not found:
                 missing.append(index + 1)
             if any(t["method"] == "aligned" for t in found):
                 aligned_pages.append(index + 1)
             for j, t in enumerate(found):
+                if t.get("method", "").startswith("layout"):
+                    t = restore_blank_merges(t, page, ruled_tables)
                 if t.get("bbox"):
                     b = t["bbox"]
                     sizes = [
@@ -672,6 +696,7 @@ def convert(source, output, options):
                     ]
                     if sizes:
                         t["fontSize"] = max(6, min(14, median(sizes)))
+                apply_source_typography(t, page)
                 t.update(page=index + 1, index=j + 1)
                 tables.append(t)
             if sum(len(e["text"]) for t in tables for e in t["cells"]) > 5_000_000:

@@ -2,6 +2,7 @@
 
 from collections import Counter
 import re
+import math
 from statistics import median
 
 from pdfplumber.utils import cluster_list
@@ -46,6 +47,8 @@ def recover_open_grid(item, page):
     from layout_grid import recover_source_grid
 
     box = model_box(item["prov"][0]["bbox"], page)
+    if not all(math.isfinite(v) for v in box) or box[0] >= box[2] or box[1] >= box[3]:
+        return None
     left, top, right, bottom = box
     view = visible_box(page)
     region = (

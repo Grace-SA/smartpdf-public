@@ -38,6 +38,8 @@ A page with no detected table may retry at most two strongly bounded numeric reg
 
 A missed card grid can be recovered only with a complete regular outer grid and at least three source labels shared by every card. Smaller internal frames are excluded; mixed font heights use source baselines to retain reading order. Underlined multi-column headings require independent body anchors and an empty destination row. Rotated currency literals require exact numeric-string agreement with one complete source grid.
 
+Source typography is restored only when glyph content, font family and geometry agree. Narrow verified headers receive bounded width padding. Overprinted blanks are removed only inside complete compact numeric/date runs; ordinary word gaps and dot leaders remain. Two alternating underlined field rows can recover complete fixed-width records only with source-character agreement. Blank merged cells require a complete physical grid matching every populated cell's text, position and span.
+
 All extracted values are strings: leading zeros, long integers and formula-like content remain unchanged. Consumers may deliberately convert selected cells to numbers in Excel. Original spreadsheet formulas cannot be reconstructed from rendered PDFs.
 
 ## API

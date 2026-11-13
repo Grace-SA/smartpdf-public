@@ -9,6 +9,7 @@ import os
 import re
 import unicodedata
 from pathlib import Path
+from source_glyphs import visible_glyphs, without_overprinted_blanks
 
 
 class LayoutError(Exception):
@@ -42,6 +43,7 @@ def physical_page(page):
     """
     if not hasattr(page, "filter"):
         return page
+    page = without_overprinted_blanks(page)
     return page.filter(
         lambda obj: not (
             obj.get("object_type") == "rect"
@@ -101,7 +103,7 @@ def source_cell_text(text, box, page):
     bands = getattr(page, "_excel_glyph_bands", None)
     if bands is None:
         bands = defaultdict(list)
-        for char in page.chars:
+        for char in visible_glyphs(page.chars):
             bands[math.floor((char["top"] + char["bottom"]) / 32)].append(char)
         page._excel_glyph_bands = bands
     chars = [
