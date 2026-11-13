@@ -284,6 +284,7 @@ def scan_tables(page):
         horizontal | vertical, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
     tables = []
+    raster_boxes = []
 
     def groups(values):
         out = []
@@ -364,6 +365,7 @@ def scan_tables(page):
                 }
             )
         if any(e["text"] for e in entries):
+            raster_boxes.append((xs[0], ys[0], xs[-1], ys[-1]))
             tables.append(
                 {
                     "widths": [(b - a) / 2 for a, b in zip(xs, xs[1:])],
@@ -372,6 +374,12 @@ def scan_tables(page):
                     "method": "ocr",
                 }
             )
+    if tables:
+        from source_context import ocr_page_context
+
+        context = ocr_page_context(result, raster_boxes, (im.shape[1], im.shape[0]))
+        if context:
+            tables[0].update(sourceContext=context, sourceContextOcr=True)
     return tables
 
 
@@ -592,8 +600,13 @@ def write_workbook(tables, output, layout):
             if e["r"] < 12 and e["c"] < cols:
                 values[e["r"]][e["c"]] = e["text"][:250]
         if t.get("sourceContext"):
+            label = (
+                "OCR text (uncorrected; verify against the scan)"
+                if t.get("sourceContextOcr")
+                else "native text"
+            )
             s.cell(offset + 1, 1).comment = Comment(
-                f"Source page {t['page']}: native text outside detected tables. "
+                f"Source page {t['page']}: {label} outside detected tables. "
                 "Page-level context only; footnote associations and reading order "
                 "are not inferred.\n\n" + t["sourceContext"],
                 "SmartPDF",
@@ -899,7 +912,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
         )
     if any(t.get("sourceContext") for t in tables):
         warnings.append(
-            "Native text outside detected tables is preserved where supported in "
+            "Page text outside detected tables is preserved where supported in "
             "a comment on the first cell of the first table from each page. "
             "Open these comments to review titles and footnotes; associations "
             "are not inferred and context may be incomplete."
