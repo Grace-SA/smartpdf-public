@@ -37,6 +37,7 @@ def fingerprint():
             "layout_source_rows.py",
             "source_phrases.py",
             "source_fonts.py",
+            "source_rotation.py",
             "cff_names.py",
             "layout_header_tree.py",
             "layout_section_rows.py",
@@ -160,3 +161,4 @@ if fingerprint() != runtime["engineSha256"]:
 summary = dict(Counter(r["status"] for r in results))
 (root / "benchmark-summary.json").write_text(json.dumps(summary, indent=2))
 print(summary)
+

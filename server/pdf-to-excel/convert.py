@@ -678,7 +678,17 @@ def convert(source, output, options):
     from source_fonts import prepared_source
 
     with prepared_source(source, reader, output.parent) as prepared:
-        return convert_pages(prepared, output, selected, count, layout, ocr)
+        from source_rotation import prepared_rotation
+
+        with prepared_rotation(prepared, selected, output.parent) as (upright, rotated):
+            result = convert_pages(upright, output, selected, count, layout, ocr)
+            if rotated:
+                result["warnings"].append(
+                    "Native sideways text was oriented upright on pages: "
+                    + ", ".join(map(str, rotated))
+                    + ". Check table orientation against the source PDF."
+                )
+            return result
 
 
 def convert_pages(source, output, selected, count, layout, ocr):
@@ -894,3 +904,4 @@ if __name__ == "__main__":
             )
         )
         sys.exit(2)
+
