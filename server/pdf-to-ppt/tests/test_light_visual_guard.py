@@ -123,3 +123,56 @@ def test_actual_pdf_identity_and_shift_refusal(tmp_path):
     assert not guard.verify(*args)
     args[4]=source;args[5]=1
     assert not guard.verify(*args)
+
+
+def two_roi_setup(monkeypatch,tmp_path,*,bad='regression',outside=False):
+    calls,snapshots=fake_run(monkeypatch,tmp_path)
+    calls.clear()
+    def raster(path,index,dpi,size,folder,label,deadline):
+        calls.append((label,dpi));scale=dpi/72
+        im=Image.new('RGB',(int(100*scale),)*2,'white');draw=ImageDraw.Draw(im)
+        for x in [20,60]:draw.rectangle((x*scale,30*scale,(x+5)*scale,40*scale),fill='black')
+        if label.startswith('candidate'):
+            if bad=='regression':draw.rectangle((62*scale,32*scale,63*scale,38*scale),fill='white')
+            elif bad=='empty':draw.rectangle((58*scale,28*scale,67*scale,42*scale),fill='white')
+            elif bad=='dirty':im.putpixel((int(58*scale),int(28*scale)),(0,0,0))
+            if outside and dpi==432:im.putpixel((0,0),(0,0,0))
+        return im
+    monkeypatch.setattr(guard,'_raster',raster)
+    args=(tmp_path/'s',0,tmp_path/'p',0,tmp_path/'c',0,(100,100),[(19,59,26,71),(59,59,66,71)])
+    return args,calls,snapshots
+
+@pytest.mark.parametrize('bad',['regression','empty','dirty'])
+def test_assess_keeps_good_roi_but_verify_still_short_circuits(monkeypatch,tmp_path,bad):
+    args,calls,snapshots=two_roi_setup(monkeypatch,tmp_path,bad=bad)
+    assert guard.assess(*args)==[True,False]
+    assert len(calls)==12 # one source/previous/candidate render per DPI
+    assert all(not path.exists() for path in snapshots)
+    calls.clear()
+    assert not guard.verify(*args)
+    assert len(calls)==3 # unchanged whole-candidate rejection on first DPI
+
+
+def test_assess_global_outside_change_after_local_failure_is_not_hidden(monkeypatch,tmp_path):
+    args,calls,_=two_roi_setup(monkeypatch,tmp_path,outside=True)
+    assert guard.assess(*args) is None
+    assert len(calls)==12 # must still inspect final-DPI outside pixels
+
+
+def test_assess_identity_and_deadline_global_refusal(monkeypatch,tmp_path):
+    args,calls,_=two_roi_setup(monkeypatch,tmp_path,bad=None)
+    assert guard.assess(*args)==[True,True]
+    calls.clear();assert guard.assess(*args,timeout=0) is None and calls==[]
+    count=[0]
+    def expired(self):
+        count[0]+=1
+        if count[0]>10:raise guard.Refused('time_budget')
+        return 1
+    monkeypatch.setattr(guard.Deadline,'remaining',expired)
+    assert guard.assess(*args) is None
+
+
+def test_assess_parser_grid_uncertainty_is_global(monkeypatch,tmp_path):
+    args,_,_=two_roi_setup(monkeypatch,tmp_path)
+    monkeypatch.setattr(guard,'metrics',lambda *_: (_ for _ in ()).throw(guard.Refused('crop_grid_mismatch')))
+    assert guard.assess(*args) is None

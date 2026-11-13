@@ -87,3 +87,36 @@ def source_verified(page,runs):
                 if obj is None or ctypes.cast(obj.raw,ctypes.c_void_p).value!=run['object_id']:return False
             if ''.join(text)!=run['text']:return False
     return True
+
+
+def trim_generated_tails(page,runs):
+    """Copy runs, optionally removing one inferred terminal ASCII separator.
+
+    Only collision candidates may use this normalization. It does not authorize
+    a run: callers must still call source_verified on the result, retain the
+    original collision graph/geometry, and keep every word as a separate shape.
+    Real spaces, multiple trailing spaces, internal generated characters and
+    malformed/expanded Unicode ranges are never normalized.
+    """
+    from contextlib import closing
+    import pypdfium2 as pdfium
+    from copy import deepcopy
+    copied=[deepcopy(run) for run in runs]
+    with closing(page.get_textpage()) as tp:
+        count=tp.count_chars()
+        for run in copied:
+            text=run.get('text');start=run.get('index');end=run.get('end_index')
+            if (not isinstance(text,str) or len(text)<2 or not text.endswith(' ')
+                    or text[-2].isspace() or type(start) is not int or type(end) is not int
+                    or not 0<=start<end<=count or end-start!=len(text)):
+                continue
+            if pdfium.raw.FPDFText_IsGenerated(tp,end-1)!=1:continue
+            # The full original span must be exactly this string, not a guessed
+            # separator from NFKC, a truncated range, or a generated glyph.
+            if any(pdfium.raw.FPDFText_GetUnicode(tp,i)!=ord(char)
+                   for i,char in enumerate(text,start)):continue
+            if any(pdfium.raw.FPDFText_IsGenerated(tp,i)!=0 for i in range(start,end-1)):continue
+            run['text']=text[:-1];run['end_index']=end-1
+            run['generated_tail_space_trimmed']=True
+            run['source_original_end_index']=end
+    return copied

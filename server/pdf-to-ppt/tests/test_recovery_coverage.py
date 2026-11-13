@@ -27,8 +27,8 @@ def test_finer_strategy_must_keep_footer_occurrence_on_each_page(tmp_path,monkey
    with closing(doc[i]) as page:add_background(p.slides.add_slide(p.slide_layouts[6]),page_background(page,[],max_side=2200,scale_limit=2),400,400)
  p.save(target);settings=Settings(renderer_path=os.environ['SMARTPPT_TEST_RENDERER'])
  objects=regional.objects_for_page;geometry=regional.rendered_word_regions;recover=regional._recover_regions;saved={}
- def candidates(page,grouped=True,word_regions=False,word_clusters=False,cluster_mode='adjacent'):
-  result,warnings=objects(page,grouped=grouped,word_regions=word_regions,word_clusters=word_clusters,cluster_mode=cluster_mode)
+ def candidates(page,grouped=True,word_regions=False,word_clusters=False,cluster_mode='adjacent',normalize_tails=False):
+  result,warnings=objects(page,grouped=grouped,word_regions=word_regions,word_clusters=word_clusters,cluster_mode=cluster_mode,normalize_tails=normalize_tails)
   if not word_regions:result=[o for o in result if all(r['box'][3]<100 for r in o[1])]
   return result,warnings
  def boxes(prs,number,page,objects,pdf,**kwargs):

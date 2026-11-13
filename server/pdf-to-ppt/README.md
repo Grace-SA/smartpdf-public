@@ -197,3 +197,7 @@ CMU Typewriter Text另按已验证源face的真实pitch元数据写入OOXML提�
 只有明确的常规`SFTTdddd`、`CMtt数字`或`CMU Typewriter Text`来源，且已映射为CMU Typewriter Text、无粗斜体/旋转、原文及NFKC字符均被字体覆盖，才可尝试。最后最多四次增量候选（两种校准，各尝试0或0.1pt纵向偏移），不能替换或删除先前已验证文字；来源、顺序、逐词位置、局部及原始整页像素和已保留区域像素检查全部沿用。缺失/篡改/不支持时保留原结果。这是明确标记的替代字体，不是源字体完全一致的声明，也不代表其他客户端已验收。
 
 Light增量另须通过独立Poppler保护：最终组合输出在144/216/288/432 DPI逐区域MAE、前景误差及最大墨迹边界误差均不得比先前保留原图更差；编辑区域外全页像素必须完全相同。独立验证使用跨候选共享的120秒截止预算，页面/像素/区域/输入及子进程输出均有界；Office渲染仍受原有单次时限约束，可能晚于该截止返回，但过期后不得通过新候选。缺少Poppler、资源超限、尺寸不一致、脏边界或无法明确观测均拒绝追加。这不取消原PDFium局部0.035/0.16、2pt位置与原始整页门槛，也不把跨引擎比较解释为字形完全相同。0.1pt只是需要逐次验证的有限候选，不是通用修复常数。
+
+### Inferred separator recovery
+
+A final additive collision-component pass can omit a single PDFium-generated terminal ASCII separator from a copied source run, never real spaces or visible glyphs. Exact source ownership remains mandatory. Complete components must pass independent Poppler nonregression at 144/216/288/432 DPI, then be rebuilt and verified again; uncertain regions remain graphic. See [round 20 evidence](../../docs/pdf-to-ppt-quality-round20-2026-11-13.md).

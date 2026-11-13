@@ -179,3 +179,49 @@ def check(*args,**kwargs):
 
 # Boolean integration entry point; evaluate is for bounded internal diagnostics.
 verify=check
+
+
+def assess(source,source_index,previous,previous_index,candidate,candidate_index,page_size,source_boxes,*,timeout=120):
+    """Return per-ROI eligibility, or None on any global uncertainty.
+
+    This is NOT an acceptance result. Callers must keep complete atomic source
+    components, rebuild the final candidate, then call verify on that final PDF.
+    Every resolution checks outside the original complete ROI union, even when
+    some local ROIs have already failed. Input/ROI policy matches evaluate.
+    """
+    try:
+        deadline=Deadline(timeout)
+        if os.name!='posix' or not shutil.which('pdftoppm'):raise Refused('poppler_or_posix_unavailable')
+        rois=_rois(page_size,source_boxes);passed=[True]*len(rois)
+        with tempfile.TemporaryDirectory(prefix='smartppt-light-assess-') as temp:
+            folder=Path(temp);files=[]
+            for label,path,index in [('source',source,source_index),('previous',previous,previous_index),('candidate',candidate,candidate_index)]:
+                snapshot=_snapshot(Path(path),folder/(label+'.pdf'),deadline)
+                dimensions=_metadata(snapshot,index,folder,label,deadline)
+                if len(dimensions)!=2 or any(not math.isfinite(v) for v in dimensions) or max(abs(a-b) for a,b in zip(dimensions,page_size))>1e-4:
+                    raise Refused('page_dimensions_differ')
+                files.append((label,snapshot,index))
+            for dpi in DPIS:
+                images=[]
+                try:
+                    for label,path,index in files:images.append(_raster(path,index,dpi,page_size,folder,label+str(dpi),deadline))
+                    if not _outside_equal(images[1],images[2],rois,dpi/72):raise Refused('outside_roi_changed')
+                    for i,roi in enumerate(rois):
+                        deadline.remaining()
+                        if not passed[i]:continue
+                        box=tuple(int(v*dpi/72) for v in roi);crops=[im.crop(box) for im in images]
+                        try:
+                            old=metrics(crops[0],crops[1],dpi/72);new=metrics(crops[0],crops[2],dpi/72)
+                            if any(new[key]>old[key]+EPSILON for key in old):passed[i]=False
+                        except Refused as error:
+                            # Local ink/background uncertainty disqualifies this
+                            # ROI only. Grid/parser/resource errors remain global.
+                            if str(error) not in {'dirty_border','no_ink','background_changed'}:raise
+                            passed[i]=False
+                        finally:
+                            for crop in crops:crop.close()
+                finally:
+                    for image in images:image.close()
+            deadline.remaining();return passed
+    except (ValueError,TypeError,OSError,RuntimeError,subprocess.SubprocessError,ImportError):
+        return None

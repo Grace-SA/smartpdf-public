@@ -348,6 +348,7 @@ def test_resource_warning_propagates_without_rendering_or_target_mutation(tmp_pa
 
 def test_resource_flagged_page_skipped_in_all_later_cluster_attempts(monkeypatch):
  from smartppt import regional_order
+ monkeypatch.setattr(regional.shutil,'which',lambda name:'/test/pdftoppm')
  prior={n:{'source_ranges':[[0,1]],'warnings':[]} for n in (1,2)};calls=[];first=True
  def recover(source,target,pages,settings,**kwargs):
   nonlocal first
@@ -359,5 +360,5 @@ def test_resource_flagged_page_skipped_in_all_later_cluster_attempts(monkeypatch
  monkeypatch.setattr(regional,'_recover_regions',recover)
  monkeypatch.setattr(regional_order,'restore_source_order',lambda *a:None)
  result=regional.recover_regions(None,None,[1,2],None)
- assert calls==[[1,2],[2],[2],[2]]
+ assert calls==[[1,2],[2],[2],[2],[2],[2]] # original four plus normalized-tail two
  assert result[1] is prior[1] and result[1]['warnings']==['word_cluster_resource_limit']

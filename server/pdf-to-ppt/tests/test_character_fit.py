@@ -63,10 +63,10 @@ def test_character_retry_failure_keeps_prior_report(monkeypatch):
  calls=[]
  def recover(*args,**kwargs):
   calls.append(kwargs)
-  if kwargs.get('character_fit'):raise ConversionError('render_failed','test')
+  if kwargs.get('character_fit') and not kwargs.get('alternative_font') and not kwargs.get('normalize_tails'):raise ConversionError('render_failed','test')
   return {1:prior} if len(calls)==1 else {}
  monkeypatch.setattr(regional,'_recover_regions',recover)
  monkeypatch.setattr(regional_order,'restore_source_order',lambda *args:None)
  assert regional.recover_regions(None,None,[1],None)[1] is prior
  assert prior['warnings']==['additional_character_extension_unavailable']
- assert sum(bool(c.get('character_fit')) for c in calls)==1
+ assert sum(bool(c.get('character_fit')) and not c.get('alternative_font') and not c.get('normalize_tails') for c in calls)==1

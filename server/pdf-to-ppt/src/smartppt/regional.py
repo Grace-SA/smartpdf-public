@@ -10,6 +10,7 @@ from copy import deepcopy
 import ctypes
 from io import BytesIO
 import math
+import os
 import statistics
 import re
 import shutil
@@ -91,8 +92,9 @@ def intersects(a,b):
     return a[0]<b[2] and b[0]<a[2] and a[1]<b[3] and b[1]<a[3]
 
 
-def objects_for_page(page,grouped=True,word_regions=False,word_clusters=False,cluster_mode='adjacent'):
+def objects_for_page(page,grouped=True,word_regions=False,word_clusters=False,cluster_mode='adjacent',normalize_tails=False):
     if word_clusters and not word_regions:raise ValueError("word clusters require regional words")
+    if normalize_tails and not (word_clusters and cluster_mode=='collision'):raise ValueError("tail normalization requires complete collision components")
     runs,objects,warnings=extract_native(page,split_words=word_regions,allow_quarter_turns=word_regions,partial_regions=word_regions);groups=defaultdict(list)
     for run in runs:groups[run['object_id']].append(run)
     safe=[]
@@ -143,6 +145,12 @@ def objects_for_page(page,grouped=True,word_regions=False,word_clusters=False,cl
             neighbors=bounded_neighbors(memberships,cells)
             if neighbors is None:return [],sorted(set(warnings+['word_cluster_resource_limit']))
             clusters=connected_word_clusters(parts,boxes,neighbors,blocked_pixels,mode=cluster_mode)
+            if normalize_tails:
+                from .word_clusters import trim_generated_tails
+                # Normalize only after the complete original spatial graph was
+                # built. Never split components or weaken exact source owners.
+                clusters=[(group,trim_generated_tails(page,runs)) for group,runs in clusters]
+                clusters=[(group,runs) for group,runs in clusters if any(r.get('generated_tail_space_trimmed') for r in runs)]
             return [(group,runs) for group,runs in clusters if source_verified(page,runs)],warnings
         for i,(obj,run) in enumerate(parts):
             if any(intersects(boxes[i],box) for box in blocked_pixels):continue
@@ -478,10 +486,25 @@ def alternative_cmu_light(objects):
                 run['text']+unicodedata.normalize('NFKC',run['text'])) for run in runs)]
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None,word_clusters=False,cluster_mode='adjacent',light_shift=0,light_guard_deadline=None):
+def _screen_complete_components(objects,flags):
+    """Unknown assessment shape rejects the page; never admit part of a group."""
+    if (not isinstance(flags,list) or len(flags)!=sum(len(runs) for _,runs in objects)
+            or any(type(flag) is not bool for flag in flags)):
+        return []
+    kept=[];cursor=0
+    for obj in objects:
+        count=len(obj[1])
+        if count and all(flags[cursor:cursor+count]):kept.append(obj)
+        cursor+=count
+    return kept
+
+
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None,word_clusters=False,cluster_mode='adjacent',light_shift=0,light_guard_deadline=None,normalize_tails=False,tail_guard_deadline=None):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
     if extend and not word_regions:raise ValueError('extensions require regional words')
+    if normalize_tails and not (extend and word_clusters and cluster_mode=='collision' and alternative_font is None and spacing_retry):
+        raise ValueError('normalized tails require additive original-font collision recovery')
     if word_clusters and not (extend and word_regions):raise ValueError('word clusters require additive regional recovery')
     if character_fit and not (extend and spacing_retry):raise ValueError('character fitting requires additive spacing extension')
     if alternative_font is not None and (alternative_font not in ('base-sans','cmu-light') or not (extend and spacing_retry)):
@@ -489,6 +512,7 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
     if light_shift not in (0,.1) or (light_shift and alternative_font!='cmu-light'):
         raise ValueError('unsupported optional Light vertical trial')
     if alternative_font=='cmu-light' and light_guard_deadline is not None and time.monotonic()>=light_guard_deadline:return {}
+    if normalize_tails and tail_guard_deadline is not None and time.monotonic()>=tail_guard_deadline:return {}
     reports={};minimum_coverage=minimum_coverage or {}
     prior={n:{i for a,b in report['source_ranges'] for i in range(a,b)} for n,report in minimum_coverage.items()}
     with tempfile.TemporaryDirectory(prefix='smartppt-regions-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
@@ -508,7 +532,7 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
                 if (character_fit or alternative_font) and page.get_rotation():continue
-                objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions,**({'word_clusters':True,'cluster_mode':cluster_mode} if word_clusters else {}))
+                objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions,**({'word_clusters':True,'cluster_mode':cluster_mode,**({'normalize_tails':True} if normalize_tails else {})} if word_clusters else {}))
                 if word_clusters and 'word_cluster_resource_limit' in warnings:
                     previous=minimum_coverage.get(number)
                     if previous is not None and 'word_cluster_resource_limit' not in previous['warnings']:
@@ -593,6 +617,29 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                     if not changed:break
                     verified=folder/f'pruned-{iteration}.pptx';final.save(verified)
                     final_pdf=render([verified])[0]
+            if normalize_tails and selected:
+                from .light_visual_guard import assess
+                changed=False
+                for number,objects in list(selected.items()):
+                    old_path,old_index=location(baseline_pdf,number)
+                    new_path,new_index=location(final_pdf,number)
+                    flags=assess(source,number-1,old_path,old_index,new_path,new_index,
+                                 pages[number].get_size(),[run['box'] for _,runs in objects for run in runs],
+                                 timeout=min(120,tail_guard_deadline-time.monotonic()) if tail_guard_deadline is not None else 120)
+                    kept=_screen_complete_components(objects,flags)
+                    if len(kept)==len(objects):continue
+                    changed=True
+                    if kept:selected[number]=kept;draw(final,number,kept)
+                    else:
+                        del selected[number]
+                        slide=final.slides[number-1]
+                        for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
+                        for shape in fallback.slides[number-1].shapes:
+                            slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
+                if not selected:return {}
+                if changed:
+                    verified=folder/'tail-filtered.pptx';final.save(verified)
+                    final_pdf=render([verified])[0]
             # A second whole-page check catches interactions between text objects,
             # clipping, shared resources and pixels outside their measured boxes.
             for number,objects in selected.items():
@@ -615,13 +662,14 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                         measured=score_regions(expected,actual,boxes,final) if boxes else None
                         if measured:final_scores.extend(measured)
                         else:regions_valid=False
-                if regions_valid and alternative_font=='cmu-light':
+                if regions_valid and (alternative_font=='cmu-light' or normalize_tails):
                     from .light_visual_guard import verify
                     old_path,old_index=location(baseline_pdf,number)
                     new_path,new_index=location(final_pdf,number)
+                    deadline=tail_guard_deadline if normalize_tails else light_guard_deadline
                     regions_valid=verify(source,number-1,old_path,old_index,new_path,new_index,
                                          pages[number].get_size(),[run['box'] for _,runs in objects for run in runs],
-                                         timeout=min(120,light_guard_deadline-time.monotonic()) if light_guard_deadline is not None else 120)
+                                         timeout=min(120,deadline-time.monotonic()) if deadline is not None else 120)
                 if not improves or not regions_valid or not acceptable_page(gate_baseline,score):
                     slide=final.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
@@ -650,6 +698,11 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                         report['word_cluster_mode']=cluster_mode
                     report['extension_spacing_retry']=spacing_retry
                     report['extension_calibration_mode']='median-character-height' if character_fit else 'word-bounds'
+                    if normalize_tails:
+                        report['normalized_tail_cross_renderer_dpis']=[144,216,288,432]
+                        report['omitted_generated_separator_indices']=sorted(r['source_original_end_index']-1 for r in runs if r.get('generated_tail_space_trimmed'))
+                        warning='inferred_terminal_spaces_omitted_from_separate_textboxes'
+                        if warning not in report['warnings']:report['warnings'].append(warning)
                     if alternative_font:
                         if alternative_font=='base-sans':
                             from .base_font import FAMILY
@@ -740,6 +793,20 @@ def recover_regions(source,target,page_numbers,settings):
                 try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=character_fit,alternative_font='cmu-light',light_shift=light_shift,light_guard_deadline=light_guard_deadline))
                 except ConversionError:
                     for n in remaining:reports[n]['warnings'].append('additional_cmu_light_extension_unavailable')
+                    break
+        # Generated separators never become source-authorized glyphs. Only a
+        # copied, trimmed collision component may enter this final additive
+        # stage; all members must pass four-DPI screening, then the rebuilt
+        # combination is verified again. Existing accepted routes stay intact.
+        if os.name=='posix' and shutil.which('pdftoppm'):
+            tail_guard_deadline=time.monotonic()+120
+            for character_fit in (True,False):
+                if time.monotonic()>=tail_guard_deadline:break
+                tail_pages=[n for n in remaining if 'word_cluster_resource_limit' not in reports[n]['warnings']]
+                if not tail_pages:break
+                try:reports.update(_recover_regions(source,target,tail_pages,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=character_fit,word_clusters=True,cluster_mode='collision',normalize_tails=True,tail_guard_deadline=tail_guard_deadline))
+                except ConversionError:
+                    for n in remaining:reports[n]['warnings'].append('additional_normalized_cluster_extension_unavailable')
                     break
     from .regional_order import restore_source_order
     restore_source_order(source,target,reports,settings)
