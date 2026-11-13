@@ -48,6 +48,7 @@ def fingerprint():
             "layout_paragraph_rows.py",
             "layout_header_spans.py",
             "layout_native_rowspans.py",
+            "layout_native_order.py",
             "layout_forms.py",
             "form_workbook.py",
             "xlsx_form_rules.py",

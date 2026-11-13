@@ -677,31 +677,20 @@ def refine_predictions(item, page):
     from layout_paragraph_rows import recover as recover_paragraphs
     from layout_header_spans import recover as recover_header_spans
     from layout_native_rowspans import recover as recover_native_rowspans
+    from layout_native_order import recover as recover_native_order
 
-    return [
-        recover_native_rowspans(
-            recover_header_spans(
-                recover_paragraphs(
-                    recover_columns(
-                        recover_local_sections(
-                            recover_section_rows(
-                                recover_source_rows(
-                                    recover_header_tree(part, page), page
-                                ),
-                                page,
-                            ),
-                            page,
-                        ),
-                        page,
-                    ),
-                    page,
-                ),
-                page,
-            ),
-            page,
-        )
-        for part in result
-    ]
+    recovered = []
+    for part in result:
+        part = recover_header_tree(part, page)
+        part = recover_source_rows(part, page)
+        part = recover_section_rows(part, page)
+        part = recover_local_sections(part, page)
+        part = recover_columns(part, page)
+        part = recover_paragraphs(part, page)
+        part = recover_header_spans(part, page)
+        part = recover_native_rowspans(part, page)
+        recovered.append(recover_native_order(part, page))
+    return recovered
 
 
 def restore_stub_header(data, page):
