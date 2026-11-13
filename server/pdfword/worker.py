@@ -107,6 +107,10 @@ def needs_ocr(page):
                 raise Rejected("Page exceeds object limit.")
             parent_matrix = ancestors[obj.level]
             bounds = parent_matrix.on_rect(*obj.get_bounds())
+            # Fill alpha alone misses soft masks/blend modes, and page-level
+            # transparency can be false even while an individual object is masked.
+            if obj.type in (pdf.raw.FPDF_PAGEOBJ_TEXT, pdf.raw.FPDF_PAGEOBJ_FORM):
+                unsafe |= bool(pdf.raw.FPDFPageObj_HasTransparency(obj))
             if obj.type == pdf.raw.FPDF_PAGEOBJ_FORM:
                 ancestors[obj.level + 1] = obj.get_matrix().multiply(parent_matrix)
                 if obj.level == 7:
