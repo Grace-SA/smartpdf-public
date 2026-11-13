@@ -11,6 +11,7 @@ import ctypes
 from io import BytesIO
 import math
 import statistics
+import re
 import shutil
 from pathlib import Path
 import tempfile
@@ -410,11 +411,36 @@ def compact_source_ranges(indices):
     return ranges
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False):
+def alternative_base_sans(objects):
+    """Try a reviewed substitute, never assert identity with an uploaded font.
+
+    Restrict to observed regular Helvetica names, full raw/NFKC cmap coverage,
+    and existing isolated-word ownership. Every accepted word still passes the
+    unchanged geometry, region, retained-pixel and whole-page checks.
+    """
+    from .base_font import FAMILY,approved_cmap
+    cmap=approved_cmap();selected=[]
+    for group,runs in objects:
+        if not runs:continue
+        def eligible(run):
+            name=re.sub(r'^[A-Z]{6}\+','',run.get('source_base_font',''))
+            text=run['text']
+            return (name in {'Helvetica','HelveticaNeueLTStd-Roman'} and
+                    not run['bold'] and not run['italic'] and not run.get('rotation') and
+                    run['font']!=FAMILY and bool(text.strip()) and
+                    all(ord(c) in cmap or c in '\t\r\n' for c in text+unicodedata.normalize('NFKC',text)))
+        if all(eligible(run) for run in runs):
+            selected.append((group,[dict(run,font=FAMILY,substituted=True) for run in runs]))
+    return selected
+
+
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
     if extend and not word_regions:raise ValueError('extensions require isolated words')
     if character_fit and not (extend and spacing_retry):raise ValueError('character fitting requires additive spacing extension')
+    if alternative_font is not None and (alternative_font!='base-sans' or not (extend and spacing_retry)):
+        raise ValueError('alternative font requires approved additive spacing extension')
     reports={};minimum_coverage=minimum_coverage or {}
     prior={n:{i for a,b in report['source_ranges'] for i in range(a,b)} for n,report in minimum_coverage.items()}
     with tempfile.TemporaryDirectory(prefix='smartppt-regions-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
@@ -433,8 +459,9 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
         try:
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
-                if character_fit and page.get_rotation():continue
+                if (character_fit or alternative_font) and page.get_rotation():continue
                 objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions)
+                if alternative_font:objects=alternative_base_sans(objects)
                 if character_fit:objects=[(group,runs) for group,runs in objects if not any(r.get('rotation') for r in runs)]
                 if extend:
                     if number not in prior:continue
@@ -549,9 +576,16 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                     'graphics':'raster; not editable'}
                 if extend:
                     previous=minimum_coverage[number];report=reports[number]
+                    report['warnings']=list(dict.fromkeys(previous.get('warnings',[])+report['warnings']))
                     report['regional_strategy']='source-words-extended'
                     report['extension_spacing_retry']=spacing_retry
                     report['extension_calibration_mode']='median-character-height' if character_fit else 'word-bounds'
+                    if alternative_font:
+                        from .base_font import FAMILY
+                        report['extension_font_strategy']='base-sans-substitute'
+                        report['calibration_font']=FAMILY
+                        if 'reviewed_font_substitute_not_source_identity' not in report['warnings']:
+                            report['warnings'].append('reviewed_font_substitute_not_source_identity')
                     report['retained_regions']=deepcopy(previous)
                     report['added_source_ranges']=compact_source_ranges(coverage-prior[number])
                     report['added_editable_runs']=len(runs)
@@ -598,6 +632,13 @@ def recover_regions(source,target,page_numbers,settings):
         try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=True))
         except ConversionError:
             for n in remaining:reports[n]['warnings'].append('additional_character_extension_unavailable')
+        # Two bounded substitute-font attempts extend the same verified package;
+        # neither can remove an earlier accepted source occurrence or shape.
+        for character_fit in (True,False):
+            try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=character_fit,alternative_font='base-sans'))
+            except ConversionError:
+                for n in remaining:reports[n]['warnings'].append('additional_base_sans_extension_unavailable')
+                break
     from .regional_order import restore_source_order
     restore_source_order(source,target,reports,settings)
     return reports

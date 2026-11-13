@@ -164,3 +164,13 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 以固定 FontTools 将完整 CFF 转为重命名的 TrueType，保留 Unicode、布局表、字距和行度量、斜体/下划线信息；曲线整数化可能带来一个字体单位的极值差异，仍须通过实际像素门槛。渲染器与 EOT 嵌入共享相同字节，不复制上传字体。保留原 `fsType=12` 可编辑嵌入权限，不将它改成无限制安装权限。完整 GFL、LPPL 与变更清单包含于运行包及交付字体；不是原字体完全一致或各 Office 客户端已验收的承诺。
 
 区域恢复增加一次受限的逐字符高度中位数校准，只追加新通过的完整词语；旋转、Unicode 展开、来源不明确或不匹配时不使用。既有文字、原始整页误差基准、局部像素与位置门槛保持不变。
+
+独立固定网格墨迹诊断（POSIX + Poppler，仅诊断，不替换严格边框或转换门槛）：
+
+```sh
+.venv/bin/python tools/public-native-ink.py --source /path/to/new-run/fw9/source.pdf --rendered /path/to/new-run/fw9/candidate.pdf --output /path/to/new-ink-review.json
+```
+
+该工具不进行图像配准、平移或缩放；用几何位置而不是相同文本选择对应词。邻近词重叠、边界不纯、无墨迹或像素网格不一致时明确弃权。仅有少量可独立观察的词不能证明整页准确。原有 Poppler 严格边框失败仍保留：完整字体的 ascent/descent 与 PDF 子集不同可能改变解析框，但不能因此压缩字体指标、遮蔽重音符号或豁免真实错位。输入、页数、像素、词数及 XML 提取都有显式上限；缺少 POSIX 文件大小限制时拒绝执行。
+
+另有两次受限的 Base Sans 替代字体追加尝试，仅针对明确的 `Helvetica` 或 `HelveticaNeueLTStd-Roman` 常规字形；这不是源字体完全一致的声明。只有通过既有位置、局部及整页像素检查的新词才会追加，已验证文字与原始误差基准保持不变，报告明确标记字体替代。
