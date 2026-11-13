@@ -59,7 +59,7 @@ def join_words(words):
     return text
 
 
-def words_to_blocks(words, width, height, split_columns=True):
+def words_to_blocks(words, width, height, split_columns=True, merge_lines=True):
     if not words:
         return []
     # Detect a persistent central gutter before grouping baselines. With narrow
@@ -168,6 +168,20 @@ def words_to_blocks(words, width, height, split_columns=True):
                 if len(ordered_words) > 1 and re.fullmatch(r"[•●▪]|[-–]|\d+[.)]|[a-zA-Z][.)]", ordered_words[0]["text"]):
                     blocks[-1]["list_indent"] = ordered_words[1]["x0"] - bounds[0]
     ordered = order_blocks(blocks)
+    if not merge_lines:
+        # Groups separated horizontally on the same baseline are still one
+        # cell line, not separate records.
+        result = []
+        for block in sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0])):
+            prev = result[-1] if result else None
+            if prev and abs(prev["bbox"][1] - block["bbox"][1]) <= max(1, normal * 0.25):
+                block["runs"][0]["text"] = " " + block["runs"][0]["text"]
+                prev["runs"].extend(block["runs"])
+                prev["text"] += " " + block["text"]
+                prev["bbox"] = union([prev["bbox"], block["bbox"]])
+            else:
+                result.append(block)
+        return result
     result = []
     for block in ordered:
         prev = result[-1] if result else None
@@ -216,6 +230,7 @@ def native_tables(page, words):
         if (len(xs) - 1) * (len(ys) - 1) > 10000:
             raise Rejected("Table exceeds cell budget.")
         cells = []
+        line_records = []
         for b in boxes:
             c0, c1 = (
                 min(range(len(xs)), key=lambda j: abs(xs[j] - b[k])) for k in (0, 2)
@@ -237,7 +252,8 @@ def native_tables(page, words):
             inside = extract_words(
                 chars, return_chars=True, x_tolerance=2, y_tolerance=3
             )
-            paras = words_to_blocks(inside, page.width, page.height, split_columns=False)
+            paras = words_to_blocks(inside, page.width, page.height, split_columns=False, merge_lines=False)
+            line_records.append((r0, r1, paras))
             cells.append(
                 dict(
                     row=r0,
@@ -249,6 +265,33 @@ def native_tables(page, words):
                     header=False,
                 )
             )
+        # A ruled cell can contain several logical records. Preserve missing
+        # record positions across neighbouring cells when their baselines form
+        # a regular grid, instead of moving a later value up beside another row.
+        bands = {}
+        for index, (r0, r1, paras) in enumerate(line_records):
+            bands.setdefault((r0, r1), []).append((index, paras))
+        for band in bands.values():
+            lines = [(p["bbox"][1], index, p) for index, paras in band for p in paras]
+            if len(band) < 2 or not lines:
+                continue
+            tolerance = max(0.5, median(p["size"] for _, _, p in lines) * 0.25)
+            slots = []
+            for top, index, para in sorted(lines, key=lambda item: item[0]):
+                if not slots or top - slots[-1][0][0] > tolerance:
+                    slots.append([])
+                slots[-1].append((top, index, para))
+            tops = [median(top for top, _, _ in slot) for slot in slots]
+            gaps = [b-a for a,b in zip(tops,tops[1:])]
+            regular = (len(slots) >= 3 and sum(len({i for _, i, _ in slot}) >= 2 for slot in slots) >= 2
+                       and min(gaps) >= median(p["size"] for _, _, p in lines) * 0.8
+                       and max(gaps) <= min(gaps) * 1.25)
+            if regular:
+                for index, paras in band:
+                    if paras:
+                        cells[index]["text"] = "\n".join(
+                            " ".join(p["text"] for _, i, p in slot if i == index)
+                            for slot in slots)
         if sum(bool(c["text"]) for c in cells) < 2:
             continue
         slots = set()
