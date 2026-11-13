@@ -42,6 +42,62 @@ def table_text(value):
     )
 
 
+def cell_text(node):
+    """Retain block/line boundaries without inserting spaces into inline runs."""
+    pieces = []
+
+    def boundary():
+        if pieces and not pieces[-1].endswith("\n"):
+            pieces.append("\n")
+
+    def visit(element):
+        if element.tag == "br":
+            pieces.append("\n")
+            return
+        if element.tag == "p":
+            boundary()
+        value = element.text_content()
+        if (
+            element.tag in {"sup", "sub"}
+            and re.fullmatch("[0-9+-]+", value)
+            and not element.xpath(".//p|.//br")
+        ):
+            pieces.append(value.translate(str.maketrans(
+                "0123456789+-",
+                "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻" if element.tag == "sup" else "₀₁₂₃₄₅₆₇₈₉₊₋",
+            )))
+        else:
+            if element.text:
+                pieces.append(element.text)
+            for child in element:
+                visit(child)
+                if child.tail and not (child.tag == "p" and not child.tail.strip()):
+                    pieces.append(child.tail)
+        if element.tag == "p":
+            boundary()
+
+    visit(node)
+    return plain(table_text("".join(pieces).strip()))
+
+
+def validate_table_structure(root):
+    """Do not quietly drop model text placed outside the reconstructed cells."""
+    structure = {
+        "table": {"tr", "thead", "tbody", "tfoot"},
+        "thead": {"tr"}, "tbody": {"tr"}, "tfoot": {"tr"},
+        "tr": {"td", "th"},
+    }
+    for element in root.iter():
+        if element.tag in structure:
+            if (element.text or "").strip():
+                raise Rejected("Table contains text outside cells; review the source.")
+            for child in element:
+                if child.tag not in structure[element.tag] or (child.tail or "").strip():
+                    raise Rejected("Table contains unassigned content; review the source.")
+        elif any(child.tag in structure or child.tag in {"td", "th"} for child in element):
+            raise Rejected("Unsupported nested table structure.")
+
+
 def table_from_html(markup):
     """Accept only a complete bounded table; never interpret arbitrary model HTML."""
     if (
@@ -91,6 +147,7 @@ def table_from_html(markup):
     }
     if any(n.tag not in allowed for n in root.iter()) or root.xpath(".//table"):
         raise Rejected("Unsupported nested table content.")
+    validate_table_structure(root)
     rows = root.xpath("./tr|./thead/tr|./tbody/tr|./tfoot/tr")
     if not 1 <= len(rows) <= 500:
         raise Rejected("Table exceeds row limit.")
@@ -111,25 +168,13 @@ def table_from_html(markup):
             if occupied & slots or len(occupied | slots) > MAX_CELLS:
                 raise Rejected("Overlapping or oversized table.")
             occupied.update(slots)
-            for br in node.xpath(".//br"):
-                br.tail = "\n" + (br.tail or "")
-            for script in node.xpath(".//sup|.//sub"):
-                value = script.text_content()
-                if re.fullmatch("[0-9+-]+", value):
-                    script.clear(keep_tail=True)
-                    script.text = value.translate(
-                        str.maketrans(
-                            "0123456789+-",
-                            "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻" if script.tag == "sup" else "₀₁₂₃₄₅₆₇₈₉₊₋",
-                        )
-                    )
             cells.append(
                 dict(
                     row=r,
                     col=c,
                     rowspan=rs,
                     colspan=cs,
-                    text=plain(table_text(node.text_content().strip())),
+                    text=cell_text(node),
                     header=node.tag == "th",
                 )
             )
@@ -218,3 +263,4 @@ def validate(model):
     if total > MAX_TEXT:
         raise Rejected("Document exceeds text limit.")
     return model
+
