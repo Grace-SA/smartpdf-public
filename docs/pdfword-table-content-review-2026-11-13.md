@@ -8,12 +8,14 @@ Base: `dad8a4f7e00559982a8df19a1e392fcf5436dda8`, branch `codex/pdfword-general`
 - Text or paragraphs outside actual table cells were accepted but omitted from the output. Structural validation now refuses such unassigned content instead of claiming a complete conversion. Whitespace and ordinary table row groups remain supported.
 - Independent review caught an additional superscript/subscript shortcut that concatenated line-separated digits, plus formatting whitespace that could introduce extra blank lines. Both were corrected and covered by regressions.
 - Existing merged-cell ownership, Unicode text, numeric super/subscripts, explicit repeated line breaks and editing/reopening are preserved.
+- A second review found that the offline release gate accepted impossible rates (such as negative character error rate or accuracy above 100%), ambiguous native/OCR classifications, and boolean `false` as a zero critical-error count. Rates now require valid numeric bounds, native/OCR classification must be a boolean, and critical-error counts must be integers. This prevents malformed evidence from declaring production readiness; it does not improve recognition accuracy by itself.
 
 ## Verification
 
 - 12 new regression tests; running them against the unchanged base model produced 13 failing assertions (including parameterized structural-text cases), confirming the repros.
-- Final complete available PDF-to-Word Python discovery: **59 passed, zero skips**, using pinned pypdfium2 5.14.0, pypdf 6.21.4, python-docx 1.2.0, pdfplumber 0.11.9, Pillow 13.0.0 and lxml 6.1.1. OpenCV preprocessing tests additionally used opencv-python-headless 5.0.0.93 and NumPy 2.5.4. These optional local test dependencies do not change the production requirements.
-- Python compilation passed. A separate reviewer reran all 12 added regressions and found no remaining blockers in this scope.
+- Five additional acceptance-gate tests include parameterized malformed-evidence cases, valid synthetic evidence and refusals remaining in the denominator. Against the original acceptance script they produced 14 assertion failures.
+- Final complete available PDF-to-Word Python discovery: **64 passed, zero skips**, using pinned pypdfium2 5.14.0, pypdf 6.21.4, python-docx 1.2.0, pdfplumber 0.11.9, Pillow 13.0.0 and lxml 6.1.1. OpenCV preprocessing tests additionally used opencv-python-headless 5.0.0.93 and NumPy 2.5.4. These optional local test dependencies do not change the production requirements.
+- Python compilation passed. A separate reviewer reran all 12 content regressions and all five acceptance tests, and found no remaining blockers in the reviewed scope.
 - Three original synthetic DOCX examples (multiline amounts/units, merged headers, Chinese text) were exported and independently rendered by LibreOffice. All three were one page; extracted text retained separate amounts, line boundaries and characters. All three rendered pages were visually inspected for clipping/overlap. A regression also verifies the saved DOCX XML line break directly after edit/reopen.
 
 ## Release status and limitations

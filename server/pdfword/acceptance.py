@@ -55,6 +55,7 @@ def evaluate(report):
             and row.get("visual_review") is True
             and row.get("edit_reopen") is True
             and row.get("ground_truth_verified") is True
+            and type(row.get("native")) is bool
         )
         metrics = row.get("metrics", {})
 
@@ -63,6 +64,7 @@ def evaluate(report):
             return (
                 type(value) in (int, float)
                 and math.isfinite(value)
+                and 0 <= value <= 1
                 and (value >= bound if minimum else value <= bound)
             )
 
@@ -84,7 +86,11 @@ def evaluate(report):
                 and threshold("cell_accuracy", 0.99, True)
                 and threshold("teds", 0.98, True)
             )
-        valid = bool(valid and metrics.get("critical_errors") == 0)
+        valid = bool(
+            valid
+            and type(metrics.get("critical_errors")) is int
+            and metrics["critical_errors"] == 0
+        )
         passed += valid
         for c in categories:
             groups[c].append(valid)
@@ -134,3 +140,4 @@ if __name__ == "__main__":
     result = evaluate(json.loads(open(args.report).read()))
     print(json.dumps(result, indent=2))
     raise SystemExit(0 if result["ready"] else 2)
+
