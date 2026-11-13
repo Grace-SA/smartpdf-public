@@ -5,6 +5,7 @@ import io, json, os, re, sys, urllib.request, zipfile
 import math, unicodedata
 from statistics import median
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from copy import copy
 import pdfplumber
 from pypdf import PdfReader, PdfWriter
@@ -66,6 +67,10 @@ def clean(text):
     text = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
     if len(text) > 32767:
         raise ConversionError("A cell exceeds the Excel text limit.")
+    if any(0xD800 <= ord(c) <= 0xDFFF or ord(c) in (0xFFFE, 0xFFFF) for c in text):
+        raise ConversionError(
+            "A cell contains characters that Excel cannot store safely."
+        )
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
 
 
@@ -476,6 +481,19 @@ def readable_heights(table, widths, font_size):
 
 
 def write_workbook(tables, output, layout):
+    output = Path(output)
+    # Never expose a partial ZIP or overwrite a previous valid output before
+    # serialization, drawing attachment and independent checks all succeed.
+    with TemporaryDirectory(prefix=".pdf-excel-workbook-", dir=output.parent) as tmp:
+        pending = Path(tmp) / "workbook.xlsx"
+        preview = _write_workbook(tables, pending, layout)
+        if pending.stat().st_size > MAX_BYTES:
+            raise ConversionError("The workbook exceeds the download size limit.")
+        os.replace(pending, output)
+        return preview
+
+
+def _write_workbook(tables, output, layout):
     original_tables = tables
     try:
         tables = shared_columns(tables, layout, MAX_CELLS)
@@ -663,6 +681,15 @@ def write_workbook(tables, output, layout):
                 tree = ET.fromstring(z.read(name))
                 if any(x.tag.rsplit("}", 1)[-1] == "f" for x in tree.iter()):
                     raise ConversionError("Unsafe spreadsheet output.")
+            elif name.endswith(".rels"):
+                tree = ET.fromstring(z.read(name))
+                if any(
+                    e.get("TargetMode", "").lower() == "external"
+                    or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", e.get("Target", ""))
+                    or e.get("Target", "").startswith(("//", "\\\\"))
+                    for e in tree
+                ):
+                    raise ConversionError("Unsafe spreadsheet external relationship.")
     return preview
 
 
@@ -921,9 +948,6 @@ def convert_pages(source, output, selected, count, layout, ocr):
         "Only detected tables and supported forms are included as cells. Text and numbers are stored as text to preserve spelling, leading zeros and precision."
     )
     preview = write_workbook(tables, output, layout)
-    if output.stat().st_size > MAX_BYTES:
-        output.unlink()
-        raise ConversionError("The workbook exceeds the download size limit.")
     return {
         "pages": len(selected),
         "tables": len(tables),
