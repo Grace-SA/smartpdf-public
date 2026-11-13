@@ -372,12 +372,48 @@ def restore_native_spans(model, physical):
 
     A complete matching grid can establish that a wrapped label occupies one
     cell. Multiple numeric values, independently capitalized labels and existing
-    model spans are never joined by this recovery path.
+    model spans are not joined. A single label may expand into verified empty
+    cells; short CJK fragments can join inside one physical vertical cell.
     """
     from copy import deepcopy
 
     if not physical.get("closedGrid"):
         return model
+    # Extending an existing span or joining CJK fragments requires more than
+    # one proposed rectangle: verify the complete grid and all numeric anchors.
+    pr, pc = len(physical.get("heights", [])), len(physical.get("widths", []))
+    verified_grid = (
+        pr > 1
+        and pc > 1
+        and pr == len(model.get("heights", []))
+        and pc == len(model.get("widths", []))
+    )
+    covered = set()
+    physical_index = {(c["r"], c["c"]): c for c in physical["cells"]}
+    if verified_grid:
+        for entry in physical["cells"]:
+            r, c, rs, cs = (entry[k] for k in ("r", "c", "rs", "cs"))
+            if not 0 <= r < r + rs <= pr or not 0 <= c < c + cs <= pc:
+                verified_grid = False
+                break
+            area = {(y, x) for y in range(r, r + rs) for x in range(c, c + cs)}
+            if covered & area:
+                verified_grid = False
+                break
+            covered.update(area)
+        verified_grid = verified_grid and len(covered) == pr * pc
+    if verified_grid:
+        for entry in model["cells"]:
+            if not any(ch.isdigit() for ch in entry["text"]):
+                continue
+            other = physical_index.get((entry["r"], entry["c"]))
+            if (
+                other is None
+                or (entry["rs"], entry["cs"]) != (other["rs"], other["cs"])
+                or "".join(entry["text"].split()) != "".join(other["text"].split())
+            ):
+                verified_grid = False
+                break
     cells = deepcopy(model["cells"])
     changed = False
     for target in physical["cells"]:
@@ -398,19 +434,41 @@ def restore_native_spans(model, physical):
             or c["r"] + c["rs"] > end
             or c["c"] < left
             or c["c"] + c["cs"] > right
-            or c["rs"] > 1
-            or c["cs"] > 1
             for c in members
         ):
             continue
         nonempty = sorted(
             [c for c in members if c["text"].strip()], key=lambda c: (c["r"], c["c"])
         )
+        if len(members) == 1 and all(
+            members[0][key] == target[key] for key in ("r", "c", "rs", "cs")
+        ):
+            # An already correct span retains its text and typography evidence.
+            continue
+        existing_span = any(c["rs"] > 1 or c["cs"] > 1 for c in members)
+        if existing_span and not (
+            verified_grid
+            and len(nonempty) == 1
+            and target["cs"] == nonempty[0]["cs"] == 1
+            and target["r"] == nonempty[0]["r"]
+            and target["c"] == nonempty[0]["c"]
+            and any(ch.isalpha() for ch in nonempty[0]["text"])
+            and not any(ch.isdigit() for ch in nonempty[0]["text"])
+        ):
+            continue
+        cjk_fragments = verified_grid and all(
+            1 <= len("".join(c["text"].split())) <= 8
+            and all("\u3400" <= ch <= "\u9fff" for ch in c["text"] if not ch.isspace())
+            for c in nonempty
+        )
         if len(nonempty) > 1 and (
             target["cs"] != 1
             or target["rs"] > 4
             or any(any(ch.isdigit() for ch in c["text"]) for c in nonempty)
-            or any(not c["text"].lstrip()[0].islower() for c in nonempty[1:])
+            or (
+                not cjk_fragments
+                and any(not c["text"].lstrip()[0].islower() for c in nonempty[1:])
+            )
         ):
             continue
         before = "".join("".join(c["text"].split()) for c in nonempty)
@@ -614,10 +672,22 @@ def refine_predictions(item, page):
     from layout_header_tree import recover as recover_header_tree
 
     from layout_section_rows import recover as recover_section_rows
+    from layout_columns import recover as recover_columns
+    from layout_paragraph_rows import recover as recover_paragraphs
+    from layout_header_spans import recover as recover_header_spans
 
     return [
-        recover_section_rows(
-            recover_source_rows(recover_header_tree(part, page), page), page
+        recover_header_spans(
+            recover_paragraphs(
+                recover_columns(
+                    recover_section_rows(
+                        recover_source_rows(recover_header_tree(part, page), page), page
+                    ),
+                    page,
+                ),
+                page,
+            ),
+            page,
         )
         for part in result
     ]

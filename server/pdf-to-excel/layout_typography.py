@@ -7,6 +7,24 @@ import math
 import unicodedata
 
 
+def output_font_widths(cell):
+    """Metrics for the workbook face, which can be wider than embedded PDF glyphs."""
+    from pdfminer.fontmetrics import FONT_METRICS
+
+    base = {
+        "Arial": "Arial",
+        "Times New Roman": "TimesNewRoman",
+        "Courier New": "CourierNew",
+    }.get(cell.get("fontName", "Arial"))
+    if base is None:
+        return {}
+    style = ("Bold" if cell.get("bold") else "") + (
+        "Italic" if cell.get("italic") else ""
+    )
+    key = base + ("," + style if style else "")
+    return FONT_METRICS[key][1]
+
+
 def valid_glyph(ch):
     vals = [ch.get(k, math.nan) for k in ("x0", "x1", "top", "bottom", "size", "width")]
     if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals):

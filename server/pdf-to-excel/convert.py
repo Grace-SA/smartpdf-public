@@ -386,6 +386,8 @@ def scan_leader_tables(page):
 
 
 def readable_heights(table, widths, font_size):
+    from layout_typography import output_font_widths
+
     source_geometry = table.get("sourceGeometry", False) or table.get(
         "sourceTypography", False
     )
@@ -408,11 +410,14 @@ def readable_heights(table, widths, font_size):
                 factor = 0.72
             else:
                 factor = 0.61
-            total += cell.get("glyphWidths", {}).get(char, factor * cell_size)
+            source_width = cell.get("glyphWidths", {}).get(char, factor * cell_size)
+            output_width = face_widths.get(char, 0) * cell_size / 1000
+            total += max(source_width, output_width)
         return total
 
     for cell in table["cells"]:
         cell_size = cell.get("fontSize", font_size)
+        face_widths = output_font_widths(cell)
         verified = cell.get("sourceFont", False)
         if source_geometry and not cell["text"].strip():
             continue
