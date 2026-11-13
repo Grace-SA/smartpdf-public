@@ -4,6 +4,7 @@ import math
 import re
 from statistics import median
 from model import Rejected, table_header_rows
+from columns import independent_baselines
 
 
 def contains(a, b, pad=0):
@@ -56,9 +57,26 @@ def join_words(words):
     return text
 
 
-def words_to_blocks(words, width, height):
+def words_to_blocks(words, width, height, split_columns=True):
     if not words:
         return []
+    # Detect a persistent central gutter before grouping baselines. With narrow
+    # gutters, independently positioned column text can otherwise become one
+    # paragraph (especially when headings use a different font size).
+    if split_columns:
+        left = [w for w in words if w["x1"] <= width / 2]
+        right = [w for w in words if w["x0"] >= width / 2]
+        groups = (left, right)
+        if (len(left) + len(right) == len(words)
+            and all(len(group) >= 20 for group in groups)
+            and min(w["x0"] for w in right) - max(w["x1"] for w in left) >= 2
+            and all(len({round(w["top"] / 4) for w in group}) >= 6 for group in groups)
+            and all(sum(len(w["text"]) for w in group) >= 160 for group in groups)
+            and independent_baselines([[w["top"] for w in group] for group in groups])
+            and min(max(w["bottom"] for w in group) for group in groups)
+                - max(min(w["top"] for w in group) for group in groups) > 60):
+            return [block for group in groups
+                    for block in words_to_blocks(group, width, height, False)]
     sizes = [c.get("size", 11) for w in words for c in w.get("chars", [])]
     normal = median(sizes) if sizes else 11
     lines = []
@@ -203,7 +221,7 @@ def native_tables(page, words):
             inside = extract_words(
                 chars, return_chars=True, x_tolerance=2, y_tolerance=3
             )
-            paras = words_to_blocks(inside, page.width, page.height)
+            paras = words_to_blocks(inside, page.width, page.height, split_columns=False)
             cells.append(
                 dict(
                     row=r0,

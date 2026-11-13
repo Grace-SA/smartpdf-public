@@ -1,6 +1,25 @@
 """Conservative geometric column bands; unsupported layouts keep editable flow."""
 
 
+from bisect import bisect_left
+
+
+def independent_baselines(groups):
+    """Require independently wrapping text, not uniform paired table rows."""
+    tops = [sorted(set(round(y, 1) for y in group)) for group in groups]
+    if len(tops) != 2:
+        return False
+    for own, other in (tops, tops[::-1]):
+        independent = 0
+        for value in own:
+            index = bisect_left(other, value)
+            if all(abs(value - neighbour) > 3 for neighbour in other[max(0,index-1):index+1]):
+                independent += 1
+        if independent < max(3, len(own) * 0.25):
+            return False
+    return True
+
+
 def column_flow(blocks, width):
     body = [b for b in blocks if b["kind"] not in ("header", "footer")]
     if len(body) < 4:
@@ -52,7 +71,15 @@ def column_flow(blocks, width):
                     (min(b["bbox"][0] for b in col), max(b["bbox"][2] for b in col))
                     for col in columns
                 ]
-                valid = all(a[1] + 18 <= b[0] for a, b in zip(ranges, ranges[1:]))
+                # A narrow but persistent gutter is safe only for substantial prose
+                # columns; compact grids retain the conservative 18pt threshold.
+                prose = all(sum(len(b.get("text", "")) for b in col
+                                if b["kind"] in ("paragraph", "list")) >= 160
+                            and len(col) >= 4 for col in columns)
+                prose = prose and independent_baselines(
+                    [[b["bbox"][1] for b in col] for col in columns])
+                gap = 2 if prose and count == 2 else 18
+                valid = all(a[1] + gap <= b[0] for a, b in zip(ranges, ranges[1:]))
                 valid = (
                     valid
                     and min(max(b["bbox"][3] for b in col) for col in columns)
@@ -80,3 +107,4 @@ def column_flow(blocks, width):
         if changed:
             return [b for b in blocks if b["kind"] in ("header", "footer")] + planned
     return blocks
+
