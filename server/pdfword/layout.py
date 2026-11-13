@@ -3,7 +3,7 @@
 import math
 import re
 from statistics import median
-from model import Rejected
+from model import Rejected, table_header_rows
 
 
 def contains(a, b, pad=0):
@@ -477,9 +477,14 @@ def link_tables(pages):
         b = next((b for b in current["blocks"] if b["kind"] == "table"), None)
         if not a or not b or a["cols"] != b["cols"]:
             continue
-        header = lambda t: [
-            c["text"].strip().casefold() for c in t["cells"] if c["row"] == 0
-        ]
+        header_count_a = table_header_rows(a)
+        header_count_b = table_header_rows(b)
+
+        def header(t, count):
+            return sorted(
+                (c["row"], c["col"], c["rowspan"], c["colspan"], c["text"].strip())
+                for c in t["cells"] if c["row"] < count
+            )
         titles = lambda p: [
             re.sub(
                 r"\s*(?:\(?continued\)?|续表|（续）)\s*$",
@@ -498,14 +503,16 @@ def link_tables(pages):
         continuation = b.get("continuation", False) or (
             explicit and bool(set(titles(previous)) & set(titles(current)))
         )
-        repeats = header(a) == header(b) and any(header(a))
+        repeats = (
+            0 < header_count_a == header_count_b < b["rows"]
+            and header(a, header_count_a) == header(b, header_count_b)
+            and any(c["text"].strip() for c in b["cells"] if c["row"] < header_count_b)
+        )
         if not (
             (repeats or continuation)
             and a["bbox"][3] > previous["height"] * 0.75
             and b["bbox"][1] < current["height"] * 0.25
         ):
-            continue
-        if any(c["row"] == 0 and c["rowspan"] > 1 for c in b["cells"]):
             continue
         # Require compatible column proportions as independent geometry evidence.
         wa = a.get("widths")
@@ -518,5 +525,7 @@ def link_tables(pages):
             continue
         b["continues"] = a.get("continues", a["id"])
         b["repeat_header"] = repeats
+        b["repeat_header_rows"] = header_count_b if repeats else 0
         if repeats:
-            a["header_rows"] = 1
+            a["header_rows"] = header_count_a
+

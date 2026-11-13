@@ -175,7 +175,7 @@ def table_from_html(markup):
                     rowspan=rs,
                     colspan=cs,
                     text=cell_text(node),
-                    header=node.tag == "th",
+                    header=node.tag == "th" or bool(node.xpath("ancestor::thead")),
                 )
             )
             c += cs
@@ -185,6 +185,25 @@ def table_from_html(markup):
     if len(occupied) != len(rows) * cols:
         raise Rejected("Incomplete table grid; review the source.")
     return dict(rows=len(rows), cols=cols, cells=cells)
+
+
+def table_header_rows(table):
+    """Only complete leading semantic header rows may be repeated or removed."""
+    header = [True] * table["rows"]
+    covered = [False] * table["rows"]
+    for cell in table["cells"]:
+        for row in range(cell["row"], cell["row"] + cell["rowspan"]):
+            covered[row] = True
+            header[row] = header[row] and cell.get("header") is True
+    count = 0
+    for row in range(table["rows"]):
+        if not covered[row] or not header[row]:
+            break
+        count += 1
+    # A merged header extending into a data row cannot be split safely.
+    if any(c["row"] < count < c["row"] + c["rowspan"] for c in table["cells"]):
+        return 0
+    return count
 
 
 def content_text(block):

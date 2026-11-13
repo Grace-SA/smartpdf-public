@@ -12,7 +12,7 @@ from docx.enum.text import WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
-from model import Rejected, validate, content_text
+from model import Rejected, validate, content_text, table_header_rows
 from math_export import segments
 from columns import column_flow
 
@@ -96,6 +96,19 @@ def content_column_weights(block):
     return weights
 
 
+def repeated_header_rows(block, existing):
+    if existing is None:
+        return 0
+    count = block.get("repeat_header_rows", 1 if block.get("repeat_header") else 0)
+    if type(count) is not int or not 0 <= count < block["rows"]:
+        raise Rejected("Invalid repeated table header.")
+    if count > table_header_rows(block):
+        raise Rejected("Repeated header would discard table data.")
+    if any(c["row"] < count < c["row"] + c["rowspan"] for c in block["cells"]):
+        raise Rejected("Repeated header splits a merged cell.")
+    return count
+
+
 def add_table(document, block, width, existing=None):
     # Word merges adjacent w:tbl elements when opening/saving a document.
     # Separate independent tables, while explicit continuations reuse one table.
@@ -150,7 +163,7 @@ def add_table(document, block, width, existing=None):
         edge.set(qn("w:type"), "dxa")
         margins.append(edge)
     props.insert_element_before(margins, "w:tblLook")
-    skip = 1 if existing is not None and block.get("repeat_header") else 0
+    skip = repeated_header_rows(block, existing)
     offset = len(table.rows) - skip
     for _ in range(block["rows"] - skip):
         table.add_row()
@@ -183,13 +196,11 @@ def add_table(document, block, width, existing=None):
         props = row._tr.get_or_add_trPr()
         if props.find(qn("w:cantSplit")) is None:
             props.append(OxmlElement("w:cantSplit"))
-    if table.rows and (
-        block.get("header_rows")
-        or any(c.get("header") for c in block["cells"] if c["row"] == 0)
-    ):
-        props = table.rows[0]._tr.get_or_add_trPr()
-        if props.find(qn("w:tblHeader")) is None:
-            props.append(OxmlElement("w:tblHeader"))
+    if existing is None:
+        for row in table.rows[:table_header_rows(block)]:
+            props = row._tr.get_or_add_trPr()
+            if props.find(qn("w:tblHeader")) is None:
+                props.append(OxmlElement("w:tblHeader"))
     return table
 
 
@@ -297,11 +308,7 @@ def export_word(model, destination, assets):
                         table.rows[
                             -(
                                 block["rows"]
-                                - (
-                                    1
-                                    if old is not None and block.get("repeat_header")
-                                    else 0
-                                )
+                                - repeated_header_rows(block, old)
                             )
                         ]
                         .cells[0]
@@ -371,3 +378,4 @@ def export_word(model, destination, assets):
         textCharacters=sum(len(t) for t in text),
         warnings=model.get("warnings", []),
     )
+
