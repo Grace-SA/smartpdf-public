@@ -266,8 +266,9 @@ def native_tables(page, words):
                 )
             )
         # A ruled cell can contain several logical records. Preserve missing
-        # record positions across neighbouring cells when their baselines form
-        # a regular grid, instead of moving a later value up beside another row.
+        # record positions across neighbouring cells when common baselines give
+        # independent row evidence. Unequal vertical gaps do not change record
+        # identity: normalize the spacing, not the source row association.
         bands = {}
         for index, (r0, r1, paras) in enumerate(line_records):
             bands.setdefault((r0, r1), []).append((index, paras))
@@ -283,10 +284,10 @@ def native_tables(page, words):
                 slots[-1].append((top, index, para))
             tops = [median(top for top, _, _ in slot) for slot in slots]
             gaps = [b-a for a,b in zip(tops,tops[1:])]
-            regular = (len(slots) >= 3 and sum(len({i for _, i, _ in slot}) >= 2 for slot in slots) >= 2
-                       and min(gaps) >= median(p["size"] for _, _, p in lines) * 0.8
-                       and max(gaps) <= min(gaps) * 1.25)
-            if regular:
+            aligned_records = (len(slots) >= 3
+                               and sum(len({i for _, i, _ in slot}) >= 2 for slot in slots) >= 2
+                               and min(gaps) >= median(p["size"] for _, _, p in lines) * 0.8)
+            if aligned_records:
                 for index, paras in band:
                     if paras:
                         cells[index]["text"] = "\n".join(
