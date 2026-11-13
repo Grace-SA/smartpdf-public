@@ -69,6 +69,31 @@ export function ToolNavigation({
       className="tool-navigation"
       ref={host}
       data-open={expanded}
+      onKeyDown={(event) => {
+        if (
+          !expanded ||
+          event.key !== "Tab" ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        // WebKit can skip buttons and links in its native Tab order. Keep
+        // the open panel reachable, while leaving both boundaries untrapped.
+        const stops = [
+          toggle.current,
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            '.tool-nav button:not(:disabled), .tool-nav a[href]:not([aria-disabled="true"])',
+          ),
+        ];
+        const index = stops.indexOf(document.activeElement as HTMLElement);
+        if (index < 0) return;
+        const next = stops[index + (event.shiftKey ? -1 : 1)];
+        if (next) {
+          event.preventDefault();
+          next.focus({ preventScroll: true });
+        }
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) close();
       }}

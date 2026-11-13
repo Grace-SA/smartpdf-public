@@ -96,11 +96,13 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
     if type(orientation)!=int or orientation not in (0,90,180,270):raise ConversionError('invalid_orientation')
     validate_ocr(record,image_path)
     with Image.open(image_path) as im:image=im.convert('RGB').copy()
-    a=np.array(image);accepted=[];warnings=[]
+    a=np.array(image);accepted=[];accepted_indices=[];font_evidence={};warnings=[]
     if line_approvals is not None and (len(line_approvals)!=len(record['lines']) or any(type(x)!=bool for x in line_approvals)):
         raise ConversionError('invalid_ocr_consensus')
-    overlaps=overlapping_lines(record['lines'])
-    for index,line in enumerate(record['lines']):
+    from .ocr_bounds import trim_line_padding
+    lines,trimmed=trim_line_padding(a,record['lines'])
+    overlaps=overlapping_lines(lines,a)
+    for index,line in enumerate(lines):
         if (line_approvals is not None and not line_approvals[index]) or (line_approvals is None and verified is False):
             warnings.append('ocr_models_disagree_kept_as_image');continue
         if index in overlaps:
@@ -133,6 +135,10 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         bounds=(l,t,r,b)
         if len(ink):bounds=(l+int(ink[:,1].min()),t+int(ink[:,0].min()),l+int(ink[:,1].max())+1,t+int(ink[:,0].max())+1)
         color=tuple(int(x) for x in np.quantile(crop[ink_mask],.2,axis=0))
+        choice=latin_font(line['text'],working.crop(bounds),background,os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))
+        if choice and choice['error']>.30:
+            warnings.append('font_shape_unverified_kept_as_image');continue
+        font_evidence[id(line)]=choice
         if mapping is None:a[t:b,l:r]=background.astype(np.uint8)
         else:
             mask=Image.new('1',image.size)
@@ -143,7 +149,7 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
             ml=max(0,ml);mt=max(0,mt);mr=min(image.width,mr);mb=min(image.height,mb)
             patch=a[mt:mb,ml:mr]
             patch[np.asarray(mask,dtype=bool)[mt:mb,ml:mr]]=background.astype(np.uint8)
-        accepted.append((line,*bounds,color,background,working,mapping))
+        accepted.append((line,*bounds,color,background,working,mapping));accepted_indices.append(index)
     w,h=page.get_size();sw,sh=prs.slide_width/12700,prs.slide_height/12700
     if orientation in (90,270):w,h=h,w;sw,sh=sh,sw
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
@@ -154,7 +160,7 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         family,_=font_family('Arial',line['text'])
         # Glyph height alone is not evidence of bold (especially mixed CJK/Latin).
         bold=False;italic=False
-        choice=latin_font(line['text'],working.crop((l,t,r,b)),background,os.getenv('SMARTPPT_FONT_DIR','/System/Library/Fonts/Supplemental'))
+        choice=font_evidence[id(line)]
         if choice:
             family=choice['family'];bold=choice['bold'];italic=choice['italic']
             font_choices.append(family+(' Bold' if bold else '')+(' Italic' if italic else ''))
@@ -164,9 +170,16 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         if family=='Noto Sans SC':metric_path=Path(os.getenv('SMARTPPT_CJK_FONT','NotoSansSC-variable.ttf'))
         if metric_path.exists():
             font=ImageFont.truetype(str(metric_path),100)
+            if family in ('Noto Sans SC','Noto Serif SC','SmartPDF Sans100','SmartPDF Serif200'):
+                try:
+                    axes=font.get_variation_axes()
+                    font.set_variation_by_axes([choice.get('weight',700 if bold else 400) if choice else 400]+[axis['default'] for axis in axes[1:]])
+                except (OSError,ValueError):pass
             size=min(size,(r-l)*sx/max(1,font.getlength(line['text']))*100)
         else:warnings.append('font_metrics_unavailable')
         shape=add_text(slide,line['text'],ox+l*sx,oy+t*sy-size*.18,(r-l)*sx+size*.3,size*1.5,size,family,bold,color,italic=italic)
+        from .paragraph_metrics import set_line_metrics
+        set_line_metrics(shape)
         if mapping is not None:
             width,height=shape.width/12700,shape.height/12700
             center=mapped_point(mapping,l+width/(2*sx),t-size*.18/sy+height/(2*sy))
@@ -177,14 +190,14 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         points=[(l,t),(r,t),(r,b),(l,b)]
         if mapping is not None:points=[mapped_point(mapping,x,y) for x,y in points]
         points=[restore_point(ox+x*sx,oy+y*sy,orientation,sw,sh) for x,y in points]
-        targets.append({'shape':len(slide.shapes)-1,'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
+        targets.append({'shape':len(slide.shapes)-1,'erase_box':list(erase_bounds(line)),'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
     restore_shapes(slide,orientation,round(sw*12700),round(sh*12700))
     if not record['lines']:warnings.append('no_ocr_text_detected')
     if len(accepted)<len(record['lines']):warnings.append('partial_ocr_editability')
     return {'route':'paddle-ocr','orientation_degrees':orientation,'detected_lines':len(record['lines']),'editable_lines':len(accepted),
         'independent_model_agreement':verified,
         'region_verified_lines':sum(line_approvals) if line_approvals is not None else None,
-        'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
+        'trimmed_detection_indices':trimmed,'ocr_line_indices':accepted_indices,'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
         'warnings':sorted(set(warnings+['ocr_requires_review'])),'graphics':'raster; not editable'}
 
 
@@ -269,4 +282,6 @@ def assist(source,target,settings,cached_ocr=None,cached_verifiers=None,cached_o
         if settings.renderer_path and any(p.get('editable_lines') for p in report):
             from .ocr_fit import fit_ocr_pages
             fit_ocr_pages(source,target,report,settings)
+            from .ocr_gate import verify_ocr_geometry
+            verify_ocr_geometry(source,target,report,scan_images,records,settings)
     return {'pages':report,'verdict':'needs_review','fully_editable':False}

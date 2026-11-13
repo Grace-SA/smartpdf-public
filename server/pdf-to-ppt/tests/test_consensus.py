@@ -48,10 +48,12 @@ def test_nontext_structures_remain_images(label):
     assert region_agreement(record, verifier) == [False, True]
 
 
-def test_only_exact_duplicate_plain_regions_are_coalesced():
+def test_exact_duplicate_or_nested_plain_regions_require_identical_text():
     record, verifier = evidence(); verifier['blocks'].append(deepcopy(verifier['blocks'][0]))
     assert region_agreement(record, verifier) == [True, True]
     verifier['blocks'][-1]['bbox'][0] += 1
+    assert region_agreement(record, verifier) == [True, True]
+    verifier['blocks'][-1]['content']='North 123.46'
     assert region_agreement(record, verifier) == [False, True]
     record, verifier = evidence()
     verifier['blocks'].append({'label': 'picture', 'bbox': [0,0,400,200], 'content': ''})
@@ -124,11 +126,15 @@ def test_overlap_uses_actual_integer_erase_rectangles(boxes, expected):
     assert overlapping_lines(lines) == expected
 
 
-def test_fractional_overlap_preserves_original_raster(tmp_path, pdf_file):
+@pytest.mark.parametrize("shared_ink",[False,True])
+def test_fractional_overlap_only_preserves_original_raster_when_ink_intersects(tmp_path, pdf_file,shared_ink,monkeypatch):
+    # This fixture isolates erasure geometry, not font recognition.
+    monkeypatch.setattr("smartppt.assisted.latin_font",lambda *_:None)
     image = Image.new('RGB', (100, 60), 'white')
     draw = ImageDraw.Draw(image)
     draw.rectangle((10, 10, 18, 18), fill='black')
     draw.rectangle((25, 10, 35, 18), fill='black')
+    if shared_ink:draw.point((21,12),fill='black')
     path = tmp_path/'fractional.png'
     image.save(path)
     record = {
@@ -146,10 +152,16 @@ def test_fractional_overlap_preserves_original_raster(tmp_path, pdf_file):
     with pdfium.PdfDocument(pdf_file) as doc:
         report = ocr_slide(prs, slide, doc[0], path, record,
                            line_approvals=[True, True])
-    assert report['editable_lines'] == 0
-    assert 'overlapping_ocr_kept_as_image' in report['warnings']
+    assert report['editable_lines'] == (0 if shared_ink else 2)
     from io import BytesIO
-    assert Image.open(BytesIO(slide.shapes[0].image.blob)).tobytes() == image.tobytes()
+    raster=Image.open(BytesIO(slide.shapes[0].image.blob))
+    if shared_ink:
+        assert 'overlapping_ocr_kept_as_image' in report['warnings']
+        assert raster.tobytes()==image.tobytes()
+    else:
+        assert raster.getpixel((21,12))==image.getpixel((21,12))
+        assert raster.getpixel((15,15))==(255,255,255)
+        assert raster.getpixel((30,15))==(255,255,255)
 
 
 @pytest.mark.parametrize('background,foreground', [((255,255,210),(20,40,100)),((220,240,255),(40,40,40))])

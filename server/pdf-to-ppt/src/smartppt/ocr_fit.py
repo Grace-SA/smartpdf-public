@@ -90,6 +90,8 @@ def fit_local(shape,d,a):
     nx,ny=cx+(nx-cx)*c-(ny-cy)*s,cy+(nx-cx)*s+(ny-cy)*c
     shape.left=Pt(nx-width/2);shape.top=Pt(ny-height/2);shape.width=Pt(width);shape.height=Pt(height)
     run.font.size=Pt(size);run._r.get_or_add_rPr().set('spc',str(round(spacing*100)))
+    from .paragraph_metrics import explicit_line_metrics,set_line_metrics
+    if explicit_line_metrics(shape):set_line_metrics(shape)
     return True
 
 
@@ -111,9 +113,19 @@ def raster_bounds(page,slide,targets,observed):
         desired=(min(x for x,y in pts),min(y for x,y in pts),max(x for x,y in pts),max(y for x,y in pts))
         box=local_box(observed[n],cx,cy,angle)
         l,t,r,b=math.floor(box[0]*scale)-3,math.floor(box[1]*scale)-3,math.ceil(box[2]*scale)+3,math.ceil(box[3]*scale)+3
-        if l<0 or t<0 or r>image.width or b>image.height:continue
-        working=image.rotate(angle,resample=Image.Resampling.BICUBIC,center=(cx*scale,cy*scale),fillcolor='white') if angle else image
-        crop=np.asarray(working.crop((l,t,r,b)),dtype=float);border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]));background=np.median(border,axis=0)
+        # Sample the rotated region directly. Rotating a whole page about a
+        # near-edge textbox can clip its horizontalized line off the canvas,
+        # even though every original glyph is comfortably inside the page.
+        if angle:
+            c=round(c,12);s=round(s,12);px,py=cx*scale,cy*scale
+            x0=px+(l-px)*c-(t-py)*s;y0=py+(l-px)*s+(t-py)*c
+            corners=[(x0+x*c-y*s,y0+x*s+y*c) for x,y in [(0,0),(r-l,0),(r-l,b-t),(0,b-t)]]
+            if any(x<0 or y<0 or x>image.width or y>image.height for x,y in corners):continue
+            working=image.transform((r-l,b-t),Image.Transform.AFFINE,(c,-s,x0,s,c,y0),resample=Image.Resampling.BICUBIC)
+        else:
+            if l<0 or t<0 or r>image.width or b>image.height:continue
+            working=image.crop((l,t,r,b))
+        crop=np.asarray(working,dtype=float);border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1]));background=np.median(border,axis=0)
         if np.quantile(np.abs(border-background),.95)>12:continue
         mask=np.max(np.abs(crop-background),axis=2)>30;padded=np.pad(mask.astype(np.uint8),1)
         neighbors=sum(padded[y:y+mask.shape[0],x:x+mask.shape[1]] for y in range(3) for x in range(3));ink=np.argwhere(mask&(neighbors>=3))
@@ -154,6 +166,31 @@ def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
                 if originals:changed[index]=originals
         if not changed:return
         prs.save(candidate);rendered=render_presentations([candidate],tmp,settings)[0]
+        fit_iterations=1
+        for retry in range(2):
+            refined=False
+            with pdfium.PdfDocument(rendered) as doc:
+                for item in report:
+                    index=item['page']-1
+                    if index not in changed:continue
+                    slide=prs.slides[index]
+                    with closing(doc[index]) as page:
+                        observed=observed_boxes(page,slide,item['ink_targets'])
+                        ink=raster_bounds(page,slide,item['ink_targets'],observed)
+                    for row in item['ink_targets']:
+                        n=row['shape']
+                        if n not in changed[index] or n not in observed:continue
+                        shape=slide.shapes[n]
+                        if prefer_ink or shape.rotation not in (0,90,180,270):
+                            if n not in ink or max(abs(a-b) for a,b in zip(*ink[n]))<=2:continue
+                            refined=fit_local(shape,*ink[n]) or refined
+                        else:
+                            if max(abs(a-b) for a,b in zip(row['bbox'],observed[n]))<=2:continue
+                            refined=fit_shape(shape,row['bbox'],observed[n]) or refined
+            if not refined:break
+            iteration=tmp/f'iteration-{retry+2}.pptx';prs.save(iteration)
+            rendered=render_presentations([iteration],tmp,settings)[0];fit_iterations+=1
+        partial={}
         with pdfium.PdfDocument(rendered) as doc:
             for item in report:
                 index=item['page']-1
@@ -173,10 +210,40 @@ def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
                     errors.append(error)
                 old=metric(source,baseline_pdf,index);new=metric(source,rendered,index)
                 accepted=all(e is not None and e<=2 for e in errors) and accept_candidate(old,new)
-                item['font_fit_ink' if prefer_ink else 'font_fit']={'accepted':accepted,'candidate_lines':len(rows),'max_ink_error_points':max((e for e in errors if e is not None),default=None),'baseline':old,'candidate':new}
+                item['font_fit_ink' if prefer_ink else 'font_fit']={'accepted':accepted,'fitting_iterations':fit_iterations,'candidate_lines':len(rows),'max_ink_error_points':max((e for e in errors if e is not None),default=None),'baseline':old,'candidate':new}
                 if not accepted:
+                    passed={row['shape'] for row,error in zip(rows,errors) if error is not None and error<=2}
+                    # One failed line must not discard other independently fitted
+                    # lines. The mixed result is rendered and checked again below.
+                    salvage=bool(passed) and len(passed)<len(rows)
                     for n,element in changed[index].items():
+                        if salvage and n in passed:continue
                         current=slide.shapes[n]._element;current.getparent().replace(current,element)
+                    if salvage:partial[index]=(item,[r for r in rows if r['shape'] in passed],old,errors)
+        if partial:
+            mixed=tmp/'mixed.pptx';prs.save(mixed);mixed_pdf=render_presentations([mixed],tmp,settings)[0]
+            with pdfium.PdfDocument(mixed_pdf) as doc:
+                for index,(item,rows,old,attempted_errors) in partial.items():
+                    slide=prs.slides[index]
+                    with closing(doc[index]) as page:
+                        actual=observed_boxes(page,slide,item['ink_targets']);raster=raster_bounds(page,slide,item['ink_targets'],actual)
+                    errors=[]
+                    for row in rows:
+                        n=row['shape'];shape=slide.shapes[n]
+                        if prefer_ink or shape.rotation not in (0,90,180,270):
+                            error=max(abs(a-b) for a,b in zip(*raster[n])) if n in raster else None
+                        else:error=max(abs(a-b) for a,b in zip(row['bbox'],actual[n])) if n in actual else None
+                        errors.append(error)
+                    new=metric(source,mixed_pdf,index);accepted=all(e is not None and e<=2 for e in errors) and accept_candidate(old,new)
+                    item['font_fit_ink' if prefer_ink else 'font_fit']={
+                        'accepted':accepted,'fitting_iterations':fit_iterations,'candidate_lines':len(changed[index]),'accepted_lines':len(rows) if accepted else 0,
+                        'rejected_lines':len(changed[index])-(len(rows) if accepted else 0),
+                        'max_ink_error_points':max((e for e in errors if e is not None),default=None),
+                        'attempted_max_ink_error_points':max((e for e in attempted_errors if e is not None),default=None),
+                        'baseline':old,'candidate':new,'partial_fit_independently_rendered':True}
+                    if not accepted:
+                        for row in rows:
+                            n=row['shape'];current=slide.shapes[n]._element;current.getparent().replace(current,changed[index][n])
         prs.save(target)
 
 

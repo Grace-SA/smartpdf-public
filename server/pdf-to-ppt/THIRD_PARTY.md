@@ -2,6 +2,8 @@
 
 本模块源码不打包模型、字体二进制或第三方可执行文件。输出 PPT 可以包含经过校验的 Noto Sans SC、Noto Serif SC 和 CMU 完整字体，字体元数据内保留完整版权和 OFL 许可。以下是本轮核对的主要组件；部署镜像仍需保留完整传递许可及通知。
 
+`SmartPDF Sans100`、`SmartPDF Serif200` 分别由上述固定 Noto Sans SC、Noto Serif SC 实例化为 100、200 字重，使用独立族名及 PostScript 名称。它们沿用完整上游版权和 OFL，保留完整字符集；没有提取或分发用户 PDF、系统中的未知字体。
+
 | 组件 | 本轮用途 | 上游许可/来源 |
 | --- | --- | --- |
 | Stirling core 3.2.2 | 原始 PPTX | 复用仓库已固定审核的 core；`config/word-core.stirling-3.2.2.json` |

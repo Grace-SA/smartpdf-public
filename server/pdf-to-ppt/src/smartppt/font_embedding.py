@@ -21,6 +21,8 @@ NOTO_SHA256='a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da'
 SERIF_SHA256='050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9'
 FAMILIES={'Noto Sans SC':('SMARTPPT_CJK_FONT','NotoSansSC-variable.ttf',NOTO_SHA256,'OFL-NotoSansSC.txt'),
           'Noto Serif SC':('SMARTPPT_CJK_SERIF_FONT','NotoSerifSC-variable.ttf',SERIF_SHA256,'OFL-NotoSerifSC.txt')}
+FAMILIES['SmartPDF Sans100']=FAMILIES['Noto Sans SC']
+FAMILIES['SmartPDF Serif200']=FAMILIES['Noto Serif SC']
 CMU_FACES=json.loads(Path(__file__).with_name('cmu-fonts.json').read_text())['families']
 PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)
 STYLES=('regular','bold','italic','boldItalic')
@@ -75,13 +77,24 @@ def eot_payload(font,data):
     return struct.pack('<I',len(header)+len(data))+header[4:]+data
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=8)
 def noto_payload(data,bold=False,family='Noto Sans SC'):
     if family not in FAMILIES or sha256(data).hexdigest()!=FAMILIES[family][2]:raise ConversionError('portable_font_integrity_failed')
     from fontTools.ttLib import TTFont
     from fontTools.varLib.instancer import instantiateVariableFont
     with TTFont(BytesIO(data)) as font:
-        font=instantiateVariableFont(font,{'wght':700 if bold else 400},inplace=True,updateFontNames=True)
+        font=instantiateVariableFont(font,{'wght':700 if bold else {'SmartPDF Sans100':100,'SmartPDF Serif200':200}.get(family,400)},inplace=True,updateFontNames=True)
+        if family in ('SmartPDF Sans100','SmartPDF Serif200'):
+            # A distinct family/PostScript identity prevents the variable face
+            # from replacing this approved static weight in Office/fontconfig.
+            style='Bold' if bold else 'Regular'
+            for record in list(font['name'].names):
+                if record.nameID in (1,16):value=family
+                elif record.nameID in (2,17):value=style
+                elif record.nameID==4:value=family+' '+style
+                elif record.nameID in (3,6):value=family.replace(' ','')+'-'+style
+                else:continue
+                font['name'].setName(value,record.nameID,record.platformID,record.platEncID,record.langID)
         separate_unicode_aliases(font)
         # Carry the complete copyright/license notice inside the font metadata,
         # so it survives Office editing and repackaging of the presentation.

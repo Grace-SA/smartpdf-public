@@ -53,14 +53,24 @@ def render_presentations(files, folder, settings):
     if not settings.renderer_path or not Path(settings.renderer_path).is_file():
         raise ConversionError('layout_renderer_not_configured')
     folder=Path(folder);config=folder/'fonts.conf'
+    files=list(files);outputs=[folder/(Path(p).stem+'.pdf') for p in files]
+    if len(set(outputs))!=len(outputs) or {p.resolve() for p in outputs}&{Path(p).resolve() for p in files}:
+        raise ConversionError('layout_render_name_collision')
+    # A successful exit without a new PDF must never reuse a prior iteration's
+    # geometry. All outputs belong to this isolated rendering workspace.
+    for output in outputs:output.unlink(missing_ok=True)
+    from .render_fonts import materialize_variant_fonts,variant_fontconfig_rules
     font_dirs=[Path('/System/Library/Fonts'),Path('/usr/share/fonts')]
+    static=materialize_variant_fonts(files,folder)
+    if static is not None:font_dirs.append(static)
     if os.getenv('SMARTPPT_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_FONT_DIR']))
     if os.getenv('SMARTPPT_CJK_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_FONT']).parent)
     if os.getenv('SMARTPPT_CJK_SERIF_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_SERIF_FONT']).parent)
     if os.getenv('SMARTPPT_CMU_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_CMU_FONT_DIR']))
     dirs=''.join('<dir>'+escape(str(p))+'</dir>' for p in font_dirs if p.exists())
+    rules=variant_fontconfig_rules() if static is not None else ''
     config.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'+dirs+
-        '<cachedir>'+escape(str(folder/'cache'))+'</cachedir><alias><family>SimSun</family><prefer><family>Noto Sans SC</family></prefer></alias></fontconfig>')
+        '<cachedir>'+escape(str(folder/'cache'))+'</cachedir><alias><family>SimSun</family><prefer><family>Noto Sans SC</family></prefer></alias>'+rules+'</fontconfig>')
     env=dict(os.environ,FONTCONFIG_FILE=str(config),XDG_CACHE_HOME=str(folder/'cache'),TMPDIR=str(folder))
     try:
         subprocess.run([settings.renderer_path,'-env:UserInstallation='+(folder/'profile').as_uri(),
@@ -68,7 +78,6 @@ def render_presentations(files, folder, settings):
             capture_output=True,check=True,timeout=min(settings.job_timeout,180),env=env)
     except (subprocess.TimeoutExpired,subprocess.CalledProcessError) as error:
         raise ConversionError('layout_render_failed') from error
-    outputs=[folder/(Path(p).stem+'.pdf') for p in files]
     if not all(p.is_file() for p in outputs):raise ConversionError('layout_render_failed')
     return outputs
 

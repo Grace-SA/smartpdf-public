@@ -14,8 +14,10 @@ CANDIDATES = [(family,family+suffix+'.ttf',bold,italic)
 
 
 def latin_font(text, crop, background, directory):
-    if not text or len(text)>512 or any(ord(c)>0x024f for c in text):
-        return None
+    if not text or len(text)>512:return None
+    if any(ord(c)>0x024f for c in text):
+        from .cjk_font import cjk_font
+        return cjk_font(text,crop,background)
     pixels=np.asarray(crop,dtype=float)
     ink=np.max(np.abs(pixels-np.array(background)),axis=2)
     if ink.max()<1:return None
@@ -37,5 +39,20 @@ def latin_font(text, crop, background, directory):
     if best and baseline:
         margin=.12 if best['family']=='Courier New' else .06
         if best['error']>.20 or (best!=baseline and baseline['error']-best['error']<margin):
+            from .font_words import rank_words
+            ranked=rank_words(text,crop,background,directory,CANDIDATES)
+            default=next((r for r in ranked if r['family']=='Arial' and not r['bold'] and not r['italic']),None)
+            from .cjk_font import cjk_font
+            open_choice=cjk_font(text,crop,background,require_cjk=False)
+            word_choice=None
+            if ranked and default and ranked[0]['error']<=.30 and default['error']-ranked[0]['error']>=.025:
+                word_choice=dict(ranked[0],matched=ranked[0]['error']<=.20,comparison='individual word ink; interword spacing excluded')
+            competitor=word_choice or baseline
+            if open_choice and open_choice['error']<=.20 and competitor['error']-open_choice['error']>=.06:
+                return open_choice
+            if word_choice:return word_choice
             return dict(baseline,matched=False)
+    if best is None:
+        from .cjk_font import cjk_font
+        return cjk_font(text,crop,background,require_cjk=False)
     return best

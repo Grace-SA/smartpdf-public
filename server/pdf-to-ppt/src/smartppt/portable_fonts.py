@@ -53,8 +53,10 @@ def split_script_shapes(prs,rendered,small_text_pages=()):
                     if not shape.has_text_frame or shape.rotation or len(shape.text_frame.paragraphs)!=1:continue
                     runs=shape.text_frame.paragraphs[0].runs
                     if len(runs)!=1 or runs[0].font.size is None:continue
-                    if runs[0].font.name in ('Noto Sans SC','Noto Serif SC'):
+                    if runs[0].font.name in ('Noto Sans SC','Noto Serif SC','SmartPDF Sans100','SmartPDF Serif200'):
                         chunks=script_segments(shape.text);kind='mixed-script'
+                        if runs[0].font.name in ('SmartPDF Sans100','SmartPDF Serif200') and len(chunks)==1 and len(shape.text.split())>1:
+                            chunks=re.findall(r'\s*\S+\s*',shape.text);kind='font-words'
                     elif index in small_text_pages and runs[0].font.size.pt<12 and runs[0].font.name in ('Arial','Times New Roman','Courier New'):
                         chunks=re.findall(r'\s*\S+\s*',shape.text);kind='small-words'
                     else:continue
@@ -146,6 +148,7 @@ def finalize_portable_fonts(source,target,report,settings):
             'families':{family:list(faces) for family,faces in payloads.items()},
             'faces':sorted({style for faces in payloads.values() for style in faces},key=STYLES.index),
             'whole_font':bool(payloads),'positioned_script_pages':[i+1 for i in sorted(changed) if any(r['kind']=='mixed-script' for r in targets[i])],
+            'positioned_font_word_pages':[i+1 for i in sorted(changed) if any(r['kind']=='font-words' for r in targets[i])],
             'positioned_small_text_pages':[i+1 for i in sorted(changed) if any(r['kind']=='small-words' for r in targets[i])],
             'script_layout_rejected_pages':[i+1 for i in restored],
             'render_scores':{str(i+1):s for i,s in scores.items()},

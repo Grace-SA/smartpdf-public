@@ -9,6 +9,7 @@ import math
 from xml.etree import ElementTree
 from .config import ConversionError
 from .quality import normalized
+from .partial_consensus import partial_line_agreement
 
 TEXT_LABELS = {'text', 'title', 'caption', 'footnote', 'page-header', 'page-footer',
                'header', 'footer', 'paragraph', 'list', 'list_item'}
@@ -40,11 +41,23 @@ multiline cells and inconsistent columns require stronger geometry evidence.
             or any(len(row)!=len(cells[0]) or not all(row) for row in cells)
             or sum(map(len,cells)) != len(indices)):
         return False
-    ordered = sorted(indices, key=lambda i: (sum(line_bounds(lines[i])[1::2])/2, line_bounds(lines[i])[0]))
+    # Compare cell centers in the table's own orientation. A clear slightly
+    # skewed scan must satisfy the same row/column tolerances as an upright one.
+    from statistics import median
+    angles=[math.atan2(lines[i]['polygon'][1][1]-lines[i]['polygon'][0][1],
+                       lines[i]['polygon'][1][0]-lines[i]['polygon'][0][0]) for i in indices]
+    angle=median(angles)
+    if abs(math.degrees(angle))>8 or any(abs(math.degrees(a-angle))>3 for a in angles):return False
+    c,s=math.cos(angle),math.sin(angle)
+    aligned={}
+    for i in indices:
+        points=[(x*c+y*s,-x*s+y*c) for x,y in lines[i]['polygon']]
+        aligned[i]=(min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points))
+    ordered = sorted(indices, key=lambda i: (sum(aligned[i][1::2])/2, aligned[i][0]))
     columns = len(cells[0]); positions = []
     for row, start in zip(cells, range(0,len(ordered),columns)):
-        group = sorted(ordered[start:start+columns], key=lambda i:line_bounds(lines[i])[0])
-        boxes = [line_bounds(lines[i]) for i in group]
+        group = sorted(ordered[start:start+columns], key=lambda i:aligned[i][0])
+        boxes = [aligned[i] for i in group]
         heights = [b-t for l,t,r,b in boxes]
         centers = [(t+b)/2 for l,t,r,b in boxes]
         if min(heights)<=0 or max(centers)-min(centers) > min(heights)*.5:
@@ -97,30 +110,42 @@ def region_agreement(record, verifier):
             seen.add(key)
         unique.append(block); unique_boxes.append(box)
     blocks, boxes = unique, unique_boxes
-    assigned = [[] for _ in blocks]
+    assigned = [[] for _ in blocks]; memberships=[]
     for index, line in enumerate(lines):
         l, t, r, b = line_bounds(line); cx, cy = (l+r)/2, (t+b)/2
-        # All region types participate: overlapping table/figure regions veto edits.
         matches = [i for i, (x, y, xx, yy) in enumerate(boxes) if x <= cx <= xx and y <= cy <= yy]
-        if len(matches) == 1:
-            i = matches[0]; x, y, xx, yy = boxes[i]
-            # Detectors have small edge discrepancies; disallow lines crossing columns.
+        memberships.append(matches)
+        for i in matches:
+            x, y, xx, yy = boxes[i]
             tolerance = max(3, (b-t)*.25)
             if l >= x-tolerance and r <= xx+tolerance and t >= y-tolerance and b <= yy+tolerance:
                 assigned[i].append(index)
+    agreements=[]; exact=[]
     for block, indices in zip(blocks, assigned):
-        if not indices:
-            continue
-        if block['label'].lower() == 'table':
-            if simple_grid_agreement(block['content'],lines,indices):
-                for i in indices:approved[i]=True
-            continue
-        if block['label'].lower() not in TEXT_LABELS:continue
-        indices.sort(key=lambda i: (line_bounds(lines[i])[1], line_bounds(lines[i])[0]))
-        actual = ''.join(lines[i]['text'] for i in indices)
-        if normalized(actual) and normalized(actual) == normalized(block['content']):
-            for i in indices:
-                approved[i] = True
+        accepted=set(); whole=False; label=block['label'].lower()
+        if indices and label=='table':
+            if simple_grid_agreement(block['content'],lines,indices):accepted.update(indices)
+        elif indices and label in TEXT_LABELS:
+            indices.sort(key=lambda i: (line_bounds(lines[i])[1], line_bounds(lines[i])[0]))
+            actual=normalized(''.join(lines[i]['text'] for i in indices))
+            whole=bool(actual) and actual==normalized(block['content'])
+            if whole:accepted.update(indices)
+            else:
+                safe=partial_line_agreement([lines[i]['text'] for i in indices],block['content'])
+                accepted.update(i for i,ok in zip(indices,safe) if ok)
+        agreements.append(accepted);exact.append(whole)
+    def contains(a,b):return a[0]<=b[0] and a[1]<=b[1] and a[2]>=b[2] and a[3]>=b[3]
+    for line_index,matches in enumerate(memberships):
+        if len(matches)==1:approved[line_index]=line_index in agreements[matches[0]]
+        elif len(matches)>1:
+            # Some layout models emit both a paragraph and its constituent
+            # lines. Accept only nested plain regions, each independently an
+            # exact match of every assigned line. Conflicting text, crossing
+            # regions and any structural overlap still veto edits.
+            plain=all(blocks[i]['label'].lower() in TEXT_LABELS and exact[i] and line_index in agreements[i] for i in matches)
+            nested=all(contains(boxes[i],boxes[j]) or contains(boxes[j],boxes[i]) for n,i in enumerate(matches) for j in matches[n+1:])
+            approved[line_index]=plain and nested
+
     return approved
 
 
@@ -130,12 +155,22 @@ def erase_bounds(line):
     return math.floor(l)-1, math.floor(t)-1, math.ceil(r)+1, math.ceil(b)+1
 
 
-def overlapping_lines(lines):
+def overlapping_lines(lines,image=None):
     """Any intersecting erase rectangles stay raster, including duplicate detections."""
     blocked = set(); boxes = [erase_bounds(line) for line in lines]
     for i, (l, t, r, b) in enumerate(boxes):
         for j in range(i):
             x, y, xx, yy = boxes[j]
             if min(r, xx) > max(l, x) and min(b, yy) > max(t, y):
+                if image is not None:
+                    import numpy as np
+                    pixels=np.asarray(image)
+                    left,top,right,bottom=max(0,l,x),max(0,t,y),min(pixels.shape[1],r,xx),min(pixels.shape[0],b,yy)
+                    shared=pixels[top:bottom,left:right].astype(float)
+                    if shared.size:
+                        paper=np.median(shared.reshape(-1,3),axis=0)
+                        # Permit only entirely empty, uniformly light overlap.
+                        # One dark pixel still vetoes both erase rectangles.
+                        if paper.min()>=180 and np.max(np.abs(shared-paper))<=12:continue
                 blocked.update((i, j))
     return blocked
