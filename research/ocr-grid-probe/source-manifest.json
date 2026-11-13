@@ -1,0 +1,122 @@
+[
+  {
+    "id": "eu-001",
+    "file": "eu-001.pdf",
+    "sha256": "ef7a64967276181a563e781bab46ea52dd376155ad2287c4e1303781203f91d8",
+    "referenceSha256": "52f445b761148bc3999c215616b88c81f421eab121e44a3b58213f3ab67e98f1",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-001.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "eu-002",
+    "file": "eu-002.pdf",
+    "sha256": "c46d1f2dcaebfe96b84d399a608b7b50bb29c6b67dfc9a2dbb5d9d5bd592795b",
+    "referenceSha256": "ede6b3cd20c785c32966bba3074fe3340faf153a7d1e4ddc075e4edd3ff1b4fa",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-002.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "eu-003",
+    "file": "eu-003.pdf",
+    "sha256": "dc51ec5f5b17bca82550e88505b4162b5bd4528752ef09560ddbec44751d2f39",
+    "referenceSha256": "7aaa68522937cb4144a1760b27374ee93f3a5c99b7644ce24316c02b8488f437",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-003.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "eu-004",
+    "file": "eu-004.pdf",
+    "sha256": "f36f2df28c4cf39a14cd814b4cb31b18d3e2a997a1c08472aa3d39b787819cf4",
+    "referenceSha256": "091309d6cbf3ec0d5087f1bc192afa6434acb719c99537f0e1910b97b3d5ee9d",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-004.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "eu-005",
+    "file": "eu-005.pdf",
+    "sha256": "6d96ea6972e99d17aba9e671366325aff53f485bc27c408a63173ab4c1296d9c",
+    "referenceSha256": "e19df9af765e76eb508d76b7490d88749c33bc1a8b23aa30593cdcf880e17507",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-005.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "eu-006",
+    "file": "eu-006.pdf",
+    "sha256": "be2aeede6566affd93df92875930d30ad1979e1c96b351a19ff563381f4ec2f3",
+    "referenceSha256": "3d81f4b9d2a789ad54c3ca5966167eb6bead1a49cb7d34715b92da7c3087d447",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-006.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "us-001",
+    "file": "us-001.pdf",
+    "sha256": "294a46dab2f06a99f03979c8084b71945f23ce6c12ecb1f565efcda040e7a84f",
+    "referenceSha256": "26ab0520b4cb484e19abafb851bfe1c94179e93c94af66c071ee71281e314a84",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-001.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "us-002",
+    "file": "us-002.pdf",
+    "sha256": "a1a3d580afc6313f9ffa2cfa3b9f3d0bb1406046174912cd6eb23d4f6cda8d57",
+    "referenceSha256": "0892e14ffa492181218249e17f371d04a47d2248b77f4bb09292b40c321d7d92",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-002.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "us-003",
+    "file": "us-003.pdf",
+    "sha256": "e54c02e4e8cb1b6dbfeca4d47eab72ba30ab2af75b6e0916ecb21d5b67d032ed",
+    "referenceSha256": "3aca5d02f9017d4e4fc25a753d353f0e0e34b0d6c8003a09c25ab969243602cf",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-003.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "us-004",
+    "file": "us-004.pdf",
+    "sha256": "da6c30b2fde0104dc6cd22c0b8eab37d022d4d32faebd4f7e106c4df90fa5e70",
+    "referenceSha256": "761b77953eb2f392c4ff24a713e9523ae2997be007c94d2578574271a4754118",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-004.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "us-005",
+    "file": "us-005.pdf",
+    "sha256": "81fcd5eec78b3c2e3f806a1acdb9b4d5ade72da0c77bccf0307ca43b649d035e",
+    "referenceSha256": "69c576810bcf60704d3ae29ec6b1dc2fa0fa400fcc3285144674b3fd8b57d451",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-005.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  },
+  {
+    "id": "us-006",
+    "file": "us-006.pdf",
+    "sha256": "eca1bd9ad82eb37cfb9982fe82b7206de01edaf2676a09baa14ffecc4fc3ecb6",
+    "referenceSha256": "179df18296e68b03beeb66d7a149b1ed0b8fd3d3ce7322e31beb30c634055f2c",
+    "repository": "camelot-dev/camelot",
+    "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+    "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-006.pdf",
+    "license_review": "Public research fixture; no redistribution approved"
+  }
+]

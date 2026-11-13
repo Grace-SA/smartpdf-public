@@ -1,0 +1,8 @@
+{
+  "source_sha256": "7a161be656c7e82986a1959890eadbdcd0876e15e01b28fd00900190de15eed5",
+  "page": 1,
+  "label_method": "manual visual review: no table",
+  "expected_tables": 0,
+  "status": "no_rectangular_grid",
+  "false_positive_table": false
+}
