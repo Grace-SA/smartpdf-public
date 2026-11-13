@@ -6,7 +6,7 @@ NFKC and whitespace only, preserving case, punctuation and every digit.
 from collections import Counter,defaultdict
 import math
 import re
-from .quality import normalized
+from .quality import normalized,ordered_numeric_tokens
 
 
 def edit_counts(expected,actual):
@@ -39,7 +39,8 @@ def rates(counts):
 
 
 def numbers(text):
-    return re.findall(r'[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?',normalized(text).replace('\u2212','-'))
+    # Preserve source separators: removing whitespace can turn 1 2 into 12.
+    return ordered_numeric_tokens(text)
 
 
 def validate_box(box):
@@ -135,3 +136,4 @@ def main():
 
 
 if __name__=='__main__':main()
+

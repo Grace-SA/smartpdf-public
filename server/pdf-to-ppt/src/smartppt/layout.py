@@ -173,6 +173,10 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                 # shear for baseline rotation. The horizontal basis is (a,b).
                 angle=(-math.atan2(matrix.b,matrix.a)+math.radians(rotation)+math.pi)%(2*math.pi)-math.pi
                 box=rotate_box(box)
+                loose=raw.FS_RECTF();advance_box=None
+                if raw.FPDFText_GetLooseCharBox(tp,i,ctypes.byref(loose)):
+                    candidate=rotate_box((loose.left,loose.bottom,loose.right,loose.top))
+                    if all(math.isfinite(v) for v in candidate):advance_box=candidate
             except Exception:
                 unsupported.append('unresolved_character');incomplete.add(pointer);continue
             if not all(math.isfinite(n) for n in (*box,size,angle)) or not 0<size<500:
@@ -191,10 +195,17 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
             pts=[(x*c+y*s,-x*s+y*c) for x,y in [(l,ph-t),(r,ph-t),(r,ph-b),(l,ph-b)]]
             line_box=(min(x for x,y in pts),-max(y for x,y in pts),max(x for x,y in pts),-min(y for x,y in pts))
             line_baseline=baseline_point[0]*s-(ph-baseline_point[1])*c if baseline_point is not None else None
-            groups[pointer].append({'text':char,'box':box,'line_box':line_box,'line_baseline':line_baseline,'size':size,'angle':angle,'shear':shear,'index':i,'baseline':baseline})
+            groups[pointer].append({'text':char,'box':box,'advance_box':advance_box,'line_box':line_box,'line_baseline':line_baseline,'size':size,'angle':angle,'shear':shear,'index':i,'baseline':baseline})
         runs=[];remove=[]
         for pointer,chars in groups.items():
             obj=objects[pointer]
+            # Only opaque fill-only objects can be reproduced by add_text.
+            # Stroke and clipping modes have effects beyond their glyph boxes.
+            if raw.FPDFTextObj_GetTextRenderMode(obj)!=0:
+                unsupported.append('text_paint_mode_kept_as_graphic');continue
+            paint=[ctypes.c_uint() for _ in range(4)]
+            if not raw.FPDFPageObj_GetFillColor(obj,*paint) or paint[3].value!=255:
+                unsupported.append('transparent_text_kept_as_graphic');continue
             if graphical_text(obj.get_font().get_base_name(),''.join(c['text'] for c in chars)):
                 unsupported.append('formula_or_symbol_font_kept_as_graphic');continue
             # Removing an entire text object would also remove its clipped
@@ -243,6 +254,9 @@ def extract_native(page, *, split_words=False, allow_quarter_turns=False, partia
                     'end_index':pending[-1]['index']+1,'source_base_font':font.get_base_name(),
                     'object_id':pointer,'italic':italic,'baseline':pending[0]['baseline'],
                     'blocked_boxes':blocked_boxes,
+                    'advance_box':([min(c['advance_box'][0] for c in visible),min(c['advance_box'][1] for c in visible),
+                                    max(c['advance_box'][2] for c in visible),max(c['advance_box'][3] for c in visible)]
+                                   if all(c['advance_box'] is not None for c in visible) else None),
                     'rotation':(round(math.degrees(pending[0]['angle'])/90)*90)%360})
             for char in chars:
                 if unicodedata.category(char['text']) in ('Cc','Co') and not char['text'].isspace():
@@ -313,9 +327,15 @@ def merge_native_runs(page,runs):
                         separator=separator.replace('\r','').replace('\n','')
                         # Some producers position each glyph separately; PDFium
                         # reports artificial newlines even on a shared baseline.
-                        if had_break and not separator and b[0]-a[2]>size*.22:separator=' '
+                        if had_break and not separator:
+                            left=previous.get('advance_box');right=run.get('advance_box')
+                            gap_width=right[0]-left[2] if left is not None and right is not None else b[0]-a[2]
+                            if gap_width>size*.22:separator=' '
                         previous['text']+=separator+run['text'];previous['end_index']=run['end_index']
                         previous['object_ids'].append(run['object_id'])
+                        left=previous.get('advance_box');right=run.get('advance_box')
+                        previous['advance_box']=([min(left[0],right[0]),min(left[1],right[1]),max(left[2],right[2]),max(left[3],right[3])]
+                                                 if left is not None and right is not None else None)
                         previous['box']=[min(a[0],b[0]),min(a[1],b[1]),max(a[2],b[2]),max(a[3],b[3])]
                         continue
             result.append(item)
@@ -362,3 +382,4 @@ def convert_native(source,target):
             with closing(doc[i]) as page:report.append(native_slide(prs,page))
         prs.save(target)
     return report
+

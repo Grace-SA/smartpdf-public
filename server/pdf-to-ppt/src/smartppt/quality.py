@@ -13,12 +13,22 @@ def normalized(text):
     return ''.join(c for c in unicodedata.normalize('NFKC', text) if not c.isspace())
 
 
-def numeric_tokens(text):
+def ordered_numeric_tokens(text):
     # A grouped number must end at a valid group boundary. In a date such as
     # "January 1,1990", 1,199 is not a valid prefix of the following year.
     # Keep leading decimal points and Unicode minus signs significant too.
-    pattern=r'[-+−]?(?:(?:\d{1,3}(?:,\d{3})+(?!\d|,\d)|\d+)(?:\.\d+)?|\.\d+)%?'
-    return Counter(token.replace('−','-') for token in re.findall(pattern,unicodedata.normalize('NFKC',text)))
+    number=r'[-+−]?(?:(?:\d{1,3}(?:,\d{3})+(?!\d|,\d)|\d+)(?:\.\d+)?|\.\d+)'
+    # Accounting signs and separated percent marks are meaningful even when a
+    # long paragraph's character-error tolerance would otherwise hide their loss.
+    value=number+r'(?:[^\S\r\n]*%)?'
+    pattern=r'\([^\S\r\n]*[$€£¥]?[^\S\r\n]*'+value+r'[^\S\r\n]*\)|'+value
+    return [re.sub(r'\s+','',token).replace('−','-')
+            for token in re.findall(pattern,unicodedata.normalize('NFKC',text))]
+
+
+
+def numeric_tokens(text):
+    return Counter(ordered_numeric_tokens(text))
 
 
 def text_metrics(expected, actual):
@@ -96,3 +106,4 @@ def inspect_pptx(path, info, mode):
     return {'mode': mode, 'slide_count': len(prs.slides), 'pages': pages, 'warnings': warnings,
             'visual_validation': 'not_run', 'structure_semantics': 'not_verified',
             'verdict': 'needs_review' if mode == 'editable' else 'appearance_only'}
+

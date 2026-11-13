@@ -96,3 +96,19 @@ def test_character_predictions_preserve_unicode_composition():
     predictions=[dict(region(char,(i*10,0,i*10+9,10)),reading_order=i) for i,char in enumerate('cafe\u0301')]
     result=evaluate_page([region('café')],predictions,truth_verified=True)
     assert result['character_error_rate']==0 and result['reference_characters']==4
+
+
+
+@pytest.mark.parametrize('expected,actual', [('rate .5','rate 5'),('rate -.5','rate -5'),('values 1 2','values 12'),('values 12 3','values 1 23'),('rate 5 %','rate 5'),('amount (12.50)','amount 12.50'),('amount ($12.50)','amount $12.50')])
+def test_numeric_changes_cannot_hide_below_character_tolerance(expected,actual):
+    prefix='X'*2500+' '
+    p=evaluate_page([region(prefix+expected)],[region(prefix+actual)],truth_verified=True)
+    assert p['character_error_rate']<=.001
+    assert p['numeric_regions_exact']==0 and not p['editable_success']
+
+
+def test_numeric_date_boundaries_are_consistent_with_conversion_gate():
+    from smartppt.acceptance import numbers
+    assert numbers('January 1,1990')==numbers('January 1, 1990')==['1','1990']
+    assert numbers('−.25%, １２３．４５')==['-.25%','123.45']
+    assert numbers('2 1')!=numbers('1 2')
