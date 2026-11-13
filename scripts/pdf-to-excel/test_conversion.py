@@ -446,11 +446,52 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(result["missingPages"], [2])
         self.assertTrue(any("pages: 2" in s for s in result["warnings"]))
 
+    def test_rotated_native_exact_without_stirling(self):
+        from unittest.mock import patch
+
+        expected = next(x["cells"] for x in self.expected if x["id"] == "rotated")
+        with (
+            patch.dict(os.environ, {"STIRLING_URL": ""}),
+            patch(
+                "convert.stirling_tables",
+                side_effect=AssertionError("Native rotation must not call Stirling"),
+            ) as fallback,
+        ):
+            _, book, _ = self.run_case("rotated")
+        try:
+            self.assertEqual([list(r) for r in book.active.values], expected)
+            fallback.assert_not_called()
+        finally:
+            book.close()
+
     @unittest.skipUnless(os.getenv("STIRLING_URL"), "Requires real Stirling service")
-    def test_rotated_stirling_exact(self):
-        _, book, _ = self.run_case("rotated")
+    def test_rotated_stirling_direct_exact(self):
+        from unittest.mock import patch
+
+        from convert import stirling_tables
+
+        source = self.root / "rotated.pdf"
+        self.assertEqual(PdfReader(source).pages[0].rotation, 90)
+        expected = next(x["cells"] for x in self.expected if x["id"] == "rotated")
+        # Exercise the actual HTTP/XLSX adapter directly. Never let local page
+        # normalization turn a missing or broken external service into a pass.
+        with patch(
+            "source_rotation.prepared_rotation",
+            side_effect=AssertionError("External integration cannot normalize locally"),
+        ):
+            tables = stirling_tables(source, 0)
+        self.assertEqual(len(tables), 1)
+        table = tables[0]
+        self.assertEqual(table["method"], "stirling")
+        self.assertEqual(len(table["heights"]), len(expected))
+        self.assertEqual(len(table["widths"]), len(expected[0]))
         self.assertEqual(
-            [list(r) for r in book.active.values], self.expected[0]["cells"]
+            sorted(table["cells"], key=lambda cell: (cell["r"], cell["c"])),
+            [
+                {"r": r, "c": c, "rs": 1, "cs": 1, "text": text}
+                for r, row in enumerate(expected)
+                for c, text in enumerate(row)
+            ],
         )
 
     @unittest.skipUnless(
@@ -547,3 +588,4 @@ class ConversionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

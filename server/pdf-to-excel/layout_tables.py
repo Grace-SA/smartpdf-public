@@ -676,6 +676,7 @@ def refine_predictions(item, page):
     from layout_columns import recover as recover_columns
     from layout_paragraph_rows import recover as recover_paragraphs
     from layout_header_spans import recover as recover_header_spans
+    from layout_native_colspans import recover as recover_native_colspans
     from layout_native_rowspans import recover as recover_native_rowspans
     from layout_native_order import recover as recover_native_order
     from layout_wrapped_stub import recover as recover_wrapped_stub
@@ -690,6 +691,7 @@ def refine_predictions(item, page):
         part = recover_paragraphs(part, page)
         part = recover_header_spans(part, page)
         part = recover_native_rowspans(part, page)
+        part = recover_native_colspans(part, page)
         part = recover_wrapped_stub(part, page)
         recovered.append(recover_native_order(part, page))
     return recovered
