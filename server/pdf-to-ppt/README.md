@@ -201,3 +201,7 @@ Light增量另须通过独立Poppler保护：最终组合输出在144/216/288/43
 ### Inferred separator recovery
 
 A final additive collision-component pass can omit a single PDFium-generated terminal ASCII separator from a copied source run, never real spaces or visible glyphs. Exact source ownership remains mandatory. Complete components must pass independent Poppler nonregression at 144/216/288/432 DPI, then be rebuilt and verified again; uncertain regions remain graphic. See [round 20 evidence](../../docs/pdf-to-ppt-quality-round20-2026-11-13.md).
+
+### Offline canvas quantization diagnosis
+
+`tools/public-native-quantization.py` can explain the exact PPT EMU → LibreOffice hundredth-millimetre page-size conversion using immutable PDFs and the actual PPT dimensions, then measure unchanged four-resolution visual nonregression. It never authorizes conversion and does not change default production guards. Raw numeric precision, page boxes, units, pixel-grid boundaries and expanded ROIs must all pass. See [round 21 evidence](../../docs/pdf-to-ppt-quality-round21-2026-11-13.md).
