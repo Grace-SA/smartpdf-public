@@ -13,6 +13,13 @@ import cv2, numpy as np
 
 
 def recover_spaces(image, result, reader):
+    from ocr_touching_spaces import recover_touching_spaces
+
+    projected = _recover_projected_spaces(image, result, reader)
+    return recover_touching_spaces(image, projected, reader)
+
+
+def _recover_projected_spaces(image, result, reader):
     if not result:
         return result
     candidates = []
