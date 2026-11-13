@@ -90,7 +90,8 @@ def intersects(a,b):
     return a[0]<b[2] and b[0]<a[2] and a[1]<b[3] and b[1]<a[3]
 
 
-def objects_for_page(page,grouped=True,word_regions=False):
+def objects_for_page(page,grouped=True,word_regions=False,word_clusters=False,cluster_mode='adjacent'):
+    if word_clusters and not word_regions:raise ValueError("word clusters require regional words")
     runs,objects,warnings=extract_native(page,split_words=word_regions,allow_quarter_turns=word_regions,partial_regions=word_regions);groups=defaultdict(list)
     for run in runs:groups[run['object_id']].append(run)
     safe=[]
@@ -110,6 +111,9 @@ def objects_for_page(page,grouped=True,word_regions=False):
         # Recover words independently while retaining all unselected glyphs of
         # the same PDF object in the raster. Touching padded boxes are ambiguous.
         regions=[];parts=[(obj,run) for obj,runs in safe for run in runs]
+        if word_clusters:
+            from .word_clusters import MAX_PAGE_RUNS
+            if len(parts)>MAX_PAGE_RUNS:return [],sorted(set(warnings+['word_cluster_resource_limit']))
         blocked={tuple(box) for _,run in parts for box in run.get('blocked_boxes',[])}
         blocked_pixels=[word_pixel_box(box,page.get_size()) for box in blocked]
         boxes=[word_pixel_box(r['box'],page.get_size()) for _,r in parts];cells=defaultdict(set)
@@ -118,6 +122,27 @@ def objects_for_page(page,grouped=True,word_regions=False):
             keys=[(x,y) for x in range(l//64,(r-1)//64+1) for y in range(t//64,(b-1)//64+1)]
             memberships.append(keys)
             for key in keys:cells[key].add(i)
+        if word_clusters:
+            if page.get_rotation():return [],warnings
+            from .word_clusters import connected_word_clusters,source_verified,bounded_neighbors,MAX_SOURCE_CHARS
+            # Any non-candidate visible source character is a protected obstacle,
+            # including unsafe objects not represented in the safe run list.
+            origin_x,origin_y,_,_=page.get_bbox()
+            with closing(page.get_textpage()) as tp:
+                if tp.count_chars()>MAX_SOURCE_CHARS:return [],sorted(set(warnings+['word_cluster_resource_limit']))
+                admitted={i for _,run in parts for i in range(run['index'],run['end_index'])}
+                for i in range(tp.count_chars()):
+                    if i in admitted:continue
+                    code=pdfium.raw.FPDFText_GetUnicode(tp,i)
+                    if not code or chr(code).isspace():continue
+                    l,b,r,t=tp.get_charbox(i)
+                    box=(l-origin_x,b-origin_y,r-origin_x,t-origin_y)
+                    if all(math.isfinite(v) for v in box) and box[2]>box[0] and box[3]>box[1]:
+                        blocked_pixels.append(word_pixel_box(box,page.get_size()))
+            neighbors=bounded_neighbors(memberships,cells)
+            if neighbors is None:return [],sorted(set(warnings+['word_cluster_resource_limit']))
+            clusters=connected_word_clusters(parts,boxes,neighbors,blocked_pixels,mode=cluster_mode)
+            return [(group,runs) for group,runs in clusters if source_verified(page,runs)],warnings
         for i,(obj,run) in enumerate(parts):
             if any(intersects(boxes[i],box) for box in blocked_pixels):continue
             neighbors=set().union(*(cells[key] for key in memberships[i]))
@@ -434,10 +459,11 @@ def alternative_base_sans(objects):
     return selected
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None):
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False,alternative_font=None,word_clusters=False,cluster_mode='adjacent'):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
-    if extend and not word_regions:raise ValueError('extensions require isolated words')
+    if extend and not word_regions:raise ValueError('extensions require regional words')
+    if word_clusters and not (extend and word_regions):raise ValueError('word clusters require additive regional recovery')
     if character_fit and not (extend and spacing_retry):raise ValueError('character fitting requires additive spacing extension')
     if alternative_font is not None and (alternative_font!='base-sans' or not (extend and spacing_retry)):
         raise ValueError('alternative font requires approved additive spacing extension')
@@ -460,7 +486,12 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
                 if (character_fit or alternative_font) and page.get_rotation():continue
-                objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions)
+                objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions,**({'word_clusters':True,'cluster_mode':cluster_mode} if word_clusters else {}))
+                if word_clusters and 'word_cluster_resource_limit' in warnings:
+                    previous=minimum_coverage.get(number)
+                    if previous is not None and 'word_cluster_resource_limit' not in previous['warnings']:
+                        previous['warnings'].append('word_cluster_resource_limit')
+                    continue
                 if alternative_font:objects=alternative_base_sans(objects)
                 if character_fit:objects=[(group,runs) for group,runs in objects if not any(r.get('rotation') for r in runs)]
                 if extend:
@@ -577,7 +608,10 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                 if extend:
                     previous=minimum_coverage[number];report=reports[number]
                     report['warnings']=list(dict.fromkeys(previous.get('warnings',[])+report['warnings']))
-                    report['regional_strategy']='source-words-extended'
+                    report['regional_strategy']='source-word-clusters-extended' if word_clusters else 'source-words-extended'
+                    if word_clusters:
+                        report['added_word_clusters']=len(objects)
+                        report['word_cluster_mode']=cluster_mode
                     report['extension_spacing_retry']=spacing_retry
                     report['extension_calibration_mode']='median-character-height' if character_fit else 'word-bounds'
                     if alternative_font:
@@ -639,6 +673,21 @@ def recover_regions(source,target,page_numbers,settings):
             except ConversionError:
                 for n in remaining:reports[n]['warnings'].append('additional_base_sans_extension_unavailable')
                 break
+        # Full padded-box collision components are atomic: nearby lines remain
+        # separate source-positioned textboxes, and each word keeps its gates.
+        # Never split components or retry an unbounded sequence of alternatives.
+        for alternative_font in (None,'base-sans'):
+            if alternative_font and any('additional_base_sans_extension_unavailable' in r['warnings'] for r in reports.values()):continue
+            for character_fit in (True,False):
+                if character_fit and alternative_font is None and any('additional_character_extension_unavailable' in r['warnings'] for r in reports.values()):continue
+                cluster_pages=[n for n in remaining if 'word_cluster_resource_limit' not in reports[n]['warnings']]
+                if not cluster_pages:break
+                try:reports.update(_recover_regions(source,target,cluster_pages,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=character_fit,alternative_font=alternative_font,word_clusters=True,cluster_mode='collision'))
+                except ConversionError:
+                    for n in remaining:
+                        warning='additional_word_cluster_extension_unavailable'
+                        if warning not in reports[n]['warnings']:reports[n]['warnings'].append(warning)
+                    break
     from .regional_order import restore_source_order
     restore_source_order(source,target,reports,settings)
     return reports

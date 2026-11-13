@@ -146,7 +146,7 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 
 ## 固定公开样本诊断
 
-`tools/public-native-manifest.json` 固定 W3C、IRS、arXiv 三份公开文件的 URL、SHA-256 及六个抽样页。人工下载至独立目录后，工具先核对全部哈希，输出必须使用新目录；不会自动下载或把样本写进仓库：
+`tools/public-native-manifest.json` 固定 W3C、IRS、arXiv 三份公开文件的 URL、SHA-256 及八个抽样页（保留原六页，新增 W-9 第3页及论文第6页）。人工下载至独立目录后，工具先核对全部哈希，输出必须使用新目录；不会自动下载或把样本写进仓库：
 
 ```sh
 .venv/bin/python tools/public-native-probe.py --inputs /path/to/public-pdfs --output /path/to/new-run --renderer /path/to/soffice
@@ -174,3 +174,6 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 该工具不进行图像配准、平移或缩放；用几何位置而不是相同文本选择对应词。邻近词重叠、边界不纯、无墨迹或像素网格不一致时明确弃权。仅有少量可独立观察的词不能证明整页准确。原有 Poppler 严格边框失败仍保留：完整字体的 ascent/descent 与 PDF 子集不同可能改变解析框，但不能因此压缩字体指标、遮蔽重音符号或豁免真实错位。输入、页数、像素、词数及 XML 提取都有显式上限；缺少 POSIX 文件大小限制时拒绝执行。
 
 另有两次受限的 Base Sans 替代字体追加尝试，仅针对明确的 `Helvetica` 或 `HelveticaNeueLTStd-Roman` 常规字形；这不是源字体完全一致的声明。只有通过既有位置、局部及整页像素检查的新词才会追加，已验证文字与原始误差基准保持不变，报告明确标记字体替代。
+
+
+碰撞词簇增量恢复：保护框相交的2–8个词作为一个不可拆分的候选，少于160个字符、范围不超过200×50pt。近邻行仍是独立原始文本框，不拼接数字、补写空格或跨越未知源字符。完整源字符/对象归属、原始墨迹不重叠、全部逐词几何/像素门槛、原有区域像素不变与原始整页基准均必须满足；任一成员失败则整簇保留原图。裁剪页障碍坐标与源区域统一；生成字符和不安全邻居不能参与。最多四次增量策略尝试，已经不可用的字体/校准路径不重复尝试。此机制只增加经验证的可编辑部分，不代表全文可编辑或通用上线验收。

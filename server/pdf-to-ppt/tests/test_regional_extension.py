@@ -138,6 +138,9 @@ def test_source_words_route_still_gets_bounded_spacing_extension(monkeypatch):
  monkeypatch.setattr(regional_order,'restore_source_order',lambda *args:None)
  assert regional.recover_regions(None,None,[1],None)=={1:prior}
  retries=[c for c in calls if c.get('extend')]
- assert [c['spacing_retry'] for c in retries]==[True,False,True]
- assert [c.get('character_fit',False) for c in retries]==[False,False,True]
+ assert [c['spacing_retry'] for c in retries]==[True,False,True,True,True,True,True,True,True]
+ assert [c.get('character_fit',False) for c in retries]==[False,False,True,True,False,True,False,True,False]
+ assert [c.get('alternative_font') for c in retries]==[None,None,None,'base-sans','base-sans',None,None,'base-sans','base-sans']
+ assert [c.get('word_clusters',False) for c in retries]==[False]*5+[True]*4
+ assert all(c['cluster_mode']=='collision' for c in retries if c.get('word_clusters'))
  assert all(c['word_regions'] for c in retries)
