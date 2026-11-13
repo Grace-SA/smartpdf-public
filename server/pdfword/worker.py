@@ -94,6 +94,10 @@ def needs_ocr(page):
     visible = 0
     images = 0
     unsafe = False
+    # Top-level objects have page-space bounds and are yielded in paint order.
+    # Extraction can expose characters that a later graphic partly conceals.
+    text_bounds = []
+    overlap_checks = 0
     with closing(page.get_textpage()) as tp:
         objects = 0
         for obj in page.get_objects(max_depth=8, textpage=tp):
@@ -102,6 +106,28 @@ def needs_ocr(page):
                 raise Rejected("Page exceeds object limit.")
             if obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE:
                 images += 1
+            if obj.level == 0 and obj.type in (
+                pdf.raw.FPDF_PAGEOBJ_PATH, pdf.raw.FPDF_PAGEOBJ_IMAGE,
+            ):
+                painted = obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE
+                if obj.type == pdf.raw.FPDF_PAGEOBJ_PATH:
+                    fill_mode, stroke = ctypes.c_int(), ctypes.c_int()
+                    known = pdf.raw.FPDFPath_GetDrawMode(
+                        obj, ctypes.byref(fill_mode), ctypes.byref(stroke)
+                    )
+                    # Unknown drawing state is not evidence of transparency.
+                    painted = not known or fill_mode.value != pdf.raw.FPDF_FILLMODE_NONE
+                if painted and text_bounds:
+                    bounds = obj.get_bounds()
+                    overlap_checks += len(text_bounds)
+                    if overlap_checks > 100000:
+                        unsafe = True
+                    else:
+                        unsafe |= any(
+                            min(bounds[2], prior[2]) > max(bounds[0], prior[0])
+                            and min(bounds[3], prior[3]) > max(bounds[1], prior[1])
+                            for prior in text_bounds
+                        )
             if obj.type != pdf.raw.FPDF_PAGEOBJ_TEXT:
                 continue
             value = obj.extract()
@@ -114,6 +140,8 @@ def needs_ocr(page):
                 unsafe = True
                 continue
             visible += len(value)
+            if obj.level == 0:
+                text_bounds.append(obj.get_bounds())
             unsafe |= (
                 not ok
                 or rgba[3].value != 255
@@ -437,4 +465,5 @@ if __name__ == "__main__":
             )
         )
         raise SystemExit(3)
+
 
