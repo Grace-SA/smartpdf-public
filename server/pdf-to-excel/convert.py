@@ -766,10 +766,26 @@ def convert_pages(source, output, selected, count, layout, ocr):
         if len(doc.pages) != count:
             raise ConversionError("The PDF has an inconsistent page structure.")
         forms = {}
+        hidden_scans = set()
+        hidden_reader = None
         for index in selected:
             page = doc.pages[index]
             if visible_area(page) > 10_000_000:
                 raise ConversionError("A page has unsupported dimensions.")
+            # A pre-existing invisible OCR layer is not visual evidence. Only
+            # a separately proved full-page scan may bypass native extraction.
+            if page.images and len(page.chars) >= 10:
+                from source_hidden_ocr import classify
+
+                if hidden_reader is None:
+                    hidden_reader = PdfReader(source)
+                    if len(hidden_reader.pages) != count:
+                        raise ConversionError(
+                            "The PDF has an inconsistent page structure."
+                        )
+                if classify(hidden_reader.pages[index]) == "hidden":
+                    hidden_scans.add(index)
+                    continue
             if len(control_rectangles(page)) >= 5:
                 form = recover_form(page)
                 if form is None:
@@ -787,6 +803,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
                     raise ConversionError("A page has unsupported dimensions.")
                 if (
                     index not in forms
+                    and index not in hidden_scans
                     and not page.rotation
                     and not (page.images and len(page.chars) < 10)
                 ):
@@ -802,13 +819,19 @@ def convert_pages(source, output, selected, count, layout, ocr):
             if visible_area(page) > 10_000_000:
                 raise ConversionError("A page has unsupported dimensions.")
             # Reject an image region with no corresponding text, including mixed pages.
-            image_only = bool(page.images) and len(page.chars) < 10
+            image_only = index in hidden_scans or (
+                bool(page.images) and len(page.chars) < 10
+            )
             if index in forms:
                 found = [forms[index]]
             elif image_only:
                 if not ocr:
                     raise ConversionError(
                         f"Page {index + 1} needs OCR. Enable scanned-page recognition."
+                    )
+                if index in hidden_scans:
+                    warnings.append(
+                        f"Page {index + 1}: ignored an invisible OCR text layer and recognized the visible scan. Review OCR accuracy."
                     )
                 found = scan_tables(page)
                 if not found and models and _ocr is not None:
@@ -894,7 +917,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
                     if recovered is not t:
                         leader_pages.add(index + 1)
                     t = recovered
-                if t.get("bbox"):
+                if t.get("bbox") and index not in hidden_scans:
                     b = t["bbox"]
                     sizes = [
                         c["size"]
@@ -905,7 +928,8 @@ def convert_pages(source, output, selected, count, layout, ocr):
                     ]
                     if sizes:
                         t["fontSize"] = max(6, min(14, median(sizes)))
-                apply_source_typography(t, page)
+                if index not in hidden_scans:
+                    apply_source_typography(t, page)
                 view = visible_box(page)
                 t["sourcePageOrientation"] = (
                     "landscape" if view[2] - view[0] > view[3] - view[1] else "portrait"

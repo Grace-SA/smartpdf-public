@@ -108,7 +108,7 @@ def extract_scan_layout_tables(source, index, models, page, reader):
     for item in result.document.tables:
         if item.data.num_rows < 2 or item.data.num_cols < 2:
             continue
-        table = adapt_table(item.model_dump(), page)
+        table = adapt_table(item.model_dump(), page, native_text=False)
         table["method"] = "ocr-layout"
         tables.append(table)
     tables.sort(key=lambda t: (t["bbox"][1], t["bbox"][0]))

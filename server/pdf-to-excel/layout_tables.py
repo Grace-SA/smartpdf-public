@@ -197,7 +197,8 @@ def source_cell_text(text, box, page):
     return recover_phrase(text, b, page, view)
 
 
-def adapt_table(item, page):
+def adapt_table(item, page, *, native_text=True):
+    """Adapt geometry; OCR callers must never restore native text-layer values."""
     data = item["data"]
     rows, columns = data["num_rows"], data["num_cols"]
     if not rows or not columns or rows * columns > 250000:
@@ -223,9 +224,15 @@ def adapt_table(item, page):
                 "c": c,
                 "rs": rs,
                 "cs": cs,
-                "text": source_cell_text(cell["text"], cell.get("bbox"), page),
+                "text": (
+                    source_cell_text(cell["text"], cell.get("bbox"), page)
+                    if native_text
+                    else cell["text"]
+                ),
                 "sourceTextCandidate": (
-                    model_box(cell["bbox"], page) if cell.get("bbox") else None
+                    model_box(cell["bbox"], page)
+                    if native_text and cell.get("bbox")
+                    else None
                 ),
             }
         )
