@@ -157,8 +157,9 @@ def needs_ocr(page):
                 images += 1
             if obj.type in (
                 pdf.raw.FPDF_PAGEOBJ_PATH, pdf.raw.FPDF_PAGEOBJ_IMAGE,
+                pdf.raw.FPDF_PAGEOBJ_SHADING,
             ):
-                painted = obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE
+                painted = obj.type in (pdf.raw.FPDF_PAGEOBJ_IMAGE, pdf.raw.FPDF_PAGEOBJ_SHADING)
                 clear_interior = None
                 if obj.type == pdf.raw.FPDF_PAGEOBJ_PATH:
                     fill_mode, stroke = ctypes.c_int(), ctypes.c_int()
