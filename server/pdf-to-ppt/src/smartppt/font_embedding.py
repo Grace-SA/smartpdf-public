@@ -25,7 +25,8 @@ FAMILIES['SmartPDF Sans100']=FAMILIES['Noto Sans SC']
 FAMILIES['SmartPDF Serif200']=FAMILIES['Noto Serif SC']
 CMU_FACES=json.loads(Path(__file__).with_name('cmu-fonts.json').read_text())['families']
 from .base_font import FAMILY as BASE_FAMILY
-PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)|{BASE_FAMILY}
+from .termes_font import FAMILY as TERMES_FAMILY
+PORTABLE_FAMILIES=set(FAMILIES)|set(CMU_FACES)|{BASE_FAMILY,TERMES_FAMILY}
 STYLES=('regular','bold','italic','boldItalic')
 P='http://schemas.openxmlformats.org/presentationml/2006/main'
 R='http://schemas.openxmlformats.org/officeDocument/2006/relationships'
@@ -59,10 +60,12 @@ def separate_unicode_aliases(font):
     font.setGlyphOrder(order)
 
 
-def eot_payload(font,data):
+def eot_payload(font,data,*,editable_embedding=False):
     """Uncompressed EOT 0x00020001, with actual names and embedding rights."""
     os2=font['OS/2']
-    if os2.fsType!=0:raise ConversionError('portable_font_license_not_installable')
+    # Only an explicitly reviewed full editable font may keep legacy combined
+    # preview/print + editable flags. Never clear or broaden the source bits.
+    if os2.fsType!=0 and not (editable_embedding and os2.fsType in (8,12)):raise ConversionError('portable_font_license_not_installable')
     keys=('bFamilyType','bSerifStyle','bWeight','bProportion','bContrast','bStrokeVariation','bArmStyle','bLetterForm','bMidline','bXHeight')
     header=struct.pack('<IIII',0,len(data),0x00020001,0)+bytes(getattr(os2.panose,k) for k in keys)
     header+=struct.pack('<BBIHH',1,os2.fsSelection&1,os2.usWeightClass,os2.fsType,0x504c)
@@ -74,7 +77,7 @@ def eot_payload(font,data):
         encoded=name.encode('utf-16le')
         if len(encoded)>65535:raise ConversionError('portable_font_names_invalid')
         header+=struct.pack('<HH',0,len(encoded))+encoded
-    header+=b'\0'*4  # padding and an empty root string; OFL permits distribution.
+    header+=b'\0'*4  # padding and empty root; original embedding flags are retained.
     return struct.pack('<I',len(header)+len(data))+header[4:]+data
 
 
@@ -118,6 +121,17 @@ def cmu_payload(data,family,style):
 
 
 def bundled_payloads(bold=False,family='Noto Sans SC',styles=None):
+    if family==TERMES_FAMILY:
+        from .termes_font import ttf_bytes
+        from fontTools.ttLib import TTFont
+        required=set(styles or ())|{'regular'}|({'bold'} if bold else set())
+        if required-set(STYLES):raise ConversionError('portable_termes_style_unsupported')
+        result={}
+        for style in STYLES:
+            if style in required:
+                data=ttf_bytes(style)
+                with TTFont(BytesIO(data)) as font:result[style]=eot_payload(font,data,editable_embedding=True)
+        return result
     if family==BASE_FAMILY:
         if bold or set(styles or ())-{'regular'}:raise ConversionError('portable_base_font_style_unsupported')
         from .base_font import ttf_bytes

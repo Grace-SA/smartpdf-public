@@ -10,6 +10,7 @@ from copy import deepcopy
 import ctypes
 from io import BytesIO
 import math
+import statistics
 import shutil
 from pathlib import Path
 import tempfile
@@ -278,7 +279,38 @@ def rendered_word_regions(prs,number,page,objects,rendered,shape_offset=0):
     return regions
 
 
-def calibrate_runs(prs, number, page, objects, rendered,trim_spacing=False,shape_offset=0):
+def character_height_ratio(page,run,needle,observed,scale):
+    """Match complete one-to-one source glyphs before measuring optical height.
+
+    Keep the word atomic. Raw source boxes are only comparable on unrotated
+    pages; Unicode expansions and unresolved provenance are not measurements.
+    """
+    if page.get_rotation() or run.get('rotation'):return None
+    source=[]
+    with closing(page.get_textpage()) as tp:
+        start,end=run['index'],run['end_index']
+        if not 0<=start<end<=tp.count_chars():return None
+        for i in range(start,end):
+            code=pdfium.raw.FPDFText_GetUnicode(tp,i)
+            if not code or code in (0xfffd,0xfffe,0xffff):return None
+            char=chr(code)
+            if char.isspace():continue
+            normalized=unicodedata.normalize('NFKC',char)
+            if len(normalized)!=1 or unicodedata.category(char) in ('Cc','Co','Cs'):return None
+            obj=tp.get_textobj(i)
+            if obj is None or ctypes.cast(obj.raw,ctypes.c_void_p).value!=run['object_id']:return None
+            source.append((normalized,tp.get_charbox(i)))
+    if len(source)!=len(observed) or ''.join(c for c,_ in source)!=needle:return None
+    ratios=[]
+    for (_,a),b in zip(source,observed):
+        if not all(math.isfinite(v) for v in (*a,*b)):return None
+        ah,bh=a[3]-a[1],b[3]-b[1]
+        if min(ah,bh)<=.1:return None
+        ratios.append(ah*scale/bh)
+    return statistics.median(ratios) if ratios else None
+
+
+def calibrate_runs(prs, number, page, objects, rendered,trim_spacing=False,shape_offset=0,character_fit=False):
     """Measure the office renderer's glyph placement, then fit source ink bounds.
 
     Numeric/character content is never edited. Ambiguous or implausible matches
@@ -334,6 +366,9 @@ def calibrate_runs(prs, number, page, objects, rendered,trim_spacing=False,shape
                 dw,dh=desired[2]-desired[0],desired[3]-desired[1]
                 if min(aw,ah,dw,dh)<=0:continue
                 ratio=dh/ah
+                if character_fit:
+                    ratio=character_height_ratio(page,run,needle,boxes[start:end],scale)
+                    if ratio is None:continue
                 # Nominal point sizes are not comparable across font families:
                 # CJK faces can have much taller Latin capitals. Allow bounded
                 # optical sizing; final 2pt glyph and pixel gates are unchanged.
@@ -349,6 +384,7 @@ def calibrate_runs(prs, number, page, objects, rendered,trim_spacing=False,shape
                 run['fit']={'x':desired[0]+((dw-aw*ratio)/2 if single else 0)-(observed[0]-shape.left/12700)*ratio,
                     'y':desired[1]-(observed[1]-shape.top/12700)*ratio,
                     'width':dw+size,'height':size*1.8,'size':size,'spacing':round(spacing*100)}
+                if character_fit:run['fit']['calibration_mode']='median-character-height'
 
 
 def covered_source_indices(page, objects):
@@ -374,10 +410,11 @@ def compact_source_ranges(indices):
     return ranges
 
 
-def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False):
+def _recover_regions(source, target, page_numbers, settings,grouped=False,word_regions=False,minimum_coverage=None,extend=False,spacing_retry=False,character_fit=False):
     """Mutate only verified pages. Renderer errors leave the caller's fallback intact."""
     if not page_numbers:return {}
     if extend and not word_regions:raise ValueError('extensions require isolated words')
+    if character_fit and not (extend and spacing_retry):raise ValueError('character fitting requires additive spacing extension')
     reports={};minimum_coverage=minimum_coverage or {}
     prior={n:{i for a,b in report['source_ranges'] for i in range(a,b)} for n,report in minimum_coverage.items()}
     with tempfile.TemporaryDirectory(prefix='smartppt-regions-',dir=Path(source).parent) as tmp,pdfium.PdfDocument(source) as doc:
@@ -396,7 +433,9 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
         try:
             for number in page_numbers:
                 page=pages[number]=doc[number-1]
+                if character_fit and page.get_rotation():continue
                 objects,warnings=objects_for_page(page,grouped=grouped,word_regions=word_regions)
+                if character_fit:objects=[(group,runs) for group,runs in objects if not any(r.get('rotation') for r in runs)]
                 if extend:
                     if number not in prior:continue
                     if not covered_source_indices(page,objects)-prior[number]:continue
@@ -415,9 +454,14 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
             candidate=folder/'candidate.pptx';prs.save(candidate)
             if extend:rendered=render([candidate])[0]
             else:baseline_pdf,rendered=render([baseline,candidate])
-            for number,objects in candidates.items():
-                calibrate_runs(prs,number,pages[number],objects,rendered,**({'shape_offset':len(seeds[number]['shapes']),'trim_spacing':spacing_retry} if extend else {}))
+            for number,objects in list(candidates.items()):
+                calibrate_runs(prs,number,pages[number],objects,rendered,**({'shape_offset':len(seeds[number]['shapes']),'trim_spacing':spacing_retry,'character_fit':character_fit} if extend else {}))
+                if character_fit:
+                    objects=[(group,runs) for group,runs in objects if all(r.get('fit',{}).get('calibration_mode')=='median-character-height' for r in runs)]
+                    if objects:candidates[number]=objects
+                    else:del candidates[number]
                 regions[number]=draw(prs,number,objects)
+            if not candidates:return {}
             calibrated=folder/'calibrated.pptx';prs.save(calibrated)
             rendered=render([calibrated])[0]
             selected={};scores={}
@@ -507,6 +551,7 @@ def _recover_regions(source, target, page_numbers, settings,grouped=False,word_r
                     previous=minimum_coverage[number];report=reports[number]
                     report['regional_strategy']='source-words-extended'
                     report['extension_spacing_retry']=spacing_retry
+                    report['extension_calibration_mode']='median-character-height' if character_fit else 'word-bounds'
                     report['retained_regions']=deepcopy(previous)
                     report['added_source_ranges']=compact_source_ranges(coverage-prior[number])
                     report['added_editable_runs']=len(runs)
@@ -548,6 +593,11 @@ def recover_regions(source,target,page_numbers,settings):
             except ConversionError:
                 for n in remaining:reports[n]['warnings'].append('additional_word_extension_unavailable')
                 break
+        # A single additional optical retry may add words, never replace the
+        # verified package or restart the previous bounded extension loop.
+        try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=True,character_fit=True))
+        except ConversionError:
+            for n in remaining:reports[n]['warnings'].append('additional_character_extension_unavailable')
     from .regional_order import restore_source_order
     restore_source_order(source,target,reports,settings)
     return reports

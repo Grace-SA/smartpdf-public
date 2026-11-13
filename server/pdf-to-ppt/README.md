@@ -156,3 +156,11 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 第二步需要 Poppler `pdftotext`。这是以原图为基线的原生恢复诊断，未调用 Stirling，不能代替服务验收。字符袋覆盖率不代表阅读顺序或准确率；独立字词按几何先配对再比较文字，边框差异与标点分词需人工核查。图片中的文字不计为可编辑文字，完整文档、扫描件和各客户端仍需独立测试。
 
 明确的 CM-Super 常规/粗体/斜体族名可以选择已配置的固定 OFL CMU 字体；未知变体不推断。严格来源匹配的未嵌入 Helvetica 常规字形使用 `SmartPDF Base Sans`，完整 BSD 通知包含于运行包和嵌入字体，渲染与交付使用同一字体字节。字体替代后的内容及像素门槛保持不变。
+
+## 可选的 Nimbus Roman / Termes 字体适配
+
+明确的 Nimbus Roman No9 L、Nimbus Roman 和 TeX Gyre Termes 字体名可选择新的 `SmartPDF Termes` 替代族。配置 `SMARTPPT_TERMES_FONT_DIR`，提供 CTAN TeX Gyre Termes 2.004 的四个完整文件 `texgyretermes-regular.otf`、`texgyretermes-bold.otf`、`texgyretermes-italic.otf`、`texgyretermes-bolditalic.otf`。来源：[CTAN](https://ctan.org/pkg/tex-gyre-termes)；下载目录：`https://mirrors.ctan.org/fonts/tex-gyre/opentype/`。文件大小与 SHA-256 固定于 `src/smartppt/termes_font.py`，运行时不联网下载；缺少整族时保持既有策略，修改后的字体字节不能通过渲染/嵌入校验。
+
+以固定 FontTools 将完整 CFF 转为重命名的 TrueType，保留 Unicode、布局表、字距和行度量、斜体/下划线信息；曲线整数化可能带来一个字体单位的极值差异，仍须通过实际像素门槛。渲染器与 EOT 嵌入共享相同字节，不复制上传字体。保留原 `fsType=12` 可编辑嵌入权限，不将它改成无限制安装权限。完整 GFL、LPPL 与变更清单包含于运行包及交付字体；不是原字体完全一致或各 Office 客户端已验收的承诺。
+
+区域恢复增加一次受限的逐字符高度中位数校准，只追加新通过的完整词语；旋转、Unicode 展开、来源不明确或不匹配时不使用。既有文字、原始整页误差基准、局部像素与位置门槛保持不变。

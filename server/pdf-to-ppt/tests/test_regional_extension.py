@@ -80,7 +80,8 @@ def test_retained_text_must_remain_pixel_identical():
 
 @pytest.mark.skipif(not os.getenv('SMARTPPT_TEST_RENDERER'),reason='real Office renderer required')
 @pytest.mark.parametrize('initial_words',[False,True])
-def test_real_extension_keeps_prior_xml_and_can_roll_back(tmp_path,monkeypatch,initial_words):
+@pytest.mark.parametrize('character_fit',[False,True])
+def test_real_extension_keeps_prior_xml_and_can_roll_back(tmp_path,monkeypatch,initial_words,character_fit):
  from smartppt.config import Settings
  source=tmp_path/'source.pdf';fixture(source);target=tmp_path/'result.pptx'
  with pdfium.PdfDocument(source) as doc,closing(doc[0]) as page:
@@ -95,17 +96,18 @@ def test_real_extension_keeps_prior_xml_and_can_roll_back(tmp_path,monkeypatch,i
  assert first and first[1]['covered_source_glyphs']==9
  monkeypatch.setattr(regional,'objects_for_page',original)
  initial=target.read_bytes();xml=[s._element.xml for s in list(Presentation(target).slides[0].shapes)[1:]]
- added=regional._recover_regions(source,target,[1],settings,word_regions=True,minimum_coverage=first,extend=True)
+ added=regional._recover_regions(source,target,[1],settings,word_regions=True,minimum_coverage=first,extend=True,spacing_retry=character_fit,character_fit=character_fit)
  assert added and added[1]['covered_source_glyphs']>9
  assert [s._element.xml for s in list(Presentation(target).slides[0].shapes)[1:1+len(xml)]]==xml
  assert added[1]['retained_regions']==first[1]
  assert added[1]['added_editable_runs']>0
+ assert added[1]['extension_calibration_mode']==('median-character-height' if character_fit else 'word-bounds')
  assert added[1]['baseline_render']==first[1]['baseline_render']
  # Final verification rejects a changed retained region, leaving the package
  # byte-identical even if individual new words already passed their gates.
  target.write_bytes(initial)
  monkeypatch.setattr(regional,'retained_pixels_unchanged',lambda *_:False)
- rejected=regional._recover_regions(source,target,[1],settings,word_regions=True,minimum_coverage=first,extend=True)
+ rejected=regional._recover_regions(source,target,[1],settings,word_regions=True,minimum_coverage=first,extend=True,spacing_retry=character_fit,character_fit=character_fit)
  assert rejected=={} and target.read_bytes()==initial
 
 
@@ -136,5 +138,6 @@ def test_source_words_route_still_gets_bounded_spacing_extension(monkeypatch):
  monkeypatch.setattr(regional_order,'restore_source_order',lambda *args:None)
  assert regional.recover_regions(None,None,[1],None)=={1:prior}
  retries=[c for c in calls if c.get('extend')]
- assert [c['spacing_retry'] for c in retries]==[True,False]
+ assert [c['spacing_retry'] for c in retries]==[True,False,True]
+ assert [c.get('character_fit',False) for c in retries]==[False,False,True]
  assert all(c['word_regions'] for c in retries)

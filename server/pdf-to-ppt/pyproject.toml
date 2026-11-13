@@ -14,5 +14,5 @@ testpaths = ["tests"]
 [tool.setuptools.packages.find]
 where = ["src"]
 [tool.setuptools.package-data]
-smartppt = ["OFL-NotoSansSC.txt", "OFL-NotoSerifSC.txt", "OFL-CMU.txt", "cmu-fonts.json", "BSD-PDFium-base-font.txt"]
+smartppt = ["OFL-NotoSansSC.txt", "OFL-NotoSerifSC.txt", "OFL-CMU.txt", "cmu-fonts.json", "BSD-PDFium-base-font.txt", "GFL-Termes.txt", "LPPL-1.3c.txt", "MANIFEST-SmartPDFTermes.txt"]
 

@@ -1,0 +1,27 @@
+SmartPDF Termes derivative, version 1, 2026-11-13.
+Maintained by SmartPDF contributors: https://github.com/Grace-SA/smartpdf
+Original: TeX Gyre Termes 2.004, GUST e-foundry.
+Source: https://ctan.org/pkg/tex-gyre-termes
+Full upstream files: https://mirrors.ctan.org/fonts/tex-gyre/opentype/
+texgyretermes-regular.otf, texgyretermes-bold.otf,
+texgyretermes-italic.otf, texgyretermes-bolditalic.otf.
+Exact file lengths and SHA-256 values are in termes_font.py.
+
+Modified with FontTools 4.68.0: cubic CFF outlines converted to quadratic
+TrueType with cubic-approximation tolerance 0.1 font unit; family/PostScript names changed to
+SmartPDF Termes / SmartPDFTermes-<style>; fixed timestamps; complete license
+and modification notices added. Complete glyph set, Unicode cmap, upstream
+copyright, advance/line metrics and OpenType layout tables retained.
+TrueType integer-coordinate rounding can change outline extrema and derived
+side-bearing extrema by one font unit; actual rendering remains gated. No uploaded font is
+copied or modified. These are substitutes, not an assertion of source identity.
+
+Derived files, generated only when approved source files are supplied:
+SmartPDFTermes-regular.ttf, SmartPDFTermes-bold.ttf,
+SmartPDFTermes-italic.ttf, SmartPDFTermes-boldItalic.ttf.
+The renderer uses SHA-256-based storage filenames for these same bytes.
+
+This derivative is distributed under GUST Font License version 1.0 and
+LaTeX Project Public License 1.3c or later, included in full alongside and
+in its font metadata. Source implementation is termes_font.py; obtain the
+unmodified work from the upstream URL above. No claim of upstream endorsement.

@@ -31,3 +31,5 @@ OXR 代码、MLX 权重和 D-FINE 权重的固定版本/哈希见 `ocr/oxr-manif
 
 
 CM-Super 的明确 SF 形状名仅用于选择既有 OFL CMU 替代字体，不导出或嵌入 CM-Super 字体程序。形状命名依据 [CTAN 官方说明](https://ctan.org/tex-archive/fonts/ps-type1/cm-super/)，未知、小型大写、可变宽度及 Bright 变体不据此推断。
+
+`SmartPDF Termes` 是固定 TeX Gyre Termes 2.004 的重命名 TrueType 派生字体，使用 GUST Font License 1.0 / LPPL 1.3c或更高版本。完整许可和来源/变更清单见 `src/smartppt/GFL-Termes.txt`、`LPPL-1.3c.txt`、`MANIFEST-SmartPDFTermes.txt`；它们也写入字体元数据。输入文件逐一固定大小和 SHA-256，二进制不进 Git。原始可编辑嵌入位保留不变。未采用系统 Nimbus Roman 二进制用于 PPT 交付，其现有许可例外不应直接外推到 PPT 嵌入。

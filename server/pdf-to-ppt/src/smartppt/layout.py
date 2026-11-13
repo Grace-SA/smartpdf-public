@@ -62,6 +62,9 @@ def cjk_text(text):
 
 
 def font_family(name,text,flags=0,base_name=None):
+    from .termes_font import source_family
+    termes=source_family(base_name or name)
+    if termes and not cjk_text(text):return termes,True
     modern=modern_face(base_name or name);directory=os.getenv('SMARTPPT_CMU_FONT_DIR')
     if modern and directory and not cjk_text(text):
         files={'CMU Serif':'cmunrm.ttf','CMU Sans Serif':'cmunss.ttf','CMU Typewriter Text':'cmuntt.ttf'}
@@ -92,6 +95,9 @@ def font_family(name,text,flags=0,base_name=None):
 def font_style(base_name,weight,flags=0):
     """Prefer explicit face names over PDFium's stem-width weight estimate."""
     name=re.sub(r'^[A-Z]{6}\+','',base_name).lower().replace(' ','')
+    from .termes_font import face_name
+    termes=face_name(base_name)
+    if termes:return termes in ('bold','boldItalic'),termes in ('italic','boldItalic')
     if modern_face(base_name):
         if name.startswith('sf'):
             shape=name[2:4]

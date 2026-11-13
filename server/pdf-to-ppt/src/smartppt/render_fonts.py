@@ -7,7 +7,8 @@ from lxml import etree as ET
 from .font_embedding import bundled_payloads
 
 from .base_font import FAMILY as BASE_FAMILY
-VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY)
+from .termes_font import FAMILY as TERMES_FAMILY
+VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY,TERMES_FAMILY)
 
 def materialize_variant_fonts(files,folder):
     required=set()
@@ -21,10 +22,12 @@ def materialize_variant_fonts(files,folder):
     if not required:return None
     directory=Path(folder)/'approved-static-fonts';directory.mkdir(exist_ok=True)
     for family in sorted(required):
-        payload=bundled_payloads(False,family)['regular']
-        size=struct.unpack_from('<I',payload,4)[0];data=payload[-size:]
-        target=directory/(hashlib.sha256(data).hexdigest()+'.ttf')
-        if not target.exists():target.write_bytes(data)
+        payloads=(bundled_payloads(False,family,styles={'regular','bold','italic','boldItalic'})
+                  if family==TERMES_FAMILY else bundled_payloads(False,family))
+        for payload in payloads.values():
+            size=struct.unpack_from('<I',payload,4)[0];data=payload[-size:]
+            target=directory/(hashlib.sha256(data).hexdigest()+'.ttf')
+            if not target.exists():target.write_bytes(data)
     return directory
 
 
