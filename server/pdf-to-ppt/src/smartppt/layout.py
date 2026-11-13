@@ -123,6 +123,13 @@ def add_text(slide,text,x,y,width,height,size,font='Arial',bold=False,color=(0,0
     r=p.add_run();r.text=text;r.font.name=font;r.font.size=Pt(max(1,min(size,400)))
     r.font.bold=bold;r.font.italic=italic;r.font.color.rgb=RGBColor(*color)
     props=r._r.get_or_add_rPr()
+    if font=='CMU Typewriter Text':
+        # The pinned regular/italic faces declare fixed pitch, but bold faces
+        # declare variable pitch. Without the matching OOXML hint LibreOffice
+        # can select Bold for regular text (or Regular for bold if all are 49).
+        # Preserve the original font bytes and expose each face's real metadata.
+        props.find('{http://schemas.openxmlformats.org/drawingml/2006/main}latin').set(
+            'pitchFamily','50' if bold else '49')
     for tag in ('a:ea','a:cs'):
         el=OxmlElement(tag);el.set('typeface',font);props.append(el)
     if len(text)>1 and abs(scale-1)>.01:

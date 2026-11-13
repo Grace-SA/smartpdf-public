@@ -104,6 +104,7 @@ def noto_payload(data,bold=False,family='Noto Sans SC'):
         # so it survives Office editing and repackaging of the presentation.
         license_text=Path(__file__).with_name(FAMILIES[family][3]).read_text()
         font['name'].setName(license_text,13,3,1,0x409)
+        font.recalcTimestamp=False # Preserve pinned source timestamps across processes.
         output=BytesIO();font.save(output)
         return eot_payload(font,output.getvalue())
 
@@ -116,6 +117,7 @@ def cmu_payload(data,family,style):
     with TTFont(BytesIO(data)) as font:
         separate_unicode_aliases(font)
         font['name'].setName(Path(__file__).with_name('OFL-CMU.txt').read_text(),13,3,1,0x409)
+        font.recalcTimestamp=False # Preserve pinned source timestamps across processes.
         output=BytesIO();font.save(output)
         return eot_payload(font,output.getvalue())
 

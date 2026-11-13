@@ -4,11 +4,11 @@ import struct
 import zipfile
 from pathlib import Path
 from lxml import etree as ET
-from .font_embedding import bundled_payloads
+from .font_embedding import bundled_payloads,CMU_FACES
 
 from .base_font import FAMILY as BASE_FAMILY
 from .termes_font import FAMILY as TERMES_FAMILY
-VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY,TERMES_FAMILY)
+VARIANTS=('SmartPDF Sans100','SmartPDF Serif200',BASE_FAMILY,TERMES_FAMILY,*CMU_FACES)
 
 def materialize_variant_fonts(files,folder):
     required=set()
@@ -23,7 +23,7 @@ def materialize_variant_fonts(files,folder):
     directory=Path(folder)/'approved-static-fonts';directory.mkdir(exist_ok=True)
     for family in sorted(required):
         payloads=(bundled_payloads(False,family,styles={'regular','bold','italic','boldItalic'})
-                  if family==TERMES_FAMILY else bundled_payloads(False,family))
+                  if family==TERMES_FAMILY or family in CMU_FACES else bundled_payloads(False,family))
         for payload in payloads.values():
             size=struct.unpack_from('<I',payload,4)[0];data=payload[-size:]
             target=directory/(hashlib.sha256(data).hexdigest()+'.ttf')

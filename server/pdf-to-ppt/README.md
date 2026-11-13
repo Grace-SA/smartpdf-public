@@ -177,3 +177,15 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 
 
 碰撞词簇增量恢复：保护框相交的2–8个词作为一个不可拆分的候选，少于160个字符、范围不超过200×50pt。近邻行仍是独立原始文本框，不拼接数字、补写空格或跨越未知源字符。完整源字符/对象归属、原始墨迹不重叠、全部逐词几何/像素门槛、原有区域像素不变与原始整页基准均必须满足；任一成员失败则整簇保留原图。裁剪页障碍坐标与源区域统一；生成字符和不安全邻居不能参与。最多四次增量策略尝试，已经不可用的字体/校准路径不重复尝试。此机制只增加经验证的可编辑部分，不代表全文可编辑或通用上线验收。
+
+### 多分辨率诊断及字体一致性
+
+`tools/public-native-multires.py` 在144/216/288/432 DPI使用同一整数点坐标ROI，对候选与零可提取文字的原图基线分别测量。输入先做有界、带哈希的私有快照；固定几何配对和邻域，保留弃权，不配准、不减去基线误差、不输出验收结论。ROI策略与原216 DPI工具不同，不能覆盖或替代原结果。POSIX/Poppler资源上限及总600秒预算适用。
+
+```sh
+.venv/bin/python tools/public-native-multires.py --source /path/to/source.pdf --rendered /path/to/candidate.pdf --baseline /path/to/image-only-baseline.pdf --output /path/to/new-multires.json
+```
+
+CMU字体渲染现在使用与EOT嵌入相同、经过固定哈希验证的完整别名安全TTF，不再把原始目录直接交给Fontconfig。已使用CMU族但配置不完整或字体被修改时，渲染明确失败，不能静默替换后继续验证。CMU和Noto转换保留源字体时间戳，避免同一输入在不同时间产生不同字体字节。该一致性保护不代表跨Office客户端验收。
+
+CMU Typewriter Text另按已验证源face的真实pitch元数据写入OOXML提示：regular/italic为49，bold/boldItalic为50，在本次Linux LibreOffice实测中修正regular被选成bold的问题。不是改变字形、字重、advance或套用于其他字体的规则。回归同时核对嵌入前后PDF每个可见字符的真实字体身份，不能只检查字体文件已存在。

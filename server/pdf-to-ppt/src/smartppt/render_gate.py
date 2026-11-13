@@ -74,7 +74,8 @@ def render_presentations(files, folder, settings, *, page_numbers=None):
     if os.getenv('SMARTPPT_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_FONT_DIR']))
     if os.getenv('SMARTPPT_CJK_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_FONT']).parent)
     if os.getenv('SMARTPPT_CJK_SERIF_FONT'):font_dirs.append(Path(os.environ['SMARTPPT_CJK_SERIF_FONT']).parent)
-    if os.getenv('SMARTPPT_CMU_FONT_DIR'):font_dirs.append(Path(os.environ['SMARTPPT_CMU_FONT_DIR']))
+    # CMU faces must come from the same verified, alias-safe full font bytes
+    # as the embedded EOT, not an optional raw directory or silent fallback.
     dirs=''.join('<dir>'+escape(str(p))+'</dir>' for p in font_dirs if p.exists())
     rules=variant_fontconfig_rules() if static is not None else ''
     config.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'+dirs+
@@ -115,3 +116,4 @@ def run_gate(original,target,source,report,settings):
             compare_and_restore(original,target,source,report,ap,bp)
     from .native_words import try_native_words
     return try_native_words(source,target,report,settings)
+
