@@ -83,7 +83,11 @@ def apply_source_typography(table, page):
         if not chars or Counter(
             ch for g in chars for ch in g["text"] if not ch.isspace()
         ) != Counter(ch for ch in cell["text"] if not ch.isspace()):
-            chars = unique_source(cell, nearby, xs[c], xs[c + cs], ys[r], ys[r + rs])
+            chars = candidate_source(cell, bands, xs[c], xs[c + cs], ys[r], ys[r + rs])
+            if not chars:
+                chars = unique_source(
+                    cell, nearby, xs[c], xs[c + cs], ys[r], ys[r + rs]
+                )
             if not chars:
                 continue
         names = {family(ch["fontname"]) for ch in chars}
@@ -123,6 +127,61 @@ def apply_source_typography(table, page):
         table["sourceTypography"] = True
         refine_widths(table)
     return count
+
+
+def candidate_source(cell, bands, x0, x1, y0, y1):
+    """Use a model text box only when complete native glyphs verify it."""
+    from pdfplumber.utils import extract_text
+
+    b = cell.get("sourceTextCandidate")
+    if (
+        not isinstance(b, (list, tuple))
+        or len(b) != 4
+        or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in b)
+    ):
+        return []
+    l, t, r, bottom = b
+    if not (
+        l < r and t < bottom and x0 <= (l + r) / 2 < x1 and y0 <= (t + bottom) / 2 < y1
+    ):
+        return []
+    if (
+        l < x0 - (x1 - x0) * 0.5
+        or r > x1 + (x1 - x0) * 0.5
+        or t < y0 - (y1 - y0) * 0.3
+        or bottom > y1 + (y1 - y0) * 0.3
+    ):
+        return []
+    glyphs = [
+        ch
+        for band in bands
+        if math.floor((t - 4) / 16) <= band <= math.floor((bottom + 4) / 16)
+        for ch in bands[band]
+    ]
+    expected = " ".join(cell["text"].split())
+    nearby = [
+        ch
+        for ch in glyphs
+        if l - 4 <= (ch["x0"] + ch["x1"]) / 2 <= r + 4
+        and t - 4 <= (ch["top"] + ch["bottom"]) / 2 <= bottom + 4
+    ]
+    if not nearby:
+        return []
+    for padding in [0.5, min(4, median(ch["size"] for ch in nearby) * 0.5)]:
+        chars = [
+            ch
+            for ch in nearby
+            if l - padding <= (ch["x0"] + ch["x1"]) / 2 <= r + padding
+            and t - padding <= (ch["top"] + ch["bottom"]) / 2 <= bottom + padding
+        ]
+        actual = (
+            " ".join(extract_text(chars, x_tolerance=1.5, y_tolerance=2).split())
+            if chars
+            else ""
+        )
+        if actual == expected:
+            return chars
+    return []
 
 
 def unique_source(cell, glyphs, x0, x1, y0, y1):

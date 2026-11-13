@@ -13,6 +13,7 @@ type Service = {
   retentionMinutes: number;
 };
 type Preview = {
+  kind?: "form";
   sheet: string;
   page: number;
   rows: number;
@@ -24,6 +25,7 @@ type Job = {
   state: string;
   error?: string;
   tables?: number;
+  forms?: number;
   sheets?: number;
   warnings?: string[];
   preview?: Preview[];
@@ -202,7 +204,7 @@ export function PdfExcelPage() {
         setStage(
           result.state === "queued"
             ? "Waiting for conversion…"
-            : "Extracting and checking tables…",
+            : "Extracting and checking tables and forms…",
         );
         await pause(controller.signal);
         result = await request<Job>("/jobs/" + created.id, {
@@ -303,8 +305,8 @@ export function PdfExcelPage() {
         <h1>{url ? "Your Excel file is ready" : "PDF to Excel"}</h1>
         <p className="px-lead">
           {url
-            ? "Check the table preview, then download your editable workbook."
-            : "Turn PDF tables into editable Excel worksheets."}
+            ? "Check the preview, then download your editable workbook."
+            : "Turn PDF tables and supported forms into editable Excel worksheets."}
         </p>
         {error && (
           <div className="px-alert" role="alert">
@@ -315,7 +317,15 @@ export function PdfExcelPage() {
           <>
             <section className="px-result">
               <p>
-                {job.tables} tables · {job.sheets} worksheets
+                {[
+                  (job.tables || 0) > (job.forms || 0)
+                    ? `${(job.tables || 0) - (job.forms || 0)} tables`
+                    : null,
+                  job.forms ? `${job.forms} form pages` : null,
+                  `${job.sheets} ${job.sheets === 1 ? "worksheet" : "worksheets"}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
               <a
                 className="px-primary"
@@ -338,7 +348,9 @@ export function PdfExcelPage() {
             </section>
             {preview && (
               <section className="px-preview">
-                <label htmlFor="px-sheet">Table preview</label>
+                <label htmlFor="px-sheet">
+                  {preview.kind === "form" ? "Form preview" : "Table preview"}
+                </label>
                 <select
                   id="px-sheet"
                   value={sheet}
@@ -351,8 +363,9 @@ export function PdfExcelPage() {
                   ))}
                 </select>
                 <p>
-                  {preview.rows} rows × {preview.columns} columns. Preview shows
-                  up to 12 rows and columns; long cell text is shortened.
+                  {preview.kind === "form"
+                    ? "First 12 text lines; long text is shortened. Check field placement and checkbox states in the downloaded workbook."
+                    : `${preview.rows} rows × ${preview.columns} columns. Preview shows up to 12 rows and columns; long cell text is shortened.`}
                 </p>
                 <div className="px-table-scroll" tabIndex={0}>
                   <table>
@@ -436,12 +449,14 @@ export function PdfExcelPage() {
                     value={layout}
                     onChange={(e) => setLayout(e.target.value)}
                   >
-                    <option value="tables">One worksheet per table</option>
-                    <option value="single">All tables in one worksheet</option>
+                    <option value="tables">
+                      One worksheet per table or form page
+                    </option>
+                    <option value="single">Everything in one worksheet</option>
                   </select>
                   <small>
-                    One worksheet stacks tables in source order; it does not
-                    combine their columns.
+                    One worksheet stacks tables and form pages in source order;
+                    fields from different pages remain separate.
                   </small>
                   <label className="px-check">
                     <input
@@ -461,8 +476,9 @@ export function PdfExcelPage() {
                 </fieldset>
                 <p className="px-muted">
                   Text, leading zeros and long numbers are preserved as text.
-                  Images and non-table paragraphs are excluded. Check OCR
-                  results against your PDF.
+                  Supported native forms include field text and checkbox states.
+                  Images and other non-table paragraphs are excluded. Check OCR
+                  results and form fields against your PDF.
                 </p>
                 {busy ? (
                   <div className="px-progress">

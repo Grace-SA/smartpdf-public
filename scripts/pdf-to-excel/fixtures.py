@@ -10,6 +10,26 @@ from pypdf import PdfReader, PdfWriter
 import io
 
 
+def native_form(file):
+    """Two source-ordered pages with literal values and vector X marks."""
+    pdf = canvas.Canvas(str(file), pagesize=(400, 400))
+    for page in range(2):
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(30, 370, f"Synthetic application {page + 1}")
+        for choice in range(6):
+            y = 340 - choice * 25
+            pdf.rect(30, y, 9, 9)
+            pdf.drawString(45, y, f"Choice {choice + 1}")
+            if choice % 2 == 0:
+                pdf.line(30, y, 39, y + 9)
+                pdf.line(30, y + 9, 39, y)
+        for y, value in [(160, "00017"), (140, "12345678901234567890"), (120, "=1+1")]:
+            pdf.drawString(30, y, value)
+        pdf.rect(30, 90, 340, 0.5, stroke=0, fill=1)
+        pdf.showPage()
+    pdf.save()
+
+
 def generate(root):
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -142,6 +162,17 @@ def generate(root):
     w.write(root / "encrypted.pdf")
     (root / "corrupted.pdf").write_bytes(b"%PDF-1.7\ncorrupt")
     (root / "empty.pdf").write_bytes(b"")
+    native_form(root / "native-form.pdf")
+    manifest.append(
+        {
+            "id": "native-form",
+            "file": "native-form.pdf",
+            "expect": "form",
+            "pages": 2,
+            "checked": 6,
+            "unchecked": 6,
+        }
+    )
     (root / "expected.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2)
     )

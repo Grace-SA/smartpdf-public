@@ -11,6 +11,54 @@ from source_glyphs import visible_glyphs as visible_chars
 
 
 class TypographyTests(unittest.TestCase):
+    def test_multiline_header_font_requires_complete_ordered_source_phrase(self):
+        from layout_typography import readable_header_widths
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "overhanging-header.pdf"
+            p = canvas.Canvas(str(path), pagesize=(260, 220))
+            p.setFont("Helvetica", 8)
+            p.drawString(152, 150, "School participation")
+            p.drawString(152, 135, "response rate")
+            p.save()
+            cell = dict(
+                r=0,
+                c=1,
+                rs=1,
+                cs=1,
+                text="School participation response rate",
+                sourceTextCandidate=[153, 62, 224, 80],
+            )
+            base = dict(
+                bbox=[30, 60, 230, 120],
+                widths=[140, 60],
+                heights=[22, 38],
+                headerRows=1,
+                sourceGeometry=True,
+                cells=[cell],
+            )
+            with pdfplumber.open(path) as source:
+                table = copy.deepcopy(base)
+                self.assertEqual(attach(table, source.pages[0]), 1)
+                self.assertEqual(table["cells"][0]["fontName"], "Arial")
+                self.assertEqual(table["cells"][0]["fontSize"], 8)
+                self.assertFalse(table["cells"][0]["bold"])
+                self.assertEqual(table["cells"][0]["text"], cell["text"])
+                self.assertEqual(table["widths"], base["widths"])
+                for text, box in [
+                    ("School response participation rate", cell["sourceTextCandidate"]),
+                    (
+                        "School participation response rates",
+                        cell["sourceTextCandidate"],
+                    ),
+                    (cell["text"], [20, 62, 100, 80]),
+                    (cell["text"], [153, float("nan"), 224, 80]),
+                ]:
+                    bad = copy.deepcopy(base)
+                    bad["cells"][0].update(text=text, sourceTextCandidate=box)
+                    self.assertEqual(attach(bad, source.pages[0]), 0)
+                    self.assertNotIn("sourceFont", bad["cells"][0])
+
     def fixture(self, path):
         p = canvas.Canvas(str(path), pagesize=(300, 300))
         for y in [180, 200, 220, 240]:

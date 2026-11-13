@@ -76,6 +76,51 @@ test("page selection and single worksheet", async ({ page }) => {
   await expect(page.getByRole("table")).toContainText("00123");
   await expect(page.getByLabel("Table preview")).toContainText("Page 2");
 });
+for (const layout of ["tables", "single"])
+  test(`native form preserves fields and checkbox states: ${layout}`, async ({
+    page,
+  }, testInfo) => {
+    await page
+      .locator("input[type=file]")
+      .setInputFiles(path.join(fixtures, "native-form.pdf"));
+    await page.getByLabel("Worksheet layout").selectOption(layout);
+    await page
+      .getByRole("button", { name: "Upload and convert", exact: true })
+      .click();
+    const link = page.getByRole("link", {
+      name: "Download Excel",
+      exact: true,
+    });
+    await expect(link).toBeVisible();
+    await expect(page.locator(".px-result")).toContainText(
+      `2 form pages · ${layout === "single" ? "1 worksheet" : "2 worksheets"}`,
+    );
+    await expect(page.getByRole("table")).toContainText(
+      "Synthetic application 1",
+    );
+    await expect(page.getByRole("table")).toContainText("☒ Choice 1");
+    await expect(page.getByRole("table")).toContainText("☐ Choice 2");
+    await expect(page.getByRole("table")).toContainText("00017");
+    await expect(page.getByRole("table")).toContainText("=1+1");
+    await page.getByLabel("Form preview").selectOption("1");
+    await expect(page.getByRole("table")).toContainText(
+      "Synthetic application 2",
+    );
+    const download = page.waitForEvent("download");
+    await link.click();
+    await (
+      await download
+    ).saveAs(testInfo.outputPath(`native-form-${layout}.xlsx`));
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`native-form-${layout}.png`),
+      fullPage: true,
+    });
+  });
 test("invalid file and range recover without upload", async ({ page }) => {
   await page.locator("input[type=file]").setInputFiles({
     name: "empty.pdf",

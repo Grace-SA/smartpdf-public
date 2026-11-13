@@ -43,8 +43,12 @@ def physical_page(page):
     """
     if not hasattr(page, "filter"):
         return page
+    cached = getattr(page, "_excel_physical_page", None)
+    if cached is not None:
+        return cached
+    original = page
     page = without_overprinted_blanks(page)
-    return page.filter(
+    result = page.filter(
         lambda obj: not (
             obj.get("object_type") == "rect"
             and not obj.get("stroke")
@@ -53,6 +57,11 @@ def physical_page(page):
             and obj.get("height", 0) > 3
         )
     )
+    # A loaded PDF page is immutable throughout conversion. Keep this cache on
+    # that page only; cropped/rotated pages are distinct page objects.
+    original._excel_physical_page = result
+    result._excel_physical_page = result
+    return result
 
 
 def model_box(box, page):
@@ -183,7 +192,9 @@ def source_cell_text(text, box, page):
         ]
         if len(candidates) == 1:
             return candidates[0]["text"]
-    return text
+    from source_phrases import recover as recover_phrase
+
+    return recover_phrase(text, b, page, view)
 
 
 def adapt_table(item, page):
@@ -213,6 +224,9 @@ def adapt_table(item, page):
                 "rs": rs,
                 "cs": cs,
                 "text": source_cell_text(cell["text"], cell.get("bbox"), page),
+                "sourceTextCandidate": (
+                    model_box(cell["bbox"], page) if cell.get("bbox") else None
+                ),
             }
         )
         if cell.get("bbox") and cell["text"].strip():
@@ -595,7 +609,18 @@ def refine_predictions(item, page):
                 restore_underlined_headers(repair_merged_rows(part, page), page), page
             )
         )
-    return result
+    from layout_source_rows import recover as recover_source_rows
+
+    from layout_header_tree import recover as recover_header_tree
+
+    from layout_section_rows import recover as recover_section_rows
+
+    return [
+        recover_section_rows(
+            recover_source_rows(recover_header_tree(part, page), page), page
+        )
+        for part in result
+    ]
 
 
 def restore_stub_header(data, page):
@@ -811,6 +836,21 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
             if cell_count > 250000:
                 raise LayoutError("The extracted tables exceed the cell budget.")
             grouped[index].append(table)
+    from layout_dense_rows import recover as recover_dense_rows, replace_fragments
+
+    for index in indices:
+        grouped[index] = replace_fragments(
+            grouped[index], recover_dense_rows(pages[index])
+        )
+    if (
+        sum(
+            len(t["widths"]) * len(t["heights"])
+            for tables in grouped.values()
+            for t in tables
+        )
+        > 250000
+    ):
+        raise LayoutError("The extracted tables exceed the cell budget.")
     for tables in grouped.values():
         tables.sort(key=lambda t: (t["bbox"][1], t["bbox"][0]))
     return dict(grouped)

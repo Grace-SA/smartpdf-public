@@ -28,6 +28,11 @@ class RangeTests(unittest.TestCase):
                 box = local_box([39, 50, 90, 65], page)
                 self.assertEqual(source_cell_text("10 - 20", box, page), "10 – 20")
                 self.assertEqual(source_cell_text("10 - 21", box, page), "10 - 21")
+                # A clipped first glyph uses complete-word recovery. That path
+                # must retain the same source-verified separation as the full box.
+                clipped = local_box([44, 50, 90, 65], page)
+                self.assertEqual(source_cell_text("10 - 20", clipped, page), "10 – 20")
+                self.assertEqual(source_cell_text("10 - 21", clipped, page), "10 - 21")
                 tight = local_box([39, 80, 90, 95], page)
                 self.assertEqual(source_cell_text("10 - 20", tight, page), "10–20")
 

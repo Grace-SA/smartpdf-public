@@ -11,10 +11,14 @@ from pypdf import PdfReader, PdfWriter
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.pagebreak import Break
 from text_tables import aligned_tables, conservative_aligned_tables
 from layout_typography import apply_source_typography, readable_header_widths
 from layout_blank import restore_blank_merges
 from layout_alternating import recover_alternating_tables
+from layout_forms import recover as recover_form, control_rectangles
+from form_workbook import shared_columns, form_preview
+from xlsx_form_rules import attach as attach_form_rules
 from layout_tables import (
     extract_layout_tables,
     LayoutError,
@@ -368,6 +372,19 @@ def scan_tables(page):
     return tables
 
 
+def scan_leader_tables(page):
+    global _ocr
+    import onnxruntime
+    from rapidocr_onnxruntime import RapidOCR
+    from ocr_leaders import extract_from_page
+
+    onnxruntime.disable_telemetry_events()
+    if _ocr is None:
+        _ocr = RapidOCR(intra_op_num_threads=2, inter_op_num_threads=2)
+    table = extract_from_page(page, _ocr)
+    return [table] if table is not None else []
+
+
 def readable_heights(table, widths, font_size):
     source_geometry = table.get("sourceGeometry", False) or table.get(
         "sourceTypography", False
@@ -425,7 +442,7 @@ def readable_heights(table, widths, font_size):
                 else:
                     used += measured
         required = lines * cell_size * (1.15 if verified else 1.32) + (
-            1 if verified else 6
+            1 if verified else (2 if cell.get("sourceRasterGeometry") else 6)
         )
         if cell.get("rotation") in (90, 180):
             required = max(width(line) for line in cell["text"].split("\n")) + 6
@@ -443,36 +460,57 @@ def readable_heights(table, widths, font_size):
 
 
 def write_workbook(tables, output, layout):
+    original_tables = tables
+    try:
+        tables = shared_columns(tables, layout, MAX_CELLS)
+    except ValueError as error:
+        raise ConversionError(str(error))
+    placements = []
     book = Workbook()
     book.remove(book.active)
     thin = Side(style="thin", color="CED8D3")
     preview = []
     offset = 0
     for i, t in enumerate(tables):
+        label = "Form" if t.get("coordinateGrid") else "Table"
         s = (
             book.active
             if layout == "single" and book.worksheets
             else book.create_sheet(
                 "Tables"
                 if layout == "single"
-                else f'Page {t["page"]} Table {t["index"]}'
+                else f'Page {t["page"]} {label} {t["index"]}'
             )
         )
         offset = offset if layout == "single" else 0
         if layout == "single":
-            s.cell(offset + 1, 1, f'Page {t["page"]} · Table {t["index"]}')
+            if i and any(table.get("coordinateGrid") for table in tables):
+                s.row_breaks.append(Break(id=offset))
+            s.cell(offset + 1, 1, f'Page {t["page"]} · {label} {t["index"]}')
             offset += 1
+        placements.append((book.index(s) + 1, offset))
         rows = len(t["heights"])
         cols = len(t["widths"])
         if offset + rows > 1048576 or cols > 16384:
             raise ConversionError("The result exceeds Excel worksheet limits.")
-        for col, width in enumerate(readable_header_widths(t), 1):
+        for col, width in enumerate(
+            (
+                t["widths"]
+                if t.get("coordinateColumns") or t.get("coordinateGrid")
+                else readable_header_widths(t)
+            ),
+            1,
+        ):
             key = get_column_letter(col)
             existing = s.column_dimensions.get(key)
             minimum = 3 if t.get("sourceGeometry") else 8
             s.column_dimensions[key].width = max(
                 (existing.width or 0) if existing is not None else 0,
-                min(80, max(minimum, width / 5.25)),
+                (
+                    width / 5.25
+                    if t.get("coordinateGrid") or t.get("coordinateColumns")
+                    else min(80, max(minimum, width / 5.25))
+                ),
             )
         font_size = t.get("fontSize", 11)
         heights = readable_heights(
@@ -483,11 +521,17 @@ def write_workbook(tables, output, layout):
             ],
             font_size,
         )
+        if t.get("coordinateGrid"):
+            heights = t["heights"]
         for r, height in enumerate(heights, offset + 1):
             s.row_dimensions[r].height = height
         # Sparse model predictions omit empty cells. The complete detected grid
         # must still be visible; populate its styling before applying merges.
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        border = (
+            Border()
+            if t.get("coordinateGrid")
+            else Border(left=thin, right=thin, top=thin, bottom=thin)
+        )
         for row in s.iter_rows(min_row=offset + 1, max_row=offset + rows, max_col=cols):
             for cell in row:
                 cell.border = border
@@ -510,7 +554,15 @@ def write_workbook(tables, output, layout):
                 italic=e.get("italic", False),
             )
             c.alignment = Alignment(
-                vertical="top", wrap_text=True, textRotation=e.get("rotation", 0)
+                vertical=(
+                    "center"
+                    if e.get("checkbox")
+                    and sum(heights[e["r"] : e["r"] + e["rs"]])
+                    <= e.get("fontSize", font_size) * 1.35
+                    else "top"
+                ),
+                wrap_text=not t.get("coordinateGrid"),
+                textRotation=e.get("rotation", 0),
             )
             c.border = border
             if e["r"] < t.get("headerRows", 1):
@@ -535,22 +587,45 @@ def write_workbook(tables, output, layout):
         s.sheet_view.showGridLines = False
         s.sheet_properties.pageSetUpPr.fitToPage = True
         s.page_setup.fitToWidth = 1
-        s.page_setup.fitToHeight = 0
+        s.page_setup.fitToHeight = 1 if layout == "tables" else 0
         s.page_margins.left = s.page_margins.right = 0.25
         s.page_margins.top = s.page_margins.bottom = 0.25
-        s.page_setup.orientation = "landscape" if sum(t["widths"]) > 500 else "portrait"
+        orientation = t.get("sourcePageOrientation") or (
+            "landscape" if sum(t["widths"]) > 500 else "portrait"
+        )
+        # A shared sheet must not lose a wider page when a later page is portrait.
+        if layout != "single" or s.page_setup.orientation != "landscape":
+            s.page_setup.orientation = orientation
         if len(preview) < 8:
+            original = original_tables[i]
+            values = [
+                [""] * min(12, len(original["widths"]))
+                for _ in range(min(12, len(original["heights"])))
+            ]
+            for entry in original["cells"]:
+                if entry["r"] < len(values) and entry["c"] < len(values[entry["r"]]):
+                    values[entry["r"]][entry["c"]] = entry["text"][:250]
             preview.append(
                 {
                     "sheet": s.title,
                     "page": t["page"],
-                    "rows": rows,
-                    "columns": cols,
-                    "values": [r[:12] for r in values],
+                    "rows": len(original["heights"]),
+                    "columns": len(original["widths"]),
+                    "values": (
+                        form_preview(t)
+                        if t.get("coordinateGrid")
+                        else [r[:12] for r in values]
+                    ),
+                    **({"kind": "form"} if t.get("coordinateGrid") else {}),
                 }
             )
         offset += rows + 2
     book.save(output)
+    try:
+        attach_form_rules(output, tables, placements)
+    except ValueError as error:
+        output.unlink(missing_ok=True)
+        raise ConversionError(str(error))
     # Independent ZIP / XML checks prevent formulas and external relationships.
     from xml.etree import ElementTree as ET
 
@@ -595,6 +670,13 @@ def convert(source, output, options):
     if layout not in ("tables", "single") or not isinstance(ocr, bool):
         raise ConversionError("Invalid conversion options.")
     selected = pages_for(options.get("pages", "all"), count)
+    from source_fonts import prepared_source
+
+    with prepared_source(source, reader, output.parent) as prepared:
+        return convert_pages(prepared, output, selected, count, layout, ocr)
+
+
+def convert_pages(source, output, selected, count, layout, ocr):
     tables = []
     warnings = []
     missing = []
@@ -603,6 +685,18 @@ def convert(source, output, options):
     with pdfplumber.open(source) as doc:
         if len(doc.pages) != count:
             raise ConversionError("The PDF has an inconsistent page structure.")
+        forms = {}
+        for index in selected:
+            page = doc.pages[index]
+            if visible_area(page) > 10_000_000:
+                raise ConversionError("A page has unsupported dimensions.")
+            if len(control_rectangles(page)) >= 5:
+                form = recover_form(page)
+                if form is None:
+                    raise ConversionError(
+                        f"The form on page {index+1} contains ambiguous marks or unsupported text geometry. Its checkbox states could not be preserved reliably."
+                    )
+                forms[index] = form
         models = os.environ.get("PDF_EXCEL_MODELS")
         model_tables = None
         if models:
@@ -611,7 +705,11 @@ def convert(source, output, options):
                 page = doc.pages[index]
                 if visible_area(page) > 10_000_000:
                     raise ConversionError("A page has unsupported dimensions.")
-                if not page.rotation and not (page.images and len(page.chars) < 10):
+                if (
+                    index not in forms
+                    and not page.rotation
+                    and not (page.images and len(page.chars) < 10)
+                ):
                     native_indices.append(index)
             try:
                 model_tables = extract_layout_tables(
@@ -625,7 +723,9 @@ def convert(source, output, options):
                 raise ConversionError("A page has unsupported dimensions.")
             # Reject an image region with no corresponding text, including mixed pages.
             image_only = bool(page.images) and len(page.chars) < 10
-            if image_only:
+            if index in forms:
+                found = [forms[index]]
+            elif image_only:
                 if not ocr:
                     raise ConversionError(
                         f"Page {index+1} needs OCR. Enable scanned-page recognition."
@@ -678,6 +778,20 @@ def convert(source, output, options):
                     found = recover_date_tables(page)
                 if not found:
                     found = recover_alternating_tables(page)
+                if not found and ocr and page.images:
+                    view = visible_box(page)
+                    if any(
+                        max(0, min(view[2], image["x1"]) - max(view[0], image["x0"]))
+                        * max(
+                            0,
+                            min(view[3], image["bottom"]) - max(view[1], image["top"]),
+                        )
+                        >= visible_area(page) * 0.8
+                        for image in page.images
+                    ):
+                        found = scan_leader_tables(page)
+                        if found:
+                            ocr_pages.append(index + 1)
             if not found:
                 missing.append(index + 1)
             if any(t["method"] == "aligned" for t in found):
@@ -697,6 +811,10 @@ def convert(source, output, options):
                     if sizes:
                         t["fontSize"] = max(6, min(14, median(sizes)))
                 apply_source_typography(t, page)
+                view = visible_box(page)
+                t["sourcePageOrientation"] = (
+                    "landscape" if view[2] - view[0] > view[3] - view[1] else "portrait"
+                )
                 t.update(page=index + 1, index=j + 1)
                 tables.append(t)
             if sum(len(e["text"]) for t in tables for e in t["cells"]) > 5_000_000:
@@ -706,7 +824,7 @@ def convert(source, output, options):
             page.close()
     if not tables:
         raise ConversionError(
-            "No tables were found. Choose a PDF containing a table with aligned rows and columns."
+            "No tables or supported forms were found. Choose a PDF containing aligned rows and columns or a native text form with checkboxes."
         )
     if missing:
         warnings.append(
@@ -734,8 +852,12 @@ def convert(source, output, options):
         warnings.append(
             "Additional table structure was recovered from visible cell borders. Check the recovered table and merged cells against the original PDF."
         )
+    if forms:
+        warnings.append(
+            "Detected native forms retain text and checkbox states as editable cells (☒ checked, ☐ unchecked). Review fields and marks against the PDF; checkbox cells are not interactive controls."
+        )
     warnings.append(
-        "Only detected tables are included. Text and numbers are stored as text to preserve spelling, leading zeros and precision."
+        "Only detected tables and supported forms are included. Text and numbers are stored as text to preserve spelling, leading zeros and precision."
     )
     preview = write_workbook(tables, output, layout)
     if output.stat().st_size > MAX_BYTES:
@@ -744,6 +866,7 @@ def convert(source, output, options):
     return {
         "pages": len(selected),
         "tables": len(tables),
+        "forms": len(forms),
         "sheets": 1 if layout == "single" else len(tables),
         "warnings": warnings,
         "missingPages": missing,
