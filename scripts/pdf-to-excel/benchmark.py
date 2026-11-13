@@ -19,6 +19,7 @@ def fingerprint():
         name: hashlib.sha256((runner.parent / name).read_bytes()).hexdigest()
         for name in (
             "convert.py",
+            "stirling_display.py",
             "layout_tables.py",
             "layout_rows.py",
             "layout_headers.py",

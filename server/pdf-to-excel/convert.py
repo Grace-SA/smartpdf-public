@@ -168,6 +168,8 @@ def stirling_tables(source, page_index):
     base = os.environ.get("STIRLING_URL", "").rstrip("/")
     if not base:
         return []
+    from stirling_display import DisplayError, display_text
+
     w = PdfWriter()
     w.add_page(PdfReader(source).pages[page_index])
     buf = io.BytesIO()
@@ -205,18 +207,30 @@ def stirling_tables(source, page_index):
                 if cell.value is None:
                     continue
                 m = merges.get((cell.row, cell.column))
-                # Stirling is used only for rotated tables; preserve displayed decimals.
+                # Preserve only explicitly supported display formats.
                 value = cell.value
-                if isinstance(value, (int, float)):
-                    fmt = cell.number_format
-                    match = re.search(r"\.([0#]+)", fmt)
-                    value = (
-                        f"{value:,.{len(match[1])}f}"
-                        if match and "," in fmt
-                        else f"{value:.{len(match[1])}f}"
-                        if match
-                        else str(value)
-                    )
+                fmt = cell.number_format
+                try:
+                    # Upstream may collapse source parenthesized zero into a
+                    # zero number with only a negative-parentheses section.
+                    # Without source geometry this loss is not reversible.
+                    sections = fmt.split(";") if isinstance(fmt, str) else []
+                    if (
+                        not isinstance(value, bool)
+                        and isinstance(value, (int, float))
+                        and value == 0
+                        and len(sections) >= 2
+                        and "(" in sections[1]
+                        and ")" in sections[1]
+                    ):
+                        raise DisplayError(
+                            "Parenthesized zero source notation cannot be verified"
+                        )
+                    value = display_text(value, fmt)
+                except DisplayError as exc:
+                    raise ConversionError(
+                        "External workbook display cannot be preserved: " + str(exc)
+                    ) from exc
                 entries.append(
                     {
                         "r": cell.row - 1,
