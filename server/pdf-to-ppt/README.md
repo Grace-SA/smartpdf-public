@@ -142,3 +142,17 @@ PYTHONPATH=src .venv/bin/python -m smartppt.acceptance --input /path/to/local-ev
 局部文字恢复会继续尝试对象、合并字形和词语策略。后续策略只有在保留每个已验证源字符位置、增加覆盖范围且再次通过区域及整页渲染检查时才会替换前一结果；同样的页脚文字出现在正文中不能代替原页脚。追加后按源字符位置恢复文字形状顺序，只有渲染像素完全不变才保存。数字校验区分日期逗号与千位分组，并保留 Unicode 负号和前导小数点的数值意义。
 
 按词定位可以改善文字和版面，但不会生成原生表格单元格或图表数据。结果页对此明确提示；保留下来的原生表格仍需检查行列与合并单元格，不能把文字准确等同于表格结构正确。
+
+
+## 固定公开样本诊断
+
+`tools/public-native-manifest.json` 固定 W3C、IRS、arXiv 三份公开文件的 URL、SHA-256 及六个抽样页。人工下载至独立目录后，工具先核对全部哈希，输出必须使用新目录；不会自动下载或把样本写进仓库：
+
+```sh
+.venv/bin/python tools/public-native-probe.py --inputs /path/to/public-pdfs --output /path/to/new-run --renderer /path/to/soffice
+.venv/bin/python tools/public-native-compare.py --source /path/to/new-run/fw9/source.pdf --rendered /path/to/new-run/fw9/candidate.pdf --output /path/to/new-review.json
+```
+
+第二步需要 Poppler `pdftotext`。这是以原图为基线的原生恢复诊断，未调用 Stirling，不能代替服务验收。字符袋覆盖率不代表阅读顺序或准确率；独立字词按几何先配对再比较文字，边框差异与标点分词需人工核查。图片中的文字不计为可编辑文字，完整文档、扫描件和各客户端仍需独立测试。
+
+明确的 CM-Super 常规/粗体/斜体族名可以选择已配置的固定 OFL CMU 字体；未知变体不推断。严格来源匹配的未嵌入 Helvetica 常规字形使用 `SmartPDF Base Sans`，完整 BSD 通知包含于运行包和嵌入字体，渲染与交付使用同一字体字节。字体替代后的内容及像素门槛保持不变。

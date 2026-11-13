@@ -79,7 +79,8 @@ def test_retained_text_must_remain_pixel_identical():
 
 
 @pytest.mark.skipif(not os.getenv('SMARTPPT_TEST_RENDERER'),reason='real Office renderer required')
-def test_real_extension_keeps_prior_xml_and_can_roll_back(tmp_path,monkeypatch):
+@pytest.mark.parametrize('initial_words',[False,True])
+def test_real_extension_keeps_prior_xml_and_can_roll_back(tmp_path,monkeypatch,initial_words):
  from smartppt.config import Settings
  source=tmp_path/'source.pdf';fixture(source);target=tmp_path/'result.pptx'
  with pdfium.PdfDocument(source) as doc,closing(doc[0]) as page:
@@ -90,13 +91,13 @@ def test_real_extension_keeps_prior_xml_and_can_roll_back(tmp_path,monkeypatch):
   objects,warnings=original(page,**kwargs)
   return [o for o in objects if all(r['box'][3]<100 for r in o[1])],warnings
  monkeypatch.setattr(regional,'objects_for_page',footer)
- first=regional._recover_regions(source,target,[1],settings)
+ first=regional._recover_regions(source,target,[1],settings,word_regions=initial_words)
  assert first and first[1]['covered_source_glyphs']==9
  monkeypatch.setattr(regional,'objects_for_page',original)
- initial=target.read_bytes();xml=Presentation(target).slides[0].shapes[1]._element.xml
+ initial=target.read_bytes();xml=[s._element.xml for s in list(Presentation(target).slides[0].shapes)[1:]]
  added=regional._recover_regions(source,target,[1],settings,word_regions=True,minimum_coverage=first,extend=True)
  assert added and added[1]['covered_source_glyphs']>9
- assert Presentation(target).slides[0].shapes[1]._element.xml==xml
+ assert [s._element.xml for s in list(Presentation(target).slides[0].shapes)[1:1+len(xml)]]==xml
  assert added[1]['retained_regions']==first[1]
  assert added[1]['added_editable_runs']>0
  assert added[1]['baseline_render']==first[1]['baseline_render']
@@ -119,3 +120,21 @@ def test_observed_ink_protects_text_without_blocking_empty_textbox_space(tmp_pat
   import smartppt.ocr_fit as fit
   monkeypatch.setattr(fit,'observed_boxes',lambda *_:{})
   assert regional.extension_seed(prs,slide,page,source) is None
+
+
+
+def test_source_words_route_still_gets_bounded_spacing_extension(monkeypatch):
+ from smartppt import regional_order
+ calls=[]
+ prior={'source_ranges':[[10,20]],'regional_strategy':'source-words','warnings':[]}
+ def recover(*args,**kwargs):
+  calls.append(kwargs)
+  if len(calls)==1:return {1:prior}
+  if kwargs.get('extend'):assert kwargs['minimum_coverage'][1] is prior
+  return {}
+ monkeypatch.setattr(regional,'_recover_regions',recover)
+ monkeypatch.setattr(regional_order,'restore_source_order',lambda *args:None)
+ assert regional.recover_regions(None,None,[1],None)=={1:prior}
+ retries=[c for c in calls if c.get('extend')]
+ assert [c['spacing_retry'] for c in retries]==[True,False]
+ assert all(c['word_regions'] for c in retries)

@@ -539,7 +539,9 @@ def recover_regions(source,target,page_numbers,settings):
             break
     # A rejected replacement must not discard disjoint words that could safely
     # extend the verified package. Keep every existing textbox byte-for-byte.
-    remaining=[n for n,r in reports.items() if r.get('source_ranges') and r.get('regional_strategy')!='source-words']
+    # Even an accepted word pass used untrimmed spacing; the bounded
+    # extension can add disjoint words without replacing any verified glyph.
+    remaining=[n for n,r in reports.items() if r.get('source_ranges')]
     if remaining:
         for spacing_retry in (True,False):
             try:reports.update(_recover_regions(source,target,remaining,settings,word_regions=True,minimum_coverage=reports,extend=True,spacing_retry=spacing_retry))
@@ -549,3 +551,4 @@ def recover_regions(source,target,page_numbers,settings):
     from .regional_order import restore_source_order
     restore_source_order(source,target,reports,settings)
     return reports
+

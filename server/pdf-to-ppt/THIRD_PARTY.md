@@ -19,6 +19,7 @@
 | Noto Sans SC | 中文替代字体及完整字体嵌入 | SIL OFL 1.1，仓库 `vendor-fonts/NotoSansSC-OFL.txt`；运行包保留 `src/smartppt/OFL-NotoSansSC.txt` |
 | Noto Serif SC | 可选宋体/明体替代及完整字体嵌入 | SIL OFL 1.1，[固定上游许可](https://github.com/notofonts/noto-cjk/blob/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/Serif/LICENSE)；字体内 Adobe 版权及完整许可保留于 `src/smartppt/OFL-NotoSerifSC.txt`，文件与哈希见 README |
 | CMU 0.7.0 | 可选 Computer Modern 正文替代及四种字形完整嵌入 | SIL OFL 1.1，[官方发布](https://sourceforge.net/projects/cm-unicode/files/cm-unicode/0.7.0/)；完整版权与许可见 `src/smartppt/OFL-CMU.txt`，逐文件哈希见 `cmu-fonts.json`。不替换数学符号字体 |
+| SmartPDF Base Sans | 仅精确匹配 PDFium 内置未嵌入 Helvetica 常规体时使用；同源字形完整嵌入 | PDFium BSD 通知及原始 Foxit 版权见 `src/smartppt/BSD-PDFium-base-font.txt`；固定来源 SHA、构建与限制见第十三轮报告。不复制上传字体 |
 | FontTools 4.68.0 | 将固定可变字体实例化为静态字体，保留 Unicode 字形、许可和完整字符集 | MIT，[官方项目](https://github.com/fonttools/fonttools) |
 | LibreOffice | 独立渲染检查 | 按实际发行版许可及第三方通知部署，未捆绑 |
 
@@ -27,3 +28,6 @@ PaddleOCR-VL-1.6 已检查官方模型卡（Apache-2.0），本轮未推理，�
 OXR 代码、MLX 权重和 D-FINE 权重的固定版本/哈希见 `ocr/oxr-manifest.json`。上游源代码来自 `SoMarkAI/OXR`，MLX 权重来自 `bxespinozar/OXR-1.0-mlx-bf16`，检测权重来自 `SoMarkAI/OXR-1.0`。部署还需保留模型仓库各自的许可证和通知。此转换模块使用 PDFium，不调用 PyMuPDF；主站原有独立验收脚本的测试依赖另行管理。
 
 本地新增验收使用 [DocLayNet](https://github.com/DS4SD/DocLayNet) 的 test split，保留其 [CDLA-Permissive-1.0 许可](https://github.com/DS4SD/DocLayNet/blob/main/LICENSE)、来源、抽样规则与文件哈希。数据、参考文本及渲染图不进入仓库。其版面标注由人工完成，附带文字单元由原生 PDF 提取，不能当作人工 OCR 转录准确率。OmniDocBench 与 FUNSD 的资料检查发现非商业研究限制，本轮未把它们用于商业产品验收。
+
+
+CM-Super 的明确 SF 形状名仅用于选择既有 OFL CMU 替代字体，不导出或嵌入 CM-Super 字体程序。形状命名依据 [CTAN 官方说明](https://ctan.org/tex-archive/fonts/ps-type1/cm-super/)，未知、小型大写、可变宽度及 Bright 变体不据此推断。
