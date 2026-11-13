@@ -90,6 +90,43 @@ def clips_text(obj):
     return False
 
 
+def stroke_rectangle_interior(obj, parent_matrix):
+    """A conservative clear interior for one axis-aligned rectangular outline.
+
+    Other contours receive no exemption: their bounding box may hide text.
+    """
+    if pdf.raw.FPDFPath_CountSegments(obj) != 5:
+        return None
+    points = []
+    matrix = obj.get_matrix().multiply(parent_matrix)
+    for index in range(5):
+        segment = pdf.raw.FPDFPath_GetPathSegment(obj, index)
+        expected = pdf.raw.FPDF_SEGMENT_MOVETO if index == 0 else pdf.raw.FPDF_SEGMENT_LINETO
+        if pdf.raw.FPDFPathSegment_GetType(segment) != expected:
+            return None
+        x, y = ctypes.c_float(), ctypes.c_float()
+        if not pdf.raw.FPDFPathSegment_GetPoint(segment, ctypes.byref(x), ctypes.byref(y)):
+            return None
+        points.append(matrix.on_point(x.value, y.value))
+    if points[0] != points[-1] or len(set(points[:4])) != 4:
+        return None
+    xs, ys = {p[0] for p in points}, {p[1] for p in points}
+    if len(xs) != 2 or len(ys) != 2 or any(
+        a[0] != b[0] and a[1] != b[1] for a, b in zip(points, points[1:])
+    ):
+        return None
+    width = ctypes.c_float()
+    if not pdf.raw.FPDFPageObj_GetStrokeWidth(obj, ctypes.byref(width)) or width.value <= 0:
+        return None
+    # Use a full stroke-width inset (not half) to leave a conservative margin.
+    dx = width.value * (abs(matrix.a) + abs(matrix.c))
+    dy = width.value * (abs(matrix.b) + abs(matrix.d))
+    interior = (min(xs) + dx, min(ys) + dy, max(xs) - dx, max(ys) - dy)
+    if not all(math.isfinite(v) for v in interior) or interior[0] >= interior[2] or interior[1] >= interior[3]:
+        return None
+    return interior
+
+
 def needs_ocr(page):
     visible = 0
     images = 0
@@ -122,18 +159,16 @@ def needs_ocr(page):
                 pdf.raw.FPDF_PAGEOBJ_PATH, pdf.raw.FPDF_PAGEOBJ_IMAGE,
             ):
                 painted = obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE
+                clear_interior = None
                 if obj.type == pdf.raw.FPDF_PAGEOBJ_PATH:
                     fill_mode, stroke = ctypes.c_int(), ctypes.c_int()
                     known = pdf.raw.FPDFPath_GetDrawMode(
                         obj, ctypes.byref(fill_mode), ctypes.byref(stroke)
                     )
                     # Unknown drawing state is not evidence of transparency.
-                    painted = not known or fill_mode.value != pdf.raw.FPDF_FILLMODE_NONE
-                    # A single stroked line can obscure a value just like a fill.
-                    # Complex path strokes need separate contour/join analysis.
-                    if known and stroke.value and pdf.raw.FPDFPath_CountSegments(obj) == 2:
-                        segment = pdf.raw.FPDFPath_GetPathSegment(obj, 1)
-                        painted |= pdf.raw.FPDFPathSegment_GetType(segment) == pdf.raw.FPDF_SEGMENT_LINETO
+                    painted = not known or fill_mode.value != pdf.raw.FPDF_FILLMODE_NONE or bool(stroke.value)
+                    if known and stroke.value and fill_mode.value == pdf.raw.FPDF_FILLMODE_NONE:
+                        clear_interior = stroke_rectangle_interior(obj, parent_matrix)
                 if painted and text_bounds:
                     overlap_checks += len(text_bounds)
                     if overlap_checks > 100000:
@@ -142,6 +177,11 @@ def needs_ocr(page):
                         unsafe |= any(
                             min(bounds[2], prior[2]) > max(bounds[0], prior[0])
                             and min(bounds[3], prior[3]) > max(bounds[1], prior[1])
+                            and not (clear_interior is not None
+                                     and clear_interior[0] <= prior[0]
+                                     and clear_interior[1] <= prior[1]
+                                     and clear_interior[2] >= prior[2]
+                                     and clear_interior[3] >= prior[3])
                             for prior in text_bounds
                         )
             if obj.type != pdf.raw.FPDF_PAGEOBJ_TEXT:
