@@ -26,23 +26,38 @@ def quarter_turn(chars):
     """Find one exact common native baseline orientation, never majority-vote."""
     if len(chars) < 10:
         return None
-    directions = set()
-    for char in chars:
-        matrix = char.get("matrix")
-        if not matrix or len(matrix) != 6 or not all(math.isfinite(v) for v in matrix):
-            return None
-        a, b, c, d, _, _ = matrix
-        tolerance = max(abs(a), abs(b), abs(c), abs(d), 1e-9) * 0.001
-        if abs(b) <= tolerance and abs(c) <= tolerance:
-            direction = 0 if a > 0 and d > 0 else 180 if a < 0 and d < 0 else None
-        elif abs(a) <= tolerance and abs(d) <= tolerance:
-            direction = 90 if b > 0 and c < 0 else 270 if b < 0 and c > 0 else None
-        else:
-            return None
-        if direction is None:
-            return None
-        directions.add(direction)
-    return directions.pop() if len(directions) == 1 else None
+    directions = {glyph_direction(char) for char in chars}
+    return directions.pop() if len(directions) == 1 and None not in directions else None
+
+
+def glyph_direction(char):
+    matrix = char.get("matrix")
+    if not matrix or len(matrix) != 6 or not all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+        for v in matrix
+    ):
+        return None
+    a, b, c, d, _, _ = matrix
+    tolerance = max(abs(a), abs(b), abs(c), abs(d), 1e-9) * 0.001
+    if abs(b) <= tolerance and abs(c) <= tolerance:
+        return 0 if a > 0 and d > 0 else 180 if a < 0 and d < 0 else None
+    if abs(a) <= tolerance and abs(d) <= tolerance:
+        return 90 if b > 0 and c < 0 else 270 if b < 0 and c > 0 else None
+    return None
+
+
+def unresolved_dominant_turn(chars):
+    """Refuse, never rotate, strongly sideways native text with mixed directions.
+
+    A short upright page number must not allow an otherwise sideways table into
+    horizontal reconstruction. This narrow refusal leaves ordinary horizontal
+    bodies with some vertical headings unchanged; it is not a general orientation
+    detector or a claim that below-threshold pages are correct.
+    """
+    if len(chars) < 20:
+        return False
+    counts = Counter(glyph_direction(char) for char in chars)
+    return any(counts[angle] * 10 >= len(chars) * 9 for angle in (90, 180, 270))
 
 
 def horizontal(chars):

@@ -1,0 +1,43 @@
+{
+  "repository": "camelot-dev/camelot",
+  "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "scope": "Fixed six-file complex-table selection before inspecting outputs; local research only, no redistributed source binaries",
+  "files": [
+    {
+      "name": "anticlockwise_table_2.pdf",
+      "path": "tests/files/anticlockwise_table_2.pdf",
+      "gitBlobSha1": "a5f7c14739d2fae8d2c902a5e04facccbe1ace98",
+      "sha256": "919d491a50c892095c00f552aa54cc760d93000c0abb1d13d1fddfd00fa8afdb"
+    },
+    {
+      "name": "column_span_2.pdf",
+      "path": "tests/files/column_span_2.pdf",
+      "gitBlobSha1": "5cab903153627cacc42161353c657f6742d094ce",
+      "sha256": "14290fe5c01ad98b9362906b0c9646756ebf2999a82aaaeefc4dcecff5d3726f"
+    },
+    {
+      "name": "multiple_tables.pdf",
+      "path": "tests/files/multiple_tables.pdf",
+      "gitBlobSha1": "0b9d854badde4ff4ddfd1f7f22ed67d41f07137d",
+      "sha256": "9ac99cf86d3dd9b8e3773b773b942ec784c9e4b6e36febe1637767468e96526a"
+    },
+    {
+      "name": "row_span_2.pdf",
+      "path": "tests/files/row_span_2.pdf",
+      "gitBlobSha1": "39bce841bf2f77576a216ee0087124146b0cc1d0",
+      "sha256": "6845bf6cca560534204cc58e1462d7b68987330fae79593df024f75c0103cfec"
+    },
+    {
+      "name": "tableception.pdf",
+      "path": "tests/files/tableception.pdf",
+      "gitBlobSha1": "70940dface3d96a257a1a14f8a610a6f15b23654",
+      "sha256": "383c90c5cfbbb34aee9736fca358f185fc2a758150f6c6eab013408cbb5d82e8"
+    },
+    {
+      "name": "vertical_header.pdf",
+      "path": "tests/files/vertical_header.pdf",
+      "gitBlobSha1": "a343305effc4fc73dfbdd7b1ba7a250d8405d2f4",
+      "sha256": "eb1092be407cb17cd25837c52758d1305f6719268c6f824f73a7d2bd18c95760"
+    }
+  ]
+}

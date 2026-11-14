@@ -812,6 +812,12 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 if classify(hidden_reader.pages[index]) == "hidden":
                     hidden_scans.add(index)
                     continue
+            from source_rotation import visible_chars, unresolved_dominant_turn
+
+            if not page.rotation and unresolved_dominant_turn(visible_chars(page)):
+                raise ConversionError(
+                    f"Page {index + 1} contains predominantly sideways or upside-down native text that could not be safely oriented. Use a PDF with upright table content before converting."
+                )
             if len(control_rectangles(page)) >= 5:
                 form = recover_form(page)
                 if form is None:

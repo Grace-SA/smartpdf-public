@@ -13,7 +13,7 @@ from reportlab.pdfgen import canvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server/pdf-to-excel"))
 from convert import ConversionError, convert
-from source_rotation import prepared_rotation
+from source_rotation import prepared_rotation, unresolved_dominant_turn
 
 
 class RotationTests(unittest.TestCase):
@@ -57,6 +57,52 @@ class RotationTests(unittest.TestCase):
         source = self.root / f"{angle}.pdf"
         writer.write(source)
         return source
+
+    def test_dominant_native_turn_is_refusal_not_majority_rotation(self):
+        def glyph(angle):
+            matrices = {0: (1, 0, 0, 1, 0, 0), 90: (0, 1, -1, 0, 0, 0),
+                        180: (-1, 0, 0, -1, 0, 0), 270: (0, -1, 1, 0, 0, 0)}
+            return dict(matrix=matrices[angle])
+        for angle in (90, 180, 270):
+            self.assertTrue(unresolved_dominant_turn([glyph(angle)] * 18 + [glyph(0)] * 2))
+            self.assertFalse(unresolved_dominant_turn([glyph(angle)] * 17 + [glyph(0)] * 3))
+            self.assertFalse(unresolved_dominant_turn([glyph(angle)] * 19))
+        self.assertFalse(unresolved_dominant_turn([glyph(90)] * 5 + [glyph(0)] * 20))
+        self.assertFalse(unresolved_dominant_turn([dict(matrix=(float('nan'),)*6)] * 20))
+        self.assertFalse(unresolved_dominant_turn([glyph(90)] * 10 + [glyph(270)] * 10))
+
+    def test_content_rotated_table_with_upright_footer_never_reaches_model(self):
+        source = self.root / 'content-rotated.pdf'
+        c = canvas.Canvas(str(source), pagesize=(600, 600))
+        c.saveState(); c.translate(500, 0); c.rotate(90)
+        for x in (100, 250, 400):
+            c.line(x, 300, x, 420)
+        for y in (300, 340, 380, 420):
+            c.line(100, y, 400, y)
+        for r, values in enumerate(self.expected):
+            for col, value in enumerate(values):
+                c.drawString(110 + 150 * col, 400 - 40 * r, value)
+        c.restoreState(); c.drawString(300, 10, '1'); c.save()
+        original = source.read_bytes()
+        self.assertEqual(PdfReader(source).pages[0].rotation, 0)
+        output = self.root / 'existing.xlsx'; output.write_bytes(b'previous workbook')
+        for models in ({}, {'PDF_EXCEL_MODELS': '/unused-models'}):
+            with patch.dict(os.environ, models, clear=True), patch(
+                'convert.extract_layout_tables', side_effect=AssertionError('model must not run')
+            ):
+                with self.assertRaisesRegex(ConversionError, 'predominantly sideways'):
+                    convert(source, output, {})
+            self.assertEqual(output.read_bytes(), b'previous workbook')
+            self.assertEqual(source.read_bytes(), original)
+
+    def test_unhandled_metadata_rotation_keeps_existing_stirling_route(self):
+        source = self.source(90, image=True)
+        with patch.dict(os.environ, {"STIRLING_URL": "https://example.invalid"}, clear=True), patch(
+            "convert.stirling_tables", side_effect=ConversionError("verified fallback reached")
+        ) as fallback:
+            with self.assertRaisesRegex(ConversionError, "verified fallback reached"):
+                convert(source, self.root / "out.xlsx", {})
+        fallback.assert_called_once()
 
     def test_all_quarter_turns_preserve_literal_cells_without_stirling(self):
         for angle in (90, 180, 270):
