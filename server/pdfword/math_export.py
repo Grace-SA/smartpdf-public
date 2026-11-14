@@ -200,9 +200,28 @@ DELIMITERS = re.compile(
 )
 
 
-def segments(text):
+def currency_collision(text):
+    # A numeric single-dollar pair followed by another amount may be two
+    # currency markers, not delimiters: $5+$10. In mixed/ambiguous text keep
+    # ALL single-dollar expressions literal, so an odd later amount cannot
+    # consume the opening dollar of a following formula. Explicit delimiters
+    # remain available; this is conservative preservation, not classification.
+    number = r"[+\-−]?(?:\d|\.\d)"
+    return any(
+        match[2] is not None
+        and re.match(number, match[2].lstrip())
+        and re.match(number, text[match.end():])
+        for match in DELIMITERS.finditer(text)
+    )
+
+
+def segments(text, *, literal_dollars=False):
+    delimiters = (
+        re.compile(r"(?<!\\)\$\$([\s\S]+?)\$\$|\\\(([\s\S]+?)\\\)")
+        if literal_dollars or currency_collision(text) else DELIMITERS
+    )
     offset = 0
-    for match in DELIMITERS.finditer(text):
+    for match in delimiters.finditer(text):
         if match.start() > offset:
             yield text[offset : match.start()], None, False
         source = next(v for v in match.groups() if v is not None)

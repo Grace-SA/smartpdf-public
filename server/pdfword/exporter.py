@@ -13,7 +13,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from model import Rejected, validate, content_text, table_header_rows
-from math_export import segments
+from math_export import segments, currency_collision
 from columns import column_flow
 from fonts import SAFE_FAMILIES
 
@@ -52,9 +52,9 @@ def mark(paragraph, index):
     paragraph._p.append(end)
 
 
-def run_text(paragraph, text, block):
+def run_text(paragraph, text, block, *, literal_dollars=False):
     last = None
-    for value, formula, _ in segments(text):
+    for value, formula, _ in segments(text, literal_dollars=literal_dollars):
         if formula is not None:
             paragraph._p.append(formula)
         else:
@@ -381,8 +381,9 @@ def export_word(model, destination, assets):
             if block.get("runs"):
                 if "".join(r["text"] for r in block["runs"]) != value:
                     raise Rejected("Text runs do not match source content.")
+                literal_dollars = currency_collision(value)
                 for run in block["runs"]:
-                    run_text(paragraph, run["text"], run)
+                    run_text(paragraph, run["text"], run, literal_dollars=literal_dollars)
             else:
                 run_text(paragraph, value, block)
             text.append(value)

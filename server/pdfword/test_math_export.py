@@ -25,7 +25,9 @@ class InlineMathTests(unittest.TestCase):
         value = r"Before $\unknown{x}$ after"
         self.assertEqual("".join(t for t, _, _ in segments(value)), value)
         self.assertTrue(unsupported(value))
-        self.assertIsNone(list(segments("Costs $5 and $10."))[1][1])
+        currency = list(segments("Costs $5 and $10."))
+        self.assertEqual("".join(t for t, _, _ in currency), "Costs $5 and $10.")
+        self.assertTrue(all(formula is None and not failed for _, formula, failed in currency))
         for value in (r"\frac{x}", r"x^{2", r"x_1_2", "{ " * 40 + "x" + "}" * 40):
             with self.assertRaises(UnsupportedMath):
                 equation(value)
