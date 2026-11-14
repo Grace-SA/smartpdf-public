@@ -62,7 +62,7 @@ def fingerprint():
             "ocr_leaders.py",
             "ocr_monospace.py",
             "ocr_punctuation.py",
-            "ocr_spaces.py",
+            "ocr_spaces.py", "scan_raster.py",
             "ocr_touching_spaces.py",
             "layout_grid.py",
             "ocr_layout.py",

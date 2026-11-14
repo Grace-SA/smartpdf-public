@@ -294,9 +294,26 @@ def scan_tables(page):
         raise ConversionError(
             "This page needs OCR, which is unavailable on this server."
         )
-    if visible_area(page) * 4 > 20_000_000:
+    from scan_raster import resolution, raster_size, MAX_PIXELS
+
+    dpi = resolution(page)
+    dimensions = raster_size(page, dpi)
+    if dimensions[0] * dimensions[1] > MAX_PIXELS:
         raise ConversionError("The scanned page is too large for OCR.")
-    im = np.asarray(page.to_image(resolution=144).original.convert("RGB"))
+    rendered = page.to_image(resolution=dpi).original.convert("RGB")
+    if dpi != 144 and rendered.size != dimensions:
+        dpi = 144
+        dimensions = raster_size(page, dpi)
+        if dimensions[0] * dimensions[1] > MAX_PIXELS:
+            raise ConversionError("The scanned page is too large for OCR.")
+        rendered = page.to_image(resolution=dpi).original.convert("RGB")
+    if rendered.width * rendered.height > MAX_PIXELS:
+        raise ConversionError("The scanned page is too large for OCR.")
+    im = np.asarray(rendered)
+    scale = dpi / 72
+    ratio = scale / 2
+    pad = max(1, round(2 * ratio))
+    trim = max(1, round(3 * ratio))
     if _ocr is None:
         _ocr = RapidOCR(intra_op_num_threads=2, inter_op_num_threads=2)
     result, _ = _ocr(im)
@@ -310,12 +327,12 @@ def scan_tables(page):
     horizontal = cv2.morphologyEx(
         bw,
         cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (max(20, im.shape[1] // 30), 1)),
+        cv2.getStructuringElement(cv2.MORPH_RECT, (max(round(20 * ratio), im.shape[1] // 30), 1)),
     )
     vertical = cv2.morphologyEx(
         bw,
         cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(20, im.shape[0] // 30))),
+        cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(round(20 * ratio), im.shape[0] // 30))),
     )
     contours, _ = cv2.findContours(
         horizontal | vertical, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -326,7 +343,7 @@ def scan_tables(page):
     def groups(values):
         out = []
         for v in values:
-            if not out or v - out[-1][-1] > 3:
+            if not out or v - out[-1][-1] > 3 * ratio:
                 out.append([int(v)])
             else:
                 out[-1].append(int(v))
@@ -334,7 +351,7 @@ def scan_tables(page):
 
     for contour in sorted(contours, key=lambda c: cv2.boundingRect(c)[1]):
         x, y, w, h = cv2.boundingRect(contour)
-        if w < 100 or h < 40:
+        if w < 100 * ratio or h < 40 * ratio:
             continue
         xs = groups(
             np.where((vertical[y : y + h, x : x + w] > 0).sum(axis=0) > h * 0.35)[0] + x
@@ -363,11 +380,11 @@ def scan_tables(page):
             for col, (left, right) in enumerate(zip(xs, xs[1:])):
                 node = r * nc + col
                 if col + 1 < nc:
-                    strip = vertical[a + 3 : b - 2, max(0, right - 2) : right + 3]
+                    strip = vertical[a + trim : b - pad, max(0, right - pad) : right + pad + 1]
                     if strip.size and (strip > 0).any(axis=1).mean() < 0.5:
                         join(node, node + 1)
                 if r + 1 < nr:
-                    strip = horizontal[max(0, b - 2) : b + 3, left + 3 : right - 2]
+                    strip = horizontal[max(0, b - pad) : b + pad + 1, left + trim : right - pad]
                     if strip.size and (strip > 0).any(axis=0).mean() < 0.5:
                         join(node, node + nc)
         regions = {}
@@ -390,7 +407,7 @@ def scan_tables(page):
                 cy = sum(p[1] for p in box) / 4
                 if xs[col] <= cx < xs[last_c + 1] and ys[r] <= cy < ys[last_r + 1]:
                     words.append((cy, min(p[0] for p in box), text, float(score)))
-            words.sort(key=lambda v: (round(v[0] / 12), v[1]))
+            words.sort(key=lambda v: (round(v[0] / (12 * ratio)), v[1]))
             entries.append(
                 {
                     "r": r,
@@ -405,8 +422,8 @@ def scan_tables(page):
             raster_boxes.append((xs[0], ys[0], xs[-1], ys[-1]))
             tables.append(
                 {
-                    "widths": [(b - a) / 2 for a, b in zip(xs, xs[1:])],
-                    "heights": [(b - a) / 2 for a, b in zip(ys, ys[1:])],
+                    "widths": [(b - a) / scale for a, b in zip(xs, xs[1:])],
+                    "heights": [(b - a) / scale for a, b in zip(ys, ys[1:])],
                     "cells": entries,
                     "method": "ocr",
                 }

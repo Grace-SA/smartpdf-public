@@ -1,0 +1,59 @@
+{
+  "sourceRevision": "92777b852e00933a5c4b9ba642601784604356cd",
+  "repository": "camelot-dev/camelot",
+  "sources": [
+    {
+      "id": "diesel_engines",
+      "file": "diesel_engines.pdf",
+      "sha256": "6675404fa9f9cd8fb9d34d9d73056fe8e4823519adab13e8b91233d667ffd13c",
+      "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/diesel_engines.pdf",
+      "gitBlob": "2f14f161675c1045764841a72d208df4cd6d8d2c"
+    },
+    {
+      "id": "district_health",
+      "file": "district_health.pdf",
+      "sha256": "1a081f75a1f9346f0c304dacaeaaa43bb266987346254058f4e6668baee24da3",
+      "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/district_health.pdf",
+      "gitBlob": "3ab299b29182930ab2028eeccaec58fe2a77f84e"
+    },
+    {
+      "id": "population_growth",
+      "file": "population_growth.pdf",
+      "sha256": "da9aeb8364208cdea042f08321aa9b87f7d5d36a69571faf161930e6f7518f7b",
+      "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/population_growth.pdf",
+      "gitBlob": "41a166e0efdbdaa0744c1d2af926a0c156f2afc4"
+    },
+    {
+      "id": "rainfall_distribution",
+      "file": "rainfall_distribution.pdf",
+      "sha256": "c5203347eb5bd59837a95aa94ccf619d4c2a7b9393ee16d7a491db3e56c55474",
+      "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/rainfall_distribution.pdf",
+      "gitBlob": "66ba8b9142efe63efc28e050cf59e494cd50952c"
+    },
+    {
+      "id": "row_span_3",
+      "file": "row_span_3.pdf",
+      "sha256": "7560da07b6a96a1a1afad9130adb3308b6922ab5b9c23375d4a6a62e634aace4",
+      "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/row_span_3.pdf",
+      "gitBlob": "b3d9462c70c0976fb92bb94f2d0f9da3e793297b"
+    },
+    {
+      "id": "superscript",
+      "file": "superscript.pdf",
+      "sha256": "12daeb0d70ae3c70a28b2cceb2fef5f5ba9f811c60b0870f05dcdd5ac80446ef",
+      "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/superscript.pdf",
+      "gitBlob": "855a3bdebd6b2036e46d0f96cbd526fa951aec44"
+    }
+  ],
+  "renderedScanProtocol": {
+    "sourceIds": [
+      "population_growth",
+      "rainfall_distribution",
+      "district_health"
+    ],
+    "dpi": 150,
+    "renderer": "pdfplumber page.to_image",
+    "embedding": "reportlab ImageReader full-page image, original physical dimensions, no native text",
+    "scope": "Controlled render simulations of real public documents, not independently acquired scans; PDF metadata may vary while image pixels are unchanged."
+  }
+}
