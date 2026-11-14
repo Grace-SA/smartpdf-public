@@ -878,6 +878,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
                     table = recover_source_grid(prediction, pages[index])
                 if table is None:
                     raise
+            from layout_nested_guard import verify_nested_labels
+
+            verify_nested_labels(table, native[index], pages[index])
             cell_count += len(table["widths"]) * len(table["heights"])
             if cell_count > 250000:
                 raise LayoutError("The extracted tables exceed the cell budget.")
@@ -913,6 +916,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
         )
         region_budget -= attempted
         for table in recovered:
+            from layout_nested_guard import verify_nested_labels
+
+            verify_nested_labels(table, native[index], pages[index])
             cell_count += len(table["widths"]) * len(table["heights"])
             if cell_count > 250000:
                 raise LayoutError("The extracted tables exceed the cell budget.")
