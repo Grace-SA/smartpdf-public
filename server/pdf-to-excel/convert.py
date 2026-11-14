@@ -991,6 +991,12 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 if index not in hidden_scans:
                     apply_source_typography(t, page)
                 if index not in hidden_scans and index + 1 not in ocr_pages and not image_only:
+                    from field_visibility import verify as verify_field_visibility
+
+                    try:
+                        verify_field_visibility(t, page)
+                    except LayoutError as error:
+                        raise ConversionError(str(error)) from error
                     from source_header_warning import split_header_phrase
 
                     if split_header_phrase(t, page):
