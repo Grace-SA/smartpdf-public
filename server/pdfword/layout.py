@@ -252,6 +252,15 @@ def native_tables(page, words):
             inside = extract_words(
                 chars, return_chars=True, x_tolerance=2, y_tolerance=3
             )
+            # Cell emphasis is not a header classification. Restore only flags
+            # shared by every nonblank source glyph, never a majority vote.
+            names = [c.get("fontname") for c in chars if c.get("text", "").strip()]
+            emphasis = {}
+            if names and all(isinstance(name, str) and name for name in names):
+                for flag, markers in (("bold", ("bold",)), ("italic", ("italic", "oblique"))):
+                    values = {any(marker in name.lower() for marker in markers) for name in names}
+                    if len(values) == 1:
+                        emphasis[flag] = values.pop()
             paras = words_to_blocks(inside, page.width, page.height, split_columns=False, merge_lines=False)
             line_records.append((r0, r1, paras))
             cells.append(
@@ -263,6 +272,7 @@ def native_tables(page, words):
                     text="\n".join(p["text"] for p in paras),
                     size=median(p["size"] for p in paras) if paras else 10,
                     header=False,
+                    **emphasis,
                 )
             )
         # A ruled cell can contain several logical records. Preserve missing

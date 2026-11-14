@@ -189,7 +189,8 @@ def add_table(document, block, width, existing=None):
         run_text(
             cell.paragraphs[0],
             c["text"],
-            {"size": c.get("size", 10), "bold": c.get("header", False)},
+            {"size": c.get("size", 10), "bold": c.get("bold", c.get("header", False)),
+             "italic": c.get("italic", False)},
         )
         cell.paragraphs[0].paragraph_format.space_after = Pt(0)
         cell.paragraphs[0].paragraph_format.space_before = Pt(0)

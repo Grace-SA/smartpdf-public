@@ -258,6 +258,8 @@ def validate(model):
                 if not 1 <= nr <= 500 or not 1 <= nc <= 64 or nr * nc > MAX_CELLS:
                     raise Rejected("Table too large.")
                 for c in b["cells"]:
+                    if any(flag in c and type(c[flag]) is not bool for flag in ("bold", "italic")):
+                        raise Rejected("Invalid table cell emphasis.")
                     r, col, rs, cs = (
                         c[k] for k in ("row", "col", "rowspan", "colspan")
                     )

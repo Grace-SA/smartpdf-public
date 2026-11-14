@@ -1,0 +1,19 @@
+{
+  "repository": "camelot-dev/camelot",
+  "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "scope": "Public source typography research; no source or output binaries redistributed.",
+  "files": [
+    {
+      "name": "multiple_tables.pdf",
+      "path": "tests/files/multiple_tables.pdf",
+      "gitBlobSha1": "0b9d854badde4ff4ddfd1f7f22ed67d41f07137d",
+      "sha256": "9ac99cf86d3dd9b8e3773b773b942ec784c9e4b6e36febe1637767468e96526a"
+    },
+    {
+      "name": "row_span_2.pdf",
+      "path": "tests/files/row_span_2.pdf",
+      "gitBlobSha1": "39bce841bf2f77576a216ee0087124146b0cc1d0",
+      "sha256": "6845bf6cca560534204cc58e1462d7b68987330fae79593df024f75c0103cfec"
+    }
+  ]
+}
