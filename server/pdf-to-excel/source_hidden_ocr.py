@@ -1,8 +1,11 @@
-"""Recognize a narrow full-page scan with an entirely Tr=3 text layer.
+"""Recognize a narrow page-covering scan with an entirely Tr=3 text layer.
 
 This is content-stream evidence, not a general visibility detector. White text,
 alpha, occlusion, clipping and arbitrary mixed pages are not inferred.
 Only bounded, non-nested, text-only Forms with identity Matrix are supported.
+Page-level line/rectangle strokes and clipping are permitted; they never
+authorize embedded-image extraction. The caller must OCR the final rendering.
+Only /Suspect marked content containing one numeric /Conf property is admitted.
 ``other`` means a supported stream did not satisfy the rule; ``unsupported``
 means it could not be proved. Neither result authorizes discarding native text.
 """
@@ -166,7 +169,12 @@ def _classify(page):
     if len(images) != 1 or not modes or any(mode != 3 for mode in modes):
         return "other"
     box = images[0]
-    return "hidden" if all(abs(a - b) <= 0.01 for a, b in zip(box, view)) else "other"
+    covers_view = (
+        box[0] <= view[0] and box[1] <= view[1]
+        and box[2] >= view[2] and box[3] >= view[3]
+    )
+    matches_view = all(abs(a - b) <= 0.01 for a, b in zip(box, view))
+    return "hidden" if covers_view or matches_view else "other"
 
 
 def read_operations(streams, pdf, budget):
@@ -235,6 +243,8 @@ def interpret(
     # font stays bound to the parent's object despite Form resource shadowing.
     in_text = False
     stack, images, modes = [], [], []
+    marked = 0
+    path_open = clip_pending = False
     for args, op in operations:
         if op == b"q":
             numbers(args, 0)
@@ -262,7 +272,7 @@ def interpret(
             )
         elif op in (b"BT", b"ET"):
             numbers(args, 0)
-            if (op == b"BT") == in_text:
+            if path_open or (op == b"BT") == in_text:
                 raise Unsupported("Unbalanced text object")
             in_text = op == b"BT"
         elif op == b"Tr":
@@ -320,6 +330,49 @@ def interpret(
             color = numbers(args, {b"g": 1, b"G": 1, b"rg": 3, b"RG": 3}.get(op, 4))
             if any(v < 0 or v > 1 for v in color):
                 raise Unsupported("Invalid color")
+        elif op == b"BDC":
+            # Recognition confidence metadata does not change painting. Do not
+            # generalize to optional content, ActualText or resource properties.
+            if (
+                len(args) != 2
+                or not isinstance(args[0], NameObject)
+                or args[0] != "/Suspect"
+                or type(args[1]) is not DictionaryObject
+                or set(args[1]) != {"/Conf"}
+            ):
+                raise Unsupported("Unsupported marked content")
+            (confidence,) = numbers([args[1]["/Conf"]], 1)
+            if not 0 <= confidence <= 1 or marked >= MAX_STACK:
+                raise Unsupported("Marked content budget or confidence")
+            marked += 1
+        elif op == b"EMC":
+            numbers(args, 0)
+            if not marked:
+                raise Unsupported("Unbalanced marked content")
+            marked -= 1
+        elif op in (b"m", b"l", b"re", b"S", b"n", b"W*", b"w"):
+            # These operators cannot make Tr=3 text visible. We need not infer
+            # their painted regions: OCR uses the final page, including covers
+            # and clipping. Keep the supported syntax deliberately narrow.
+            if form or in_text:
+                raise Unsupported("Path outside supported page context")
+            values = numbers(
+                args, {b"m": 2, b"l": 2, b"re": 4, b"w": 1}.get(op, 0)
+            )
+            if op == b"w":
+                if values[0] < 0:
+                    raise Unsupported("Negative line width")
+            elif op in (b"m", b"re"):
+                path_open = True
+            elif op == b"l":
+                if not path_open:
+                    raise Unsupported("Line without a current path")
+            elif op == b"W*":
+                if not path_open or clip_pending:
+                    raise Unsupported("Invalid pending clipping path")
+                clip_pending = True
+            else:
+                path_open = clip_pending = False
         elif op == b"Do":
             if form:
                 raise Unsupported("Nested XObjects in Form unsupported")
@@ -369,8 +422,8 @@ def interpret(
             images.append((e, f, e + a, f + d))
         else:
             # Includes gs, sh, inline images, paths, clipping and
-            # marked-content/optional-content state. Never silently skip them.
+            # other marked-content/optional-content state. Never silently skip them.
             raise Unsupported("Unsupported operator")
-    if stack or in_text:
+    if stack or in_text or marked or path_open or clip_pending:
         raise Unsupported("Unbalanced stream state")
     return images, modes

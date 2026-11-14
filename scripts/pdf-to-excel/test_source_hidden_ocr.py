@@ -473,7 +473,7 @@ class HiddenOCRTests(unittest.TestCase):
     def test_crop_and_rotation(self):
         page = fixture()
         page.cropbox.upper_right = (280, 200)
-        self.assertEqual(m.classify(page), "other")
+        self.assertEqual(m.classify(page), "hidden")
         page = fixture()
         page.rotate(90)
         self.assertEqual(m.classify(page), "unsupported")
