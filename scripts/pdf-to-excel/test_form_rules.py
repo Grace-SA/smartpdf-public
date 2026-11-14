@@ -107,7 +107,9 @@ class RuleTests(unittest.TestCase):
             try:
                 sheet = book.active
                 comments = [c.comment for row in sheet for c in row if c.comment]
-                self.assertEqual(len(comments), 1)
+                self.assertEqual(len(comments), 2)
+                self.assertTrue(all("Original PDF colors, shading and patterns" in c.text for c in comments))
+                self.assertEqual(sum("* Data not available" in c.text for c in comments), 1)
                 self.assertIn("* Data not available", comments[0].text)
                 self.assertEqual(sheet["A2"].value, "Summary")
                 self.assertEqual(sheet["A3"].value, "00123")

@@ -164,7 +164,9 @@ class FormConversionTests(unittest.TestCase):
             out = Path(td) / "single.xlsx"
             convert(source, out, dict(layout="single", ocr=False))
             with ZipFile(out) as z:
-                drawings = [n for n in z.namelist() if n.startswith("xl/drawings/")]
+                drawings = [n for n in z.namelist() if n.startswith("xl/drawings/form-rules-") and n.endswith(".xml")]
+                self.assertEqual(sum(n.endswith(".vml") for n in z.namelist()), 1)
+                self.assertEqual(sum(n.startswith("xl/drawings/") for n in z.namelist()), 2)
                 self.assertEqual(len(drawings), 1)
                 root = ET.fromstring(z.read(drawings[0]))
                 rows = []

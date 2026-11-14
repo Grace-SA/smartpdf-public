@@ -12,7 +12,7 @@ from pypdf.generic import RectangleObject
 from reportlab.pdfgen import canvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server/pdf-to-excel"))
-from convert import convert
+from convert import convert, write_workbook, SOURCE_FORMATTING_NOTICE
 from source_context import page_context
 
 
@@ -82,7 +82,25 @@ class ContextTests(unittest.TestCase):
                 any(c.data_type == "f" for sheet in book for row in sheet for c in row)
             )
             self.assertTrue(any("comment" in w for w in result["warnings"]))
+            self.assertIn(SOURCE_FORMATTING_NOTICE, result["warnings"])
+            self.assertTrue(all(SOURCE_FORMATTING_NOTICE in note for note in comments))
             self.assertEqual(source.read_bytes(), before)
+            book.close()
+
+    def test_formatting_notice_travels_without_source_context(self):
+        table = dict(page=1, index=1, widths=[50, 50], heights=[20, 20],
+                     cells=[dict(r=0, c=0, rs=1, cs=1, text="Measure"),
+                            dict(r=0, c=1, rs=1, cs=1, text="Result"),
+                            dict(r=1, c=0, rs=1, cs=1, text="Record"),
+                            dict(r=1, c=1, rs=1, cs=1, text="0.16")])
+        for layout in ("tables", "single"):
+            out = self.root / (layout + ".xlsx")
+            write_workbook([table, dict(table, page=2)], out, layout)
+            book = load_workbook(out)
+            comments = [c.comment.text for sheet in book for row in sheet for c in row if c.comment]
+            self.assertEqual(comments, [SOURCE_FORMATTING_NOTICE] * 2)
+            values = [c.value for sheet in book for row in sheet for c in row]
+            self.assertEqual(values.count("0.16"), 2)
             book.close()
 
     def test_unknown_boundaries_and_mixed_context_are_not_guessed(self):

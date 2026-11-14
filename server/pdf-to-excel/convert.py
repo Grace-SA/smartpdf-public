@@ -525,6 +525,13 @@ def write_workbook(tables, output, layout):
         return preview
 
 
+SOURCE_FORMATTING_NOTICE = (
+    "Original PDF colors, shading and patterns are not preserved. Workbook colors "
+    "are generated formatting, not source meaning. Check the original PDF and "
+    "its legend before interpreting highlights or statistical significance."
+)
+
+
 def _write_workbook(tables, output, layout):
     original_tables = tables
     try:
@@ -649,18 +656,19 @@ def _write_workbook(tables, output, layout):
                 )
             if e["r"] < 12 and e["c"] < cols:
                 values[e["r"]][e["c"]] = e["text"][:250]
+        source_note = SOURCE_FORMATTING_NOTICE
         if t.get("sourceContext"):
             label = (
                 "OCR text (uncorrected; verify against the scan)"
                 if t.get("sourceContextOcr")
                 else "native text"
             )
-            s.cell(offset + 1, 1).comment = Comment(
-                f"Source page {t['page']}: {label} outside detected tables. "
+            source_note += (
+                f"\n\nSource page {t['page']}: {label} outside detected tables. "
                 "Page-level context only; footnote associations and reading order "
-                "are not inferred.\n\n" + t["sourceContext"],
-                "SmartPDF",
+                "are not inferred.\n\n" + t["sourceContext"]
             )
+        s.cell(offset + 1, 1).comment = Comment(source_note, "SmartPDF")
         s.freeze_panes = "A2"
         s.sheet_view.showGridLines = False
         s.sheet_properties.pageSetUpPr.fitToPage = True
@@ -775,7 +783,7 @@ def convert(source, output, options):
 
 def convert_pages(source, output, selected, count, layout, ocr):
     tables = []
-    warnings = []
+    warnings = [SOURCE_FORMATTING_NOTICE]
     missing = []
     ocr_pages = []
     aligned_pages = []
