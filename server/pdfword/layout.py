@@ -332,7 +332,7 @@ def native_tables(page, words):
 
 
 def borderless_tables(words, page):
-    """Recover regular numeric grids only; ambiguous/multiline grids still use OCR."""
+    """Recover regular numeric or strictly aligned indexed grids; ambiguous grids use OCR."""
     lines = []
     for word in sorted(words, key=lambda w: (w["top"], w["x0"])):
         if not lines or abs(word["top"] - lines[-1][0]["top"]) > 3:
@@ -349,7 +349,48 @@ def borderless_tables(words, page):
     result = []
     pending = []
 
-    def finish():
+    rule_image = None
+    rule_probes = 0
+    rule_pixels = 0
+
+    def visible_rule(line, left, right):
+        # Source geometry is not enough: invisible or covered rules must not
+        # turn a numbered list into a table. Inspect the final rendered pixels.
+        nonlocal rule_image, rule_probes, rule_pixels
+        try:
+            rule_probes += 1
+            if rule_probes > 32:
+                return False
+            if page.width * page.height * 4 > 16000000:
+                return False
+            if rule_image is None:
+                rule_image = False  # A failed render must not be retried per line.
+                rendered = page.to_image(resolution=144)
+                rule_image = (rendered.original.convert("L"), rendered.scale, rendered.bbox)
+            if rule_image is False:
+                return False
+            image, scale, bounds = rule_image
+            x0 = max(0, round((left - bounds[0]) * scale))
+            x1 = min(image.width, round((right - bounds[0]) * scale))
+            y = round((line["top"] - bounds[1]) * scale)
+            radius = max(1, math.ceil(line["linewidth"] * scale / 2)) + 1
+            offset = radius + 3
+            if x1 <= x0 or y - offset < 0 or y + offset >= image.height:
+                return False
+            rule_pixels += (x1-x0) * (2*radius+3)
+            if rule_pixels > 1000000:
+                return False
+            pixels = image.load()
+            visible = 0
+            for x in range(x0, x1):
+                ink = min(pixels[x, yy] for yy in range(y-radius, y+radius+1))
+                background = min(pixels[x, y-offset], pixels[x, y+offset])
+                visible += background - ink >= 40
+            return visible >= (x1-x0) * 0.95
+        except Exception:
+            return False
+
+    def finish(next_row=None):
         if len(pending) < 3:
             return
         cols = len(pending[0])
@@ -360,8 +401,6 @@ def borderless_tables(words, page):
             )
             for row in pending
         )
-        if numeric < max(2, len(pending) - 1):
-            return
         boxes = [
             [
                 union([[w["x0"], w["top"], w["x1"], w["bottom"]] for w in cell])
@@ -369,6 +408,41 @@ def borderless_tables(words, page):
             ]
             for row in pending
         ]
+        if numeric < max(2, len(pending) - 1):
+            # Text-valued registers can still have strong row identity: at least
+            # three consecutive integer keys and three stable, separated columns.
+            # Do not reinterpret arbitrary prose columns or numbered lists.
+            texts = [[join_words(cell) for cell in row] for row in pending]
+            numbered = lambda value: re.fullmatch(r"[1-9][0-9]{0,8}", value) is not None
+            body = texts[1:]
+            if (cols < 3 or len(body) < 3 or numbered(texts[0][0])
+                    or any(not numbered(row[0]) for row in body)
+                    or any(len(value) > 32 for row in texts for value in row)):
+                return
+            keys = [int(row[0]) for row in body]
+            if any(b != a + 1 for a, b in zip(keys, keys[1:])):
+                return
+            body_boxes = boxes[1:]
+            if any(min(max(row[c][edge] for row in body_boxes) - min(row[c][edge] for row in body_boxes)
+                       for edge in (0, 2)) > 2 for c in range(cols)):
+                return
+            # A malformed adjacent record/continuation must not be left behind
+            # while a valid prefix is silently accepted as a complete table.
+            if next_row:
+                height = max(w["bottom"] - w["top"] for cell in pending[-1] for w in cell)
+                if next_row[0][0]["top"] - pending[-1][0][0]["top"] <= max(18, height * 2.5):
+                    return
+            left = min(b[0] for row in boxes for b in row)
+            right = max(b[2] for row in boxes for b in row)
+            header_bottom = max(b[3] for b in boxes[0])
+            body_top = min(b[1] for b in boxes[1])
+            if not any(line.get("stroke") and 0 < line.get("linewidth", 0) <= 2
+                       and abs(line["top"] - line["bottom"]) <= 0.1
+                       and line["x0"] <= left + 1 and line["x1"] >= right - 1
+                       and header_bottom <= line["top"] <= body_top + 1
+                       and visible_rule(line, left, right)
+                       for line in page.lines):
+                return
         lefts = [min(row[c][0] for row in boxes) for c in range(cols)]
         rights = [max(row[c][2] for row in boxes) for c in range(cols)]
         if any(rights[c] + 12 > lefts[c + 1] for c in range(cols - 1)):
@@ -411,7 +485,7 @@ def borderless_tables(words, page):
             height = max(w["bottom"] - w["top"] for cell in previous for w in cell)
             gap = row[0][0]["top"] - previous[0][0]["top"]
             if len(row) != len(previous) or gap > max(18, height * 2.5):
-                finish()
+                finish(row)
                 pending = []
         if 2 <= len(row) <= 32:
             pending.append(row)

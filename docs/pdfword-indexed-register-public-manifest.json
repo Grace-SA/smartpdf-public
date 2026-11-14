@@ -1,0 +1,13 @@
+{
+  "repository": "camelot-dev/camelot",
+  "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "scope": "Public independently rendered indexed-register evidence; source/output binaries not redistributed.",
+  "files": [
+    {
+      "name": "hybrid_multipage.pdf",
+      "path": "tests/files/hybrid_multipage.pdf",
+      "gitBlobSha1": "3d0f256d6fb46d08fea7da8be9044bb3aa0a5f2f",
+      "sha256": "19b15e3e1baa3ffe8875cdca198f098075395ce560ff855eed2d7bc7284c658c"
+    }
+  ]
+}
