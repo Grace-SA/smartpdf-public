@@ -612,8 +612,53 @@ def native_page(page):
                 return True
         return False
 
+    # A sequence of standalone agenda headings may include both wrapped and
+    # unwrapped items. Require independent prose continuations for two items,
+    # rather than treating repeated aligned numbers alone as a list.
+    agenda = []
+    valid_agenda = True
+    for index, row in enumerate(baselines):
+        row = sorted(row, key=lambda word: word["x0"])
+        if not re.fullmatch(r"[1-9][0-9]{0,3}[.)]", row[0]["text"]):
+            continue
+        if len(row) < 2:
+            valid_agenda = False
+            continue
+        marker, first = row[:2]
+        height = max(1, marker["bottom"] - marker["top"])
+        if (not first["text"][:1].isalpha()
+                or not 0 <= first["x0"] - marker["x1"] <= height * 2
+                or any(b["x0"] - a["x1"] > 12 for a, b in zip(row[1:], row[2:]))):
+            valid_agenda = False
+        number = int(marker["text"][:-1])
+        if agenda and (number != agenda[-1][1] + 1
+                       or marker["text"][-1] != agenda[0][2]["text"][-1]
+                       or abs(marker["x0"] - agenda[0][2]["x0"]) > 3
+                       or abs(first["x0"] - agenda[0][3]["x0"]) > 3):
+            valid_agenda = False
+        continuation = sorted(baselines[index+1], key=lambda word: word["x0"]) if index+1 < len(baselines) else []
+        prose = (continuation and len(continuation) >= 6
+                 and sum(len(word["text"]) for word in continuation) >= 40
+                 and height * 0.8 <= continuation[0]["top"] - marker["top"] <= height * 1.8
+                 and abs(continuation[0]["x0"] - first["x0"]) <= 3
+                 and continuation[0]["text"][:1].isalpha()
+                 and all(b["x0"] - a["x1"] <= 12 for a, b in zip(continuation, continuation[1:])))
+        agenda.append((index, number, marker, first, bool(prose)))
+    # Every inter-item line must belong to the same prose column. Preserve
+    # isolated source punctuation, but never use it as continuation evidence.
+    for item, (index, _, marker, first, _) in enumerate(agenda):
+        end = agenda[item+1][0] if item+1 < len(agenda) else len(baselines)
+        for row in baselines[index+1:end]:
+            row = sorted(row, key=lambda word: word["x0"])
+            punctuation = len(row) == 1 and len(row[0]["text"]) <= 3 and not any(c.isalnum() for c in row[0]["text"])
+            if not punctuation and (row[0]["x0"] < first["x0"] - 3
+                                    or any(b["x0"] - a["x1"] > 18 for a, b in zip(row, row[1:]))):
+                valid_agenda = False
+    agenda_markers = {id(item[2]) for item in agenda} if (valid_agenda and len(agenda) >= 3
+                      and sum(item[4] for item in agenda) >= 2) else set()
+
     for w in remaining:
-        if not continued_list_marker(w) and re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", w["text"]):
+        if id(w) not in agenda_markers and not continued_list_marker(w) and re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", w["text"]):
             key = round(w["x1"] / 8)
             aligned.setdefault(key, set()).add(round(w["top"] / 5))
     if any(len(rows) >= 3 for rows in aligned.values()):

@@ -1,0 +1,13 @@
+{
+  "repository": "jsvine/pdfplumber",
+  "commit": "4c64b92d5caccd71c645e98e0fabb0c4dba7ff45",
+  "scope": "Public mixed wrapped/unwrapped agenda evidence; source/output binaries not redistributed.",
+  "files": [
+    {
+      "name": "cupertino_usd_4-6-16.pdf",
+      "path": "tests/pdfs/cupertino_usd_4-6-16.pdf",
+      "gitBlobSha1": "5af2fb8d60b081dcbe69476f4f70c6f6fc31baa0",
+      "sha256": "944ab863d7c83521d6250cc8682d2c985a6ae82622de1d461bb80c21a654206a"
+    }
+  ]
+}
