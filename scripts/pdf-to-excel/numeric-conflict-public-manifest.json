@@ -1,0 +1,28 @@
+[
+  {
+    "id": "column_span_1",
+    "file": "column_span_1.pdf",
+    "sha256": "b43c8722ddc0e9aee33b09d9b6d8da583270cd4fa22bec168c4c485adc594e8d",
+    "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/column_span_1.pdf",
+    "gitBlob": "e7c164e19037a66910d5dba02018c5d500865589",
+    "expectedOutcome": "refused",
+    "reason": "Repeated numeric-column conflict",
+    "nativeRows": 50,
+    "nativeColumns": 8,
+    "baselineModelRows": 51,
+    "baselineModelColumns": 7,
+    "dataRecords": 47,
+    "baselineCrossRecordExamples": [
+      {
+        "sourceYear": "2006",
+        "sourceSuicideIncidence": "118112",
+        "wrongOutputYear": "2005"
+      },
+      {
+        "sourceYear": "2010",
+        "sourceAccidentalRate": "32.4",
+        "wrongOutputYear": "2011"
+      }
+    ]
+  }
+]

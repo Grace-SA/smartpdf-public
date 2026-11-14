@@ -887,6 +887,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
 
             table = recover_split_rows(table, native[index], pages[index])
             verify_nested_labels(table, native[index], pages[index])
+            from layout_numeric_guard import verify_numeric_columns
+
+            verify_numeric_columns(table, native[index], pages[index])
             cell_count += len(table["widths"]) * len(table["heights"])
             if cell_count > 250000:
                 raise LayoutError("The extracted tables exceed the cell budget.")
@@ -931,6 +934,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
 
             table = recover_split_rows(table, native[index], pages[index])
             verify_nested_labels(table, native[index], pages[index])
+            from layout_numeric_guard import verify_numeric_columns
+
+            verify_numeric_columns(table, native[index], pages[index])
             cell_count += len(table["widths"]) * len(table["heights"])
             if cell_count > 250000:
                 raise LayoutError("The extracted tables exceed the cell budget.")
