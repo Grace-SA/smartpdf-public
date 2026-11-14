@@ -1,0 +1,25 @@
+{
+  "repository": "jsvine/pdfplumber",
+  "commit": "4c64b92d5caccd71c645e98e0fabb0c4dba7ff45",
+  "scope": "Three additional public examples selected before inspecting conversion output; local research only, no source binaries redistributed",
+  "files": [
+    {
+      "name": "ag-energy-round-up-2017-02-24.pdf",
+      "path": "examples/pdfs/ag-energy-round-up-2017-02-24.pdf",
+      "gitBlobSha1": "8d5b488b676d80943f53db60f0f9883a7b674345",
+      "sha256": "4b9774416291f79421a85fac7ecbb8bf2bc625df9a7207d9dcd3ba845f3146fb"
+    },
+    {
+      "name": "ca-warn-report.pdf",
+      "path": "examples/pdfs/ca-warn-report.pdf",
+      "gitBlobSha1": "09fc7e5419d3bf1faafb10c85f564f7f469f5dce",
+      "sha256": "f52f80bd057313c8abec2e854c65c4d96658e72744c836e81d3048d8a5861046"
+    },
+    {
+      "name": "san-jose-pd-firearm-sample.pdf",
+      "path": "examples/pdfs/san-jose-pd-firearm-sample.pdf",
+      "gitBlobSha1": "1909dc15d626080d6d4b25a1a8a3d43b03644337",
+      "sha256": "9ad73ac371e7c9479c0ac4fe6a2741d50b5ba70698b588b1b8eefac6513ee187"
+    }
+  ]
+}

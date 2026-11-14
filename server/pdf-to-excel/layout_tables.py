@@ -935,6 +935,12 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
         grouped[index] = replace_fragments(
             grouped[index], recover_dense_rows(pages[index])
         )
+    from layout_chart_regions import recover as separate_chart_regions
+
+    for index in indices:
+        grouped[index], attempted = separate_chart_regions(
+            source, index, pages[index], grouped[index], converter_for(models), region_budget)
+        region_budget -= attempted
     if (
         sum(
             len(t["widths"]) * len(t["heights"])

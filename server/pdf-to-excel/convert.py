@@ -668,6 +668,8 @@ def _write_workbook(tables, output, layout):
                 "Page-level context only; footnote associations and reading order "
                 "are not inferred.\n\n" + t["sourceContext"]
             )
+        if t.get("chartSourceContext"):
+            source_note += "\n\n" + t["chartSourceContext"]
         s.cell(offset + 1, 1).comment = Comment(source_note, "SmartPDF")
         s.freeze_panes = "A2"
         s.sheet_view.showGridLines = False
@@ -972,6 +974,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 sum(
                     sum(len(e["text"]) for e in t["cells"])
                     + len(t.get("sourceContext", ""))
+                    + len(t.get("chartSourceContext", ""))
                     for t in tables
                 )
                 > 5_000_000
@@ -1012,6 +1015,8 @@ def convert_pages(source, output, selected, count, layout, ocr):
         warnings.append(
             "Table structure was reconstructed. Check merged cells and column alignment against the original PDF."
         )
+    if any(t.get("separatedChartPanels") for t in tables):
+        warnings.append("Separately framed charts were excluded from record fields. Their native tokens are retained in the first-cell comment, not interpreted as data. Plotted lines are not preserved; check the original PDF.")
     if any(t["method"] == "ruled-recovery" for t in tables):
         warnings.append(
             "Additional table structure was recovered from visible cell borders. Check the recovered table and merged cells against the original PDF."
