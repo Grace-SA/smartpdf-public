@@ -1,0 +1,537 @@
+{
+  "source": "Official1901 Census area.pdf selected page2 final rendered pixels",
+  "secondReaderConfig": "existing fixed Tesseract5.3.0 eng psm10, checksum lock and anonymous-FD resource wrapper; research only",
+  "cases": [
+    {
+      "name": "Delaware-pad0",
+      "shape": [
+        27,
+        29,
+        3
+      ],
+      "sha256": "9786ce06d0cb8474632f12f2cf670e7cf55903918a485d1e3953224a1ddca660",
+      "expectedUnchangedSource": "90",
+      "primaryDirect": [
+        [
+          "90",
+          0.9994038045406342
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "06",
+          0.9986340701580048
+        ]
+      ],
+      "angle": [
+        [
+          "180",
+          0.9474223256111145
+        ]
+      ],
+      "second": [
+        [
+          "90",
+          89.663216
+        ]
+      ],
+      "primarySeconds": 0.03020773000025656,
+      "angleAndRecognitionSeconds": 0.03425778700329829,
+      "secondWallSeconds": 0.23187665799923707
+    },
+    {
+      "name": "Delaware-pad4",
+      "shape": [
+        35,
+        37,
+        3
+      ],
+      "sha256": "2d8f17dcf2b7511386c46763b8f7ab740d54f935a25ed49ca081745458f2be72",
+      "expectedUnchangedSource": "90",
+      "primaryDirect": [
+        [
+          "90",
+          0.9931260049343109
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "90",
+          0.9931260049343109
+        ]
+      ],
+      "angle": [
+        [
+          "0",
+          0.5305831432342529
+        ]
+      ],
+      "second": [
+        [
+          "90",
+          95.8936
+        ]
+      ],
+      "primarySeconds": 0.028265123008168302,
+      "angleAndRecognitionSeconds": 0.031481091005844064,
+      "secondWallSeconds": 0.16504851300851442
+    },
+    {
+      "name": "Delaware-pad8",
+      "shape": [
+        43,
+        45,
+        3
+      ],
+      "sha256": "8d67b459461c68a0fb0a52bdeac2dae0bbb4a65a656959d5a3e55c3a6d8f0327",
+      "expectedUnchangedSource": "90",
+      "primaryDirect": [
+        [
+          "90",
+          0.969962865114212
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "90",
+          0.969962865114212
+        ]
+      ],
+      "angle": [
+        [
+          "180",
+          0.8666832447052002
+        ]
+      ],
+      "second": [
+        [
+          "90",
+          95.8936
+        ]
+      ],
+      "primarySeconds": 0.02981851100048516,
+      "angleAndRecognitionSeconds": 0.030575345997931436,
+      "secondWallSeconds": 0.1650076009973418
+    },
+    {
+      "name": "Delaware-rot180",
+      "shape": [
+        27,
+        29,
+        3
+      ],
+      "sha256": "89db631e48751a1ba1ea359f94e6ba6a6f7e0ade0f48eb6c996c736f8e071f40",
+      "expectedUnchangedSource": null,
+      "primaryDirect": [
+        [
+          "06",
+          0.9986340701580048
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "06",
+          0.9986340701580048
+        ]
+      ],
+      "angle": [
+        [
+          "0",
+          0.8334808349609375
+        ]
+      ],
+      "second": [
+        [
+          "06",
+          84.70166
+        ]
+      ],
+      "primarySeconds": 0.030989030987257138,
+      "angleAndRecognitionSeconds": 0.030675144007545896,
+      "secondWallSeconds": 0.11480084899812937
+    },
+    {
+      "name": "Delaware-lower-left-covered",
+      "shape": [
+        27,
+        29,
+        3
+      ],
+      "sha256": "64ea7ce9211a4ef293257dd7d66d1514cf1298ff63be12da79b8cb6d0156af94",
+      "expectedUnchangedSource": null,
+      "primaryDirect": [
+        [
+          "\u00b00",
+          0.5489141568541527
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "\u00b00",
+          0.5489141568541527
+        ]
+      ],
+      "angle": [
+        [
+          "180",
+          0.505375862121582
+        ]
+      ],
+      "second": [
+        [
+          "fait)",
+          18.571304
+        ]
+      ],
+      "primarySeconds": 0.02921870900900103,
+      "angleAndRecognitionSeconds": 0.0334498669981258,
+      "secondWallSeconds": 0.11503908300073817
+    },
+    {
+      "name": "Delaware-duplicate-adjacent",
+      "shape": [
+        27,
+        62,
+        3
+      ],
+      "sha256": "1d60d02bbcf36646a1e7e4f743dfc8cfddf03e5130e4b3f360a812869c640705",
+      "expectedUnchangedSource": null,
+      "primaryDirect": [
+        [
+          "9090",
+          0.999087318778038
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "0606",
+          0.9997018575668335
+        ]
+      ],
+      "angle": [
+        [
+          "180",
+          0.919405996799469
+        ]
+      ],
+      "second": [
+        [
+          "90",
+          86.814003
+        ],
+        [
+          "90",
+          86.814003
+        ]
+      ],
+      "primarySeconds": 0.029037380998488516,
+      "angleAndRecognitionSeconds": 0.030905694991815835,
+      "secondWallSeconds": 0.11490359199524391
+    },
+    {
+      "name": "Georgia-pad0",
+      "shape": [
+        28,
+        63,
+        3
+      ],
+      "sha256": "58ce4c1439f09dd7ebfc0683352e07c7d3ed6998c4d9f5eadd047b5de5e7f0af",
+      "expectedUnchangedSource": "58,980",
+      "primaryDirect": [
+        [
+          "58,080",
+          0.9984652797381083
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "58,080",
+          0.9984652797381083
+        ]
+      ],
+      "angle": [
+        [
+          "180",
+          0.6811262369155884
+        ]
+      ],
+      "second": [
+        [
+          "58,",
+          90.030975
+        ],
+        [
+          "980",
+          86.858719
+        ]
+      ],
+      "primarySeconds": 0.028192586003569886,
+      "angleAndRecognitionSeconds": 0.03232950100209564,
+      "secondWallSeconds": 0.11499514800379984
+    },
+    {
+      "name": "Georgia-pad4",
+      "shape": [
+        36,
+        71,
+        3
+      ],
+      "sha256": "5f6ee43338d004ed1d2794f83cb2b5c6bfcf790f31367d190d64a721a7f40a72",
+      "expectedUnchangedSource": "58,980",
+      "primaryDirect": [
+        [
+          "58, 080",
+          0.8994637387139457
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "58, 080",
+          0.8994637387139457
+        ]
+      ],
+      "angle": [
+        [
+          "0",
+          0.5752468705177307
+        ]
+      ],
+      "second": [
+        [
+          "53,980",
+          72.994064
+        ]
+      ],
+      "primarySeconds": 0.03395615899353288,
+      "angleAndRecognitionSeconds": 0.02994315599789843,
+      "secondWallSeconds": 0.11495288099104073
+    },
+    {
+      "name": "Georgia-pad8",
+      "shape": [
+        44,
+        79,
+        3
+      ],
+      "sha256": "a058bfe7df29032ae1220dded9757ae2132e5a6ee4a57dad2b1cefd6f605b3fe",
+      "expectedUnchangedSource": "58,980",
+      "primaryDirect": [
+        [
+          "58,980",
+          0.9677365819613138
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "58,980",
+          0.9677365819613138
+        ]
+      ],
+      "angle": [
+        [
+          "0",
+          0.9899469017982483
+        ]
+      ],
+      "second": [
+        [
+          "58,",
+          65.823929
+        ],
+        [
+          "980",
+          77.958908
+        ]
+      ],
+      "primarySeconds": 0.029752111993730068,
+      "angleAndRecognitionSeconds": 0.031818503004615195,
+      "secondWallSeconds": 0.11520509999536444
+    },
+    {
+      "name": "Georgia-rot180",
+      "shape": [
+        28,
+        63,
+        3
+      ],
+      "sha256": "fe25f145b97a259fbc097098b6ac88164feb39ab2fa031802242798277c0b34d",
+      "expectedUnchangedSource": null,
+      "primaryDirect": [
+        [
+          "080 *99",
+          0.6749184493507657
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "58,080",
+          0.9984652797381083
+        ]
+      ],
+      "angle": [
+        [
+          "180",
+          0.966768741607666
+        ]
+      ],
+      "second": [
+        [
+          "086",
+          89.435608
+        ],
+        [
+          "\u201889",
+          60.735573
+        ]
+      ],
+      "primarySeconds": 0.028863933010143228,
+      "angleAndRecognitionSeconds": 0.0313588900025934,
+      "secondWallSeconds": 0.1650854170002276
+    },
+    {
+      "name": "Georgia-left-edge-clipped",
+      "shape": [
+        28,
+        59,
+        3
+      ],
+      "sha256": "21dec456c4aa7d1182dfbf00014624b28323a847fd3c5e2473f23f2b6fff3d70",
+      "expectedUnchangedSource": null,
+      "primaryDirect": [
+        [
+          "58,080",
+          0.9952209293842316
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "58,080",
+          0.9952209293842316
+        ]
+      ],
+      "angle": [
+        [
+          "0",
+          0.7586852312088013
+        ]
+      ],
+      "second": [
+        [
+          "58,",
+          81.050568
+        ],
+        [
+          "980",
+          84.935905
+        ]
+      ],
+      "primarySeconds": 0.036729960003867745,
+      "angleAndRecognitionSeconds": 0.017634830001043156,
+      "secondWallSeconds": 0.16490277400589548
+    },
+    {
+      "name": "Georgia-fully-covered",
+      "shape": [
+        28,
+        63,
+        3
+      ],
+      "sha256": "f497ab6fd2536a7f5c35a1a617cc2fa954526a47ce75b48dc4811919b98c63dc",
+      "expectedUnchangedSource": null,
+      "primaryDirect": [
+        [
+          "",
+          0.0
+        ]
+      ],
+      "primaryWithAngle": [
+        [
+          "",
+          0.0
+        ]
+      ],
+      "angle": [
+        [
+          "0",
+          0.5390436053276062
+        ]
+      ],
+      "second": [
+        [
+          "Oo",
+          0.0
+        ]
+      ],
+      "primarySeconds": 0.015152932988712564,
+      "angleAndRecognitionSeconds": 0.017308845999650657,
+      "secondWallSeconds": 0.11492877299315296
+    }
+  ],
+  "jobBudget": {
+    "calls": 12,
+    "seconds": 1.673896513035288
+  },
+  "jobMeasurements": [
+    {
+      "seconds": 0.21470040900749154,
+      "returncode": 0,
+      "pixels": 783
+    },
+    {
+      "seconds": 0.16452694800682366,
+      "returncode": 0,
+      "pixels": 1295
+    },
+    {
+      "seconds": 0.16450976199121214,
+      "returncode": 0,
+      "pixels": 1935
+    },
+    {
+      "seconds": 0.11433488701004535,
+      "returncode": 0,
+      "pixels": 783
+    },
+    {
+      "seconds": 0.11453440399782266,
+      "returncode": 0,
+      "pixels": 783
+    },
+    {
+      "seconds": 0.1143959480104968,
+      "returncode": 0,
+      "pixels": 1674
+    },
+    {
+      "seconds": 0.11443746900476981,
+      "returncode": 0,
+      "pixels": 1764
+    },
+    {
+      "seconds": 0.11444042000221089,
+      "returncode": 0,
+      "pixels": 2556
+    },
+    {
+      "seconds": 0.1145886649901513,
+      "returncode": 0,
+      "pixels": 3476
+    },
+    {
+      "seconds": 0.16452725800627377,
+      "returncode": 0,
+      "pixels": 1764
+    },
+    {
+      "seconds": 0.16437992699502502,
+      "returncode": 0,
+      "pixels": 1652
+    },
+    {
+      "seconds": 0.11452041601296514,
+      "returncode": 0,
+      "pixels": 1764
+    }
+  ],
+  "childPeakRssKiB": 152268
+}
