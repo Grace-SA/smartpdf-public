@@ -101,7 +101,9 @@ def bounded_content(stream, remaining):
                 if (
                     len(data) > remaining
                     or not decoder.eof
-                    or decoder.unused_data
+                    # Accept only a single stream-terminating line ending.
+                    # Never decode a second member or ignore arbitrary suffixes.
+                    or decoder.unused_data not in (b"", b"\n", b"\r", b"\r\n")
                     or decoder.unconsumed_tail
                 ):
                     raise Unsupported("Incomplete, trailing or oversized Flate data")

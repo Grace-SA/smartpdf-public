@@ -685,6 +685,11 @@ def _write_workbook(tables, output, layout):
                 "Page-level context only; footnote associations and reading order "
                 "are not inferred.\n\n" + t["sourceContext"]
             )
+        if t.get("sourceHeaderContext"):
+            source_note += (
+                "\n\nText outside the source header band, preserved verbatim. "
+                "Its column association is not inferred:\n" + t["sourceHeaderContext"]
+            )
         if t.get("splitHeaderPhrase"):
             from source_header_warning import NOTICE as HEADER_NOTICE
 

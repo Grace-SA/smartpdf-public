@@ -889,6 +889,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
             from layout_split_label import recover as recover_split_label
 
             table = recover_split_label(table, native[index], pages[index])
+            from layout_header_band import recover as recover_header_band
+
+            table = recover_header_band(table, pages[index])
             verify_nested_labels(table, native[index], pages[index])
             from layout_numeric_guard import verify_numeric_columns
 
@@ -939,6 +942,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
             from layout_split_label import recover as recover_split_label
 
             table = recover_split_label(table, native[index], pages[index])
+            from layout_header_band import recover as recover_header_band
+
+            table = recover_header_band(table, pages[index])
             verify_nested_labels(table, native[index], pages[index])
             from layout_numeric_guard import verify_numeric_columns
 
