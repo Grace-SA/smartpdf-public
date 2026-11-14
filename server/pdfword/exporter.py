@@ -206,6 +206,14 @@ def add_table(document, block, width, existing=None):
     return table
 
 
+def margin_signature(page):
+    """Only equal content/format/geometry fields may share a source margin."""
+    return [
+        {key: value for key, value in block.items() if key not in ("id", "source")}
+        for block in page["blocks"] if block["kind"] in ("header", "footer")
+    ]
+
+
 def export_word(model, destination, assets):
     validate(model)
     destination = Path(destination)
@@ -227,10 +235,19 @@ def export_word(model, destination, assets):
     image_count = 0
     for i, page in enumerate(model["pages"]):
         body = [b for b in page["blocks"] if b["kind"] not in ("header", "footer")]
+        previous_body = ([b for b in model["pages"][i - 1]["blocks"]
+                          if b["kind"] not in ("header", "footer")] if i else [])
+        previous_table = (previous_body[-1] if previous_body
+                          and previous_body[-1]["kind"] == "table" else None)
         continuing = bool(
             i
             and len(body) == 1
-            and body[0].get("continues") in tables
+            and body[0]["kind"] == "table"
+            and previous_table is not None
+            and previous_table["id"] in tables
+            and body[0].get("continues") is not None
+            and body[0]["continues"] in (previous_table["id"], previous_table.get("continues"))
+            and margin_signature(page) == margin_signature(model["pages"][i - 1])
             and page["width"] == model["pages"][i - 1]["width"]
             and page["height"] == model["pages"][i - 1]["height"]
         )
@@ -239,6 +256,10 @@ def export_word(model, destination, assets):
             if continuing or not i
             else doc.add_section(WD_SECTION_START.NEW_PAGE)
         )
+        if not continuing:
+            # A missing source margin means empty, not inherited previous text.
+            section.header.is_linked_to_previous = False
+            section.footer.is_linked_to_previous = False
         section.page_width = Pt(page["width"])
         section.page_height = Pt(page["height"])
         section.orientation = (
@@ -302,7 +323,7 @@ def export_word(model, destination, assets):
                     paragraph.paragraph_format.line_spacing = Pt(1)
                     paragraph.add_run().add_break(WD_BREAK.COLUMN)
                     column_break = False
-                old = tables.get(block.get("continues")) if continuing else None
+                old = tables[previous_table["id"]] if continuing else None
                 table = add_table(doc, block, width, old)
                 tables[block["id"]] = table
                 if not marked:
