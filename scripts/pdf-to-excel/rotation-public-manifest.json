@@ -1,0 +1,25 @@
+{
+  "repository": "camelot-dev/camelot",
+  "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "scope": "Three public quarter-turn PDFs; local research only, no redistributed binaries",
+  "files": [
+    {
+      "name": "anticlockwise_table_1.pdf",
+      "path": "tests/files/anticlockwise_table_1.pdf",
+      "gitBlobSha1": "8b7a6152afbadf372e6ad67b0ffa8998b601e89a",
+      "sha256": "99d62c35de1978f53ca914ff47ca3e769aa5dae94016cc09c59ae204a70fad1b"
+    },
+    {
+      "name": "clockwise_table_1.pdf",
+      "path": "tests/files/clockwise_table_1.pdf",
+      "gitBlobSha1": "9494465873d39a702c96ed865cfd241c9bfbfca1",
+      "sha256": "72e1472878305b75d1d936a20b7a189a5bbd60bc659a64ab1da2c75b053d4a17"
+    },
+    {
+      "name": "clockwise_table_2.pdf",
+      "path": "tests/files/clockwise_table_2.pdf",
+      "gitBlobSha1": "5cee89b30388529002f2acd406bf4bc819195694",
+      "sha256": "135d561002f336b288c163e306126de41ebfad98d0fc4cd45afbfdbf25bd7838"
+    }
+  ]
+}

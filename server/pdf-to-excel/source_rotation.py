@@ -75,6 +75,25 @@ def prepared_rotation(source, selected, output_directory):
     """
     reader = PdfReader(source)
     candidates = [i for i in selected if reader.pages[i].rotation in (90, 180, 270)]
+    # Probe zero-Rotate content before writing a trial copy. Ordinary upright
+    # pages need no rewrite or second parse; release each probe's glyph cache.
+    zero = [i for i in selected if reader.pages[i].rotation == 0]
+    if zero:
+        with pdfplumber.open(source) as probe:
+            for i in zero:
+                page = probe.pages[i]
+                try:
+                    box = visible_box(page)
+                    if (not all(math.isfinite(v) for v in box)
+                            or box[2] <= box[0] or box[3] <= box[1]
+                            or (box[2] - box[0]) * (box[3] - box[1]) > 10_000_000):
+                        continue
+                    if page.images or page.annots or len(page.chars) > 50000:
+                        continue
+                    if quarter_turn(visible_chars(page)) in (90, 180, 270):
+                        candidates.append(i)
+                finally:
+                    page.close()
     if not candidates:
         yield source, []
         return
@@ -106,6 +125,8 @@ def prepared_rotation(source, selected, output_directory):
                     not before.images
                     and not after.images
                     and direction is not None
+                    and (reader.pages[i].rotation != 0 or direction != 0)
+                    and (reader.pages[i].rotation != 0 or not before.annots)
                     and Counter(c["text"] for c in before.chars)
                     == Counter(c["text"] for c in after.chars)
                 ):

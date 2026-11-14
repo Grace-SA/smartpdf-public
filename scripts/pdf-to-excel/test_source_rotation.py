@@ -185,11 +185,54 @@ class RotationTests(unittest.TestCase):
                 finally:
                     book.close()
 
+    def test_zero_rotate_content_turns_preserve_cells_pixels_and_source(self):
+        import pypdfium2 as pdfium
+        from PIL import ImageChops
+        for angle in (90, 180, 270):
+            for crop in (False, True):
+                raw = self.source(angle, crop=crop)
+                writer = PdfWriter(clone_from=raw)
+                writer.pages[0].transfer_rotation_to_content()
+                source = self.root / 'content-only.pdf'; writer.write(source)
+                original_bytes = source.read_bytes()
+                self.assertEqual(PdfReader(source).pages[0].rotation, 0)
+                with prepared_rotation(source, [0], self.root) as (path, pages):
+                    self.assertEqual(pages, [1])
+                    with pdfium.PdfDocument(source) as before, pdfium.PdfDocument(path) as after:
+                        original = before[0].render(scale=2, rotation=(360-angle)%360).to_pil()
+                        normalized = after[0].render(scale=2).to_pil()
+                        self.assertEqual(original.size, normalized.size)
+                        self.assertIsNone(ImageChops.difference(original, normalized).getbbox())
+                out = self.root / 'converted.xlsx'
+                with patch.dict(os.environ, {}, clear=True): convert(source, out, {})
+                book = load_workbook(out)
+                self.assertEqual(list(book.active.values), self.expected)
+                book.close()
+                self.assertEqual(source.read_bytes(), original_bytes)
+
+    def test_zero_rotate_image_and_annotation_pages_are_not_rewritten(self):
+        from pypdf.generic import ArrayObject, DictionaryObject, NameObject, TextStringObject
+        for image in (False, True):
+            raw = self.source(90, image=image)
+            writer = PdfWriter(clone_from=raw)
+            writer.pages[0].transfer_rotation_to_content()
+            if not image:
+                writer.pages[0][NameObject('/Annots')] = ArrayObject([DictionaryObject({
+                    NameObject('/Type'): NameObject('/Annot'),
+                    NameObject('/Subtype'): NameObject('/Text'),
+                    NameObject('/Rect'): RectangleObject((100,100,120,120)),
+                    NameObject('/Contents'): TextStringObject('Annotation')})])
+            source = self.root / 'excluded.pdf'; writer.write(source)
+            with prepared_rotation(source, [0], self.root) as (path, pages):
+                self.assertEqual(path, source)
+                self.assertEqual(pages, [])
+
     def test_unrotated_source_is_unchanged(self):
         source = self.source(0)
-        with prepared_rotation(source, [0], self.root) as (path, pages):
-            self.assertEqual(path, source)
-            self.assertEqual(pages, [])
+        with patch('source_rotation.PdfWriter', side_effect=AssertionError('upright pages need no trial copy')):
+            with prepared_rotation(source, [0], self.root) as (path, pages):
+                self.assertEqual(path, source)
+                self.assertEqual(pages, [])
 
     def test_mixed_direction_or_image_pages_are_not_normalized(self):
         for options in ({"mixed": True}, {"image": True}):
