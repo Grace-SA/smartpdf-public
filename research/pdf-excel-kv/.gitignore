@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.log
+*.pdf
+*.xlsx
+*.png
+runs/
+outputs/
+traces.json
+raw.json
+code.json
+result.json
+exit.json

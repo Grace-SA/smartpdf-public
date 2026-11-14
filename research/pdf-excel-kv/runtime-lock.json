@@ -1,0 +1,72 @@
+[
+  {
+    "package": "torch",
+    "version": "2.15.0+cpu",
+    "path": "torch/nn/functional.py",
+    "sha256": "5a3bacfc98d3a3b75696e7ee6814da3d3ca9e0a02b60fba5bbd15743141fa634",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-ibm-models",
+    "version": "4.0.4",
+    "path": "docling_ibm_models/tableformer/data_management/tf_predictor.py",
+    "sha256": "79bf93b305c5107eaaae32cdff898756faa3f15877b3371f50c52115984bce80",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-ibm-models",
+    "version": "4.0.4",
+    "path": "docling_ibm_models/tableformer/models/table04_rs/tablemodel04_rs.py",
+    "sha256": "559f01739685978b2b3f3bd453c1500ec4feb24ce8af257c80ce271b0e29cd21",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-ibm-models",
+    "version": "4.0.4",
+    "path": "docling_ibm_models/tableformer/models/table04_rs/transformer_rs.py",
+    "sha256": "1c917ecd17528d0e21d0248f737d35c8ce9a97aa4bbd4d33a6e28220724e89cf",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-slim",
+    "version": "2.150.0",
+    "path": "docling/pipeline/standard_pdf_pipeline.py",
+    "sha256": "a374a5fb14f5d0754fbaa4de9db4dd3f03f026b92c10788ca08c4b31ee250578",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "torch",
+    "version": "2.15.0+cpu",
+    "path": "torch/nn/modules/activation.py",
+    "sha256": "9b1ef5c6daeaf392b9267f82a7212da22233c23b8b344a7494d58426a2bf3679",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "torch",
+    "version": "2.15.0+cpu",
+    "path": "torch/nn/modules/module.py",
+    "sha256": "6e1d498b3b1997725aae48fcda347149d2fa093f4f5854490268bb4af75b1b81",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-slim",
+    "version": "2.150.0",
+    "path": "docling/models/stages/table_structure/table_structure_model.py",
+    "sha256": "7b921702de84d8f5ca357737d010e5c8aeb1c12c0be875afd2d2d558ee8f1b59",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-slim",
+    "version": "2.150.0",
+    "path": "docling/document_converter.py",
+    "sha256": "a3e46a0a83561c4bf6c15dce1d263d20b4caf3baa3eabc3e8d511cc078351a3a",
+    "wheelRecordMatches": true
+  },
+  {
+    "package": "docling-slim",
+    "version": "2.150.0",
+    "path": "docling/datamodel/pipeline_options.py",
+    "sha256": "d14e844e96405c98da743ca13f535d08102fc0a90a24de255ad0a68cedbdbf2f",
+    "wheelRecordMatches": true
+  }
+]

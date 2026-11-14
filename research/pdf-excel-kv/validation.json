@@ -1,0 +1,251 @@
+{
+  "status": "research only; default off; no merge or deployment",
+  "baseCommit": "205028ab2d2815f18afae5776e187d2f2b34c3f2",
+  "sourceRepository": "camelot-dev/camelot",
+  "sourceCommit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "sampleSelection": "Five files fixed before final adapter runs; includes previously known defective/refused cases. All selected results are retained. This is not a random or population-representative corpus.",
+  "runtime": {
+    "python": "3.12.14",
+    "torch": "2.15.0+cpu",
+    "doclingSlim": "2.150.0",
+    "doclingIbmModels": "4.0.4",
+    "cpuThreads": 2,
+    "modelDeadlineSeconds": 150,
+    "persistentCacheLimitBytes": 33554432
+  },
+  "samples": [
+    {
+      "id": "eu-017",
+      "inputSha256": "8de3587bd649191d2676da873750f3777ea8a3b2ec68521759a00f3016c65341",
+      "candidate": {
+        "status": "converted",
+        "seconds": 12.207424506006646,
+        "peakRssKiB": 1444956,
+        "cacheStates": [
+          {
+            "calls": 1,
+            "setup_fallbacks": 0,
+            "operator_fallbacks": 338,
+            "failures": 0,
+            "budget_declines": 2,
+            "peak_cache_bytes": 27672576,
+            "live_cache_bytes": 0,
+            "busy_rejections": 0
+          }
+        ]
+      },
+      "comparison": {
+        "traceCount": 1,
+        "tokenSteps": 169,
+        "traceMultisetExact": true,
+        "status": "converted",
+        "semanticDifferences": [],
+        "geometryDifferences": []
+      },
+      "baseline": {
+        "status": "converted",
+        "seconds": 17.850115496999933,
+        "peakRssKiB": 1433652
+      }
+    },
+    {
+      "id": "us-020",
+      "inputSha256": "d884d32bd2a1d620e0c7b5446e4d0b58ba67dab04e884839b2640b9a35749e99",
+      "candidate": {
+        "status": "converted",
+        "seconds": 47.174306110988255,
+        "peakRssKiB": 1806312,
+        "cacheStates": [
+          {
+            "calls": 4,
+            "setup_fallbacks": 0,
+            "operator_fallbacks": 1878,
+            "failures": 0,
+            "budget_declines": 8,
+            "peak_cache_bytes": 27672576,
+            "live_cache_bytes": 0,
+            "busy_rejections": 0
+          }
+        ]
+      },
+      "comparison": {
+        "traceCount": 4,
+        "tokenSteps": 939,
+        "traceMultisetExact": true,
+        "status": "converted",
+        "semanticDifferences": [],
+        "geometryDifferences": []
+      },
+      "baseline": {
+        "status": "converted",
+        "seconds": 67.27641620799841,
+        "peakRssKiB": 1803608
+      }
+    },
+    {
+      "id": "us-017",
+      "inputSha256": "62ccd00c8c7d67973d2abb77e4a30e173793602e91f60b9d1d1f6b9c60221989",
+      "candidate": {
+        "status": "converted",
+        "seconds": 81.5038273800019,
+        "peakRssKiB": 1685540,
+        "cacheStates": [
+          {
+            "calls": 6,
+            "setup_fallbacks": 0,
+            "operator_fallbacks": 3552,
+            "failures": 0,
+            "budget_declines": 12,
+            "peak_cache_bytes": 27672576,
+            "live_cache_bytes": 0,
+            "busy_rejections": 0
+          }
+        ]
+      },
+      "comparison": {
+        "traceCount": 6,
+        "tokenSteps": 1776,
+        "traceMultisetExact": true,
+        "status": "converted",
+        "semanticDifferences": [],
+        "geometryDifferences": []
+      },
+      "baseline": {
+        "status": "converted",
+        "seconds": 117.44449675700162,
+        "peakRssKiB": 1736384
+      }
+    },
+    {
+      "id": "us-019",
+      "inputSha256": "9ebc9ec33bdb98ecb44722874b42e384eaf0c1015e437da7444c322a711bcbbc",
+      "candidate": {
+        "status": "refused",
+        "seconds": 30.05969655700028,
+        "peakRssKiB": 1591712,
+        "cacheStates": [
+          {
+            "calls": 4,
+            "setup_fallbacks": 0,
+            "operator_fallbacks": 1046,
+            "failures": 0,
+            "budget_declines": 8,
+            "peak_cache_bytes": 27672576,
+            "live_cache_bytes": 0,
+            "busy_rejections": 0
+          }
+        ]
+      },
+      "comparison": {
+        "traceCount": 4,
+        "tokenSteps": 523,
+        "traceMultisetExact": true,
+        "status": "refused",
+        "semanticDifferences": [],
+        "geometryDifferences": []
+      },
+      "baseline": {
+        "status": "refused",
+        "seconds": 39.769680160010466,
+        "peakRssKiB": 1609396
+      }
+    },
+    {
+      "id": "us-018",
+      "inputSha256": "67f2e2e83b3d19006f949b38a4fd2a2c2ef96d725cdfd3ad6e9f463798d57297",
+      "candidate": {
+        "status": "converted",
+        "seconds": 111.98875618499005,
+        "peakRssKiB": 1919996,
+        "cacheStates": [
+          {
+            "calls": 7,
+            "setup_fallbacks": 0,
+            "operator_fallbacks": 4986,
+            "failures": 0,
+            "budget_declines": 14,
+            "peak_cache_bytes": 27672576,
+            "live_cache_bytes": 0,
+            "busy_rejections": 0
+          }
+        ]
+      },
+      "comparison": {
+        "traceCount": 7,
+        "tokenSteps": 2493,
+        "traceMultisetExact": true,
+        "status": "converted",
+        "semanticDifferences": [],
+        "geometryDifferences": [
+          {
+            "sheet": "Page 1 Table 1",
+            "kind": "height",
+            "key": 1,
+            "before": 14.8611113231627,
+            "after": 14.86108843497911
+          },
+          {
+            "sheet": "Page 1 Table 1",
+            "kind": "height",
+            "key": 58,
+            "before": 11.68499960937493,
+            "after": 11.68493857421868
+          },
+          {
+            "sheet": "Page 3 Table 1",
+            "kind": "height",
+            "key": 1,
+            "before": 14.96738753118552,
+            "after": 14.96741041936912
+          }
+        ]
+      },
+      "baseline": {
+        "status": "refused",
+        "modelDeadlineSeconds": 150,
+        "referenceControl": "Original-model selected-page controls 1-4 and5-7; not a production deadline reset",
+        "controlWorkbookSha256": [
+          "5c5f7432f2a8cb57d876bf270281f0652d20d77816962c8ef5f18976168804e5",
+          "7cbd5e2386d7f228185c9eed3fbc338886e87be96fceabeafca82fa38a0a971f"
+        ]
+      }
+    }
+  ],
+  "researchTests": {
+    "total": 17,
+    "passed": 17,
+    "seconds": 1.085,
+    "includes": [
+      "default off and dependency-version mismatch",
+      "source fingerprints match installed wheel records",
+      "budget and cache failure fallback",
+      "original operator not retried",
+      "budget initialization and cancellation cleanup",
+      "same-predictor concurrent entry rejection",
+      "distinct predictor state isolation",
+      "native SIGKILL reap/no cache file check",
+      "bitwise equivalence, alias mutations, unsupported paths and restoration"
+    ]
+  },
+  "cumulativeTests": {
+    "total": 557,
+    "passed": 556,
+    "skipped": 1,
+    "seconds": 104.536,
+    "skipReason": "Optional external Stirling service unavailable"
+  },
+  "containerValidation": {
+    "status": "not run",
+    "reason": "Docker, Podman and runc absent; no visible cgroup filesystem; only the same cloud environment was listed"
+  },
+  "limitations": [
+    "Persistent reservation accounting is not a process RSS ceiling.",
+    "Five native public files, not general PDF/OCR coverage or full frozen-corpus acceptance.",
+    "Equivalent output preserves known baseline US017 caption/header defects.",
+    "US019 unsafe record-order output remains refused with no workbook.",
+    "Three US018 row-height microdifferences are disclosed; no Office rendering acceptance.",
+    "Single owned predictor, immutable inputs/parameters/backend settings per call; custom dispatch/tracing is uncertified.",
+    "No deployment pressure, real-container OOM or hard-kill acceptance.",
+    "Local approved-asset inventory check remains blocked by inherited missing assets."
+  ]
+}
