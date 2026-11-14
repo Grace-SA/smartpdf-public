@@ -80,3 +80,32 @@ satisfy the inherited approved-asset inventory check; this is not a pass.
 
 `PYTORCH-LICENSE.txt` retains the license for the operation ordering. No public
 PDF, rendered image, model binary, private data or raw trace is included here.
+
+### Additional native resource probes
+
+`test_native_limits.py` exercises three **synthetic small-attention** scenarios in
+separate Linux child processes. It does not load TableFormer or convert PDFs:
+
+* Two children simultaneously hold independent caches, then each performs 100
+  in-place memory replacements. Every result must exactly match its own original
+  attention operator; each local reservation stays within 40,000 bytes and
+  reaches zero on explicit cleanup. This is not a shared aggregate budget.
+* After Torch warm-up, a child imposes `RLIMIT_AS` at its current virtual mapping
+  size plus 64 MiB. A real 256 MiB Torch allocation must fail, while ten subsequent
+  calls still match the original result. The allocation failure is outside the
+  cache and does not establish recovery from every internal allocation failure.
+* A child with a live cache runs attention repeatedly under adjacent soft/hard
+  CPU limits. The parent requires termination by `SIGXCPU`, reaps
+  it and checks that no files appeared in the isolated working directory.
+
+All limits are set only in the test child. They do not change parent settings.
+Before loading Torch the child disables core dumps and Linux dumpability;
+failure to do so fails the probe. Child processes are reaped before deleting
+their working directory, including assertion/timeout failures.
+These tests passed locally alongside the existing research tests (20 total).
+They establish native process behavior, **not** a production memory ceiling:
+`RLIMIT_AS` is virtual address space, not RSS; CPU time is not a wall deadline;
+no aggregate multi-job memory, cgroup OOM, secure erasure, full-model concurrent
+load or deployment container acceptance is certified. No runtime or production
+code was changed for these probes. The prior public-PDF equivalence measurements
+remain the coverage evidence; these new synthetic tests do not increase it.
