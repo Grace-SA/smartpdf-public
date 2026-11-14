@@ -892,6 +892,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
             from layout_header_band import recover as recover_header_band
 
             table = recover_header_band(table, pages[index])
+            from layout_visible_row_merge import recover as recover_visible_row_merge
+
+            table = recover_visible_row_merge(table, pages[index])
             verify_nested_labels(table, native[index], pages[index])
             from layout_numeric_guard import verify_numeric_columns
 
