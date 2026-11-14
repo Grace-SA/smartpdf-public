@@ -10,14 +10,15 @@ class CurrencyText(unittest.TestCase):
         for value in ('Total $5+$10=$15.','Costs $5 + $10.',
                       'Fees $50 / month; deposit $100.',
                       '$1,234.50+$2,345.60', '$-5+$-10', '$−5+$−10', '$.50+$.25',
-                      '$5+$10 + $20+$30.'):
+                      '$5+$10 + $20+$30.', 'Total $ 5 + $ 10 = $ 15.',
+                      '$5+$\u00a010', '$5+$\u202f10', '$5+$\t10', '$ -5+$ −10'):
             with self.subTest(value=value):
                 parts=list(segments(value))
                 self.assertEqual(''.join(p[0]for p in parts),value)
                 self.assertTrue(all(p[1]is None and not p[2]for p in parts))
                 self.assertFalse(unsupported(value))
     def test_explicit_math_and_mixed_text_unchanged(self):
-        for value in ('$5+10$',r'\(5+10\)','$$5+10$$',r'$x_i$'):
+        for value in ('$5+10$',r'\(5+10\)','$$5+10$$',r'$x_i$', '$5+10$ units', '$5+10$ + 10', '$5+10$ end'):
             with self.subTest(value=value):self.assertTrue(any(p[1]is not None for p in segments(value)))
         for value in (r'$x_i$ costs $5+$10.',r'$5+$10 and $x_i$'):
             parts=list(segments(value));self.assertEqual(''.join(p[0]for p in parts),value)
@@ -34,12 +35,14 @@ class CurrencyText(unittest.TestCase):
             self.assertFalse(any(p[2]for p in parts))
         # No safe distinction between adjacent numeric math and currency:
         # preserve the complete literal rather than silently dropping symbols.
-        self.assertTrue(all(p[1]is None for p in segments('$5$10')))
+        for value in ('$5$10', '$5$ 10', '$5+5$ 10 units'):
+            self.assertTrue(all(p[1]is None for p in segments(value)))
     def test_native_pdf_money_is_editable_and_exact(self):
         from reportlab.pdfgen.canvas import Canvas
         with tempfile.TemporaryDirectory()as temp:
             root=Path(temp);source=root/'source.pdf';c=Canvas(str(source),pagesize=(612,792));c.setFont('Helvetica',12)
-            values=['Total $5+$10=$15.','Balance $1,234.50+$2,345.60.']
+            values=['Total $5+$10=$15.','Balance $1,234.50+$2,345.60.',
+                    'Total $ 5 + $ 10 = $ 15.', 'Total $5+$ 10=$ 15.']
             for i,s in enumerate(values):c.drawString(40,720-40*i,s)
             c.save();out=root/'out.docx';report=convert(source,out)
             self.assertEqual(report['images'],0)

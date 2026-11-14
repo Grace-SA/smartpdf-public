@@ -210,7 +210,7 @@ def currency_collision(text):
     return any(
         match[2] is not None
         and re.match(number, match[2].lstrip())
-        and re.match(number, text[match.end():])
+        and re.match(number, text[match.end():].lstrip())
         for match in DELIMITERS.finditer(text)
     )
 
