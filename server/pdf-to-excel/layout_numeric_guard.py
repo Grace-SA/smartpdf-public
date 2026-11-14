@@ -18,14 +18,14 @@ from layout_nested_guard import closed_table
 from layout_split_rows import visible_sides
 
 _NUMBER = re.compile(r'[+-]?(?:\d+(?:[.,]\d+)*|\.\d+)%?\Z')
-NOTICE = ('Repeated numeric cells conflict with separately bounded source columns. '
+NOTICE = ('Numeric cells conflict with separately bounded source cells. '
           'The converter cannot safely verify their row and column ownership; '
           'conversion was stopped rather than exporting potentially mixed values.')
 
 
 def verify_numeric_columns(model, native, page):
     try:
-        conflict = _conflict(model, native, page)
+        conflict = _conflict(model, native, page) or _conflict(model, native, page, vertical=True)
     except (ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError,
             OSError, RuntimeError, MalformedPDFException):
         return
@@ -33,8 +33,8 @@ def verify_numeric_columns(model, native, page):
         raise LayoutError(NOTICE)
 
 
-def _conflict(model, native, page):
-    if (getattr(page, 'rotation', 0) or tuple(page.bbox) != (0, 0, page.width, page.height)
+def _conflict(model, native, page, *, vertical=False):
+    if (getattr(page, 'rotation', 0) or (not vertical and tuple(page.bbox) != (0, 0, page.width, page.height))
             or tuple(page.cropbox) != tuple(page.mediabox)):
         return False
     cells = model['cells']; chars = [g for g in page.chars if g['text'].strip()]
@@ -53,7 +53,7 @@ def _conflict(model, native, page):
                   and len(c['text'].split()) == 2
                   and all(_NUMBER.fullmatch(t) for t in c['text'].split())
                   and _box(c.get('sourceTextCandidate'))]
-    if len(candidates) < 3 or len(chars)*len(candidates) > 2_000_000:
+    if len(candidates) < (1 if vertical else 3) or len(chars)*len(candidates) > 2_000_000:
         return False
     if any(not _box(_geometry(g)) for g in chars):
         return False
@@ -62,6 +62,9 @@ def _conflict(model, native, page):
         return False
     view = visible_box(page); rendered = None
     for table in tables:
+        if vertical and (len(table['heights']) < 20 or len(table['widths']) < 3
+                         or sum(bool(_NUMBER.fullmatch(c['text'].strip())) for c in table['cells']) < 20):
+            continue
         if not _inside(table['bbox'], view):
             continue
         # Competing/nested native tables cannot establish unique ownership.
@@ -94,15 +97,16 @@ def _conflict(model, native, page):
                                and b[1] <= (g['top']+g['bottom'])/2 <= b[3] for g in glyphs)]
             if len(selected) != 2:
                 continue
-            selected.sort(key=lambda v: v[0]['c'])
+            selected.sort(key=lambda v: v[0]['r' if vertical else 'c'])
             (left, a, ga), (right, b2, gb) = selected
-            if (left['r'] != right['r'] or left['c']+1 != right['c']
+            adjacent = (left['c'] == right['c'] and left['r']+1 == right['r']) if vertical else (left['r'] == right['r'] and left['c']+1 == right['c'])
+            if (not adjacent
                     or c['text'].split() != [left['text'].strip(), right['text'].strip()]):
                 continue
             # Complete character ownership in the model bbox, not value lookup.
             owned = [g for g in chars if b[0] <= (g['x0']+g['x1'])/2 <= b[2]
                      and b[1] <= (g['top']+g['bottom'])/2 <= b[3]]
-            if (max(g['matrix'][5] for g in ga+gb)-min(g['matrix'][5] for g in ga+gb) > .5
+            if ((not vertical and max(g['matrix'][5] for g in ga+gb)-min(g['matrix'][5] for g in ga+gb) > .5)
                     or {id(g) for g in owned} != {id(g) for g in ga+gb}):
                 continue
             if any(other is not c and other.get('text', '').strip()
@@ -115,10 +119,13 @@ def _conflict(model, native, page):
                 if math.ceil(page.width*2)*math.ceil(page.height*2) > 20_000_000:
                     return False
                 rendered = np.asarray(page.to_image(resolution=144).original.convert('L'))
-            if visible_sides(rendered, a, page.width, page.height) and visible_sides(rendered, b2, page.width, page.height):
+            origin = page.bbox[:2]
+            pixel_a = tuple(v-origin[i%2] for i,v in enumerate(a))
+            pixel_b = tuple(v-origin[i%2] for i,v in enumerate(b2))
+            if visible_sides(rendered, pixel_a, page.width, page.height) and visible_sides(rendered, pixel_b, page.width, page.height):
                 hits[(c['c'], left['c'])].append((c['r'], left['r']))
         # One numeric spanning header is not evidence of collapsed body columns.
         for pairs in hits.values():
-            if len({r for r, _ in pairs}) >= 3 and len({r for _, r in pairs}) >= 3:
+            if vertical or (len({r for r, _ in pairs}) >= 3 and len({r for _, r in pairs}) >= 3):
                 return True
     return False

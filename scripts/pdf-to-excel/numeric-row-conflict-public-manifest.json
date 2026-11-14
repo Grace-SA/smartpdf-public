@@ -1,0 +1,21 @@
+[
+  {
+    "id": "row_span_1",
+    "file": "row_span_1.pdf",
+    "sha256": "bd7d9ba30325818cfc0b61951b14789615ba3e347b04e8cc5d726614eac0f7f3",
+    "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/row_span_1.pdf",
+    "gitBlob": "ef2c7ce4c79c8284469753d68a62849ad5f8c036",
+    "expectedOutcome": "refused",
+    "reason": "Adjacent source numeric rows collapsed into one model cell",
+    "nativeRows": 40,
+    "nativeColumns": 4,
+    "baselineModelRows": 39,
+    "baselineModelColumns": 4,
+    "baselineCompoundCell": "25 853",
+    "sourceFields": [
+      "San Francisco / Family Mosaic: 25",
+      "Total PHP Enrollment: 853"
+    ],
+    "unresolvedSeparateIssue": "Final amount 10,132,875 mixed with footer date 12/14/15; not repaired or separately detected by this rule"
+  }
+]
