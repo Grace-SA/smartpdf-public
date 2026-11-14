@@ -1,0 +1,13 @@
+__pycache__/
+engine/*
+!engine/second_ocr.py
+!engine/ocr_missing_digits.py
+engine-lock.json
+root/
+*.deb
+*.pdf
+*.png
+*.xlsx
+*.log
+
+.venv/

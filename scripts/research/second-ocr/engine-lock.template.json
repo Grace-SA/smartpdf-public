@@ -1,0 +1,13 @@
+{
+  "binary": "usr/bin/tesseract",
+  "model": "usr/share/tesseract-ocr/5/tessdata/eng.traineddata",
+  "library": "usr/lib/x86_64-linux-gnu/libtesseract.so.5.0.3",
+  "sha256": {
+    "binary": "1e8c7ce7f27d2d1c902fb648efed443483f2a8fc7b60c48a5d3b61d647a2649e",
+    "model": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+    "library": "caf99587c86adceb8e082fabb99c6da69439c6e618a7f762107db1cb060ac901"
+  },
+  "libdir": "usr/lib/x86_64-linux-gnu",
+  "data": "usr/share/tesseract-ocr/5/tessdata",
+  "version": "5.3.0"
+}

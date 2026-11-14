@@ -1,0 +1,55 @@
+--- convert.py
++++ convert.py
+@@ -339,6 +339,7 @@
+     )
+     tables = []
+     raster_boxes = []
++    digit_budget = dict(pixels=0,candidates=0)
+ 
+     def groups(values):
+         out = []
+@@ -392,6 +393,7 @@
+             for col in range(nc):
+                 regions.setdefault(find(r * nc + col), []).append((r, col))
+         entries = []
++        entry_boxes = []
+         for region in regions.values():
+             r = min(v[0] for v in region)
+             last_r = max(v[0] for v in region)
+@@ -408,6 +410,7 @@
+                 if xs[col] <= cx < xs[last_c + 1] and ys[r] <= cy < ys[last_r + 1]:
+                     words.append((cy, min(p[0] for p in box), text, float(score)))
+             words.sort(key=lambda v: (round(v[0] / (12 * ratio)), v[1]))
++            entry_boxes.append((xs[col],ys[r],xs[last_c+1],ys[last_r+1]))
+             entries.append(
+                 {
+                     "r": r,
+@@ -418,6 +421,9 @@
+                     "confidence": min((v[3] for v in words), default=1),
+                 }
+             )
++        from ocr_missing_digits import recover as recover_missing_digits
++
++        entries, recovered_digits = recover_missing_digits(im, entries, entry_boxes, _ocr, scale, digit_budget, (horizontal, vertical))
+         if any(e["text"] for e in entries):
+             raster_boxes.append((xs[0], ys[0], xs[-1], ys[-1]))
+             tables.append(
+@@ -426,6 +432,7 @@
+                     "heights": [(b - a) / scale for a, b in zip(ys, ys[1:])],
+                     "cells": entries,
+                     "method": "ocr",
++                    "recoveredDigitCells": recovered_digits,
+                 }
+             )
+     if tables:
+@@ -1080,7 +1087,9 @@
+ 
+ if __name__ == "__main__":
+     try:
+-        result = convert(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))
++        from second_ocr import research_job
++        with research_job(temp_parent=os.environ.get("SECOND_OCR_JOB_ROOT")):
++            result = convert(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))
+         print(json.dumps(result, ensure_ascii=False))
+     except ConversionError as e:
+         print(json.dumps({"error": str(e)}))
