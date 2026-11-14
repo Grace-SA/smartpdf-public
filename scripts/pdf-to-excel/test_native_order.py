@@ -14,12 +14,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server/pdf-to-exce
 from layout_native_order import recover
 
 
-def fixture(lines=("7", "Level")):
+def fixture(lines=("7", "Level"), *, centered=False):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(300, 300))
     c.setFont("Helvetica", 10)
     for i, line in enumerate(lines):
-        c.drawString(50, 250 - i * 14, line)
+        if centered:
+            c.drawCentredString(150, 250 - i * 14, line)
+        else:
+            c.drawString(50, 250 - i * 14, line)
     c.save()
     with pdfplumber.open(io.BytesIO(buf.getvalue())) as doc:
         chars = copy.deepcopy(doc.pages[0].chars)
@@ -54,6 +57,45 @@ def fixture(lines=("7", "Level")):
 
 
 class NativeOrderTests(unittest.TestCase):
+    def test_centered_section_lines_do_not_imply_new_rows(self):
+        # Nested group labels and an ordinary wrapped heading can have the same
+        # geometry. Keep their source lines without changing table structure.
+        for lines in [("All regions included", "Northern region"),
+                      ("Annual participation report", "for all regions")]:
+            item, page = fixture(lines, centered=True)
+            cell = item["data"]["table_cells"][0]
+            cell.update(column_header=False, row_section=True, text=" ".join(lines))
+            numeric = copy.deepcopy(cell)
+            numeric.update(text="85.1%", row_section=False,
+                           start_row_offset_idx=1, end_row_offset_idx=2,
+                           start_col_offset_idx=1, end_col_offset_idx=2,
+                           bbox=dict(l=200, t=100, r=240, b=112, coord_origin="TOPLEFT"))
+            item["data"]["table_cells"].append(numeric)
+            before = copy.deepcopy(item)
+            got = recover(item, page)
+            self.assertEqual(got["data"]["table_cells"][0]["text"], "\n".join(lines))
+            normalized = copy.deepcopy(got)
+            normalized["data"]["table_cells"][0]["text"] = before["data"]["table_cells"][0]["text"]
+            self.assertEqual(normalized, before)
+            self.assertEqual(item, before)
+
+    def test_section_reordering_and_ambiguous_source_are_not_repaired(self):
+        item, page = fixture(("Region", "Annual report"))
+        cell = item["data"]["table_cells"][0]
+        cell.update(column_header=False, row_section=True)
+        self.assertIs(recover(item, page), item)  # Different word order.
+        cell["text"] = "Region Annual report"
+        page.images = [dict(x0=40, top=40, x1=160, bottom=90)]
+        self.assertIs(recover(item, page), item)
+        page.images = []
+        page.annots = [dict(x0=40, top=40, x1=160, bottom=90)]
+        self.assertIs(recover(item, page), item)
+
+    def test_ordinary_numeric_body_is_not_a_section(self):
+        item, page = fixture(("12.5", "24.0"))
+        item["data"]["table_cells"][0].update(column_header=False, text="12.5 24.0")
+        self.assertIs(recover(item, page), item)
+
     def test_literal_source_order_and_immutability(self):
         for lines in [
             ("7", "Level"),

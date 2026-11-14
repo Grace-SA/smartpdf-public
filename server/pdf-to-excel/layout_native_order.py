@@ -1,4 +1,4 @@
-"""Recover source line order in simple native headers, not semantic wording.
+"""Recover source line order in native headers and line breaks in section labels.
 
 Only reorders an exact word multiset. No OCR, inferred words or value changes.
 This optional recovery is deliberately conservative about glyph ownership.
@@ -130,7 +130,7 @@ def _recover(item, page):
     candidates = [
         i
         for i, c in enumerate(cells)
-        if c.get("column_header") is True
+        if (c.get("column_header") is True or c.get("row_section") is True)
         and type(c.get("row_span")) is int
         and c.get("row_span") == 1
         and type(c.get("col_span")) is int
@@ -239,8 +239,14 @@ def _recover(item, page):
         )
         if Counter(text.split()) != Counter(cell["text"].split()):
             continue
-        # Preserve already-correct source order, including its existing whitespace.
-        if text.split() != cell["text"].split():
+        if cell.get("row_section") is True:
+            # A wrapped heading and nested group labels can share identical
+            # geometry. Preserve source lines, but never infer another row or
+            # reorder section words from geometry alone.
+            if text.split() == cell["text"].split() and text != cell["text"]:
+                updates[i] = text
+        elif text.split() != cell["text"].split():
+            # Preserve already-correct ordinary header whitespace.
             updates[i] = text
     if not updates:
         return item
