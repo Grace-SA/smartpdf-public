@@ -1,0 +1,43 @@
+{
+  "repository": "camelot-dev/camelot",
+  "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "scope": "Six fixed files selected before inspecting outputs; local research only, inputs not redistributed",
+  "files": [
+    {
+      "name": "agstat.pdf",
+      "path": "tests/files/agstat.pdf",
+      "gitBlobSha1": "cf1c25aaf6e09549c98005cf9d667503ad529efe",
+      "sha256": "9c0a9e9afc63ffb01b80f57a72939c743f9e1ab138a38a07017de6fc80568650"
+    },
+    {
+      "name": "budget.pdf",
+      "path": "tests/files/budget.pdf",
+      "gitBlobSha1": "9466e8734c90b8aa7dd52f584551eab6b0e8d9af",
+      "sha256": "61f82b26cb0a95dee9c029f498013b311f3ede3bf007cb09e6dc2a5555aa3b1e"
+    },
+    {
+      "name": "health.pdf",
+      "path": "tests/files/health.pdf",
+      "gitBlobSha1": "b9247ab7ef93e9892e0850c4a8baa5ce4e38293b",
+      "sha256": "efdcd7794fc9397dd3626075f025fa27a95b1180331b0b2c5b89a6c85ae3c4f6"
+    },
+    {
+      "name": "hybrid_multipage.pdf",
+      "path": "tests/files/hybrid_multipage.pdf",
+      "gitBlobSha1": "3d0f256d6fb46d08fea7da8be9044bb3aa0a5f2f",
+      "sha256": "19b15e3e1baa3ffe8875cdca198f098075395ce560ff855eed2d7bc7284c658c"
+    },
+    {
+      "name": "image.pdf",
+      "path": "tests/files/image.pdf",
+      "gitBlobSha1": "83f5969799a3e919586abf50b4f65b1448cf2dc7",
+      "sha256": "0321b83f298e2e8fa41edeff5284f66366d5fe573dbebadd726f48330dcb7bee"
+    },
+    {
+      "name": "missing_values.pdf",
+      "path": "tests/files/missing_values.pdf",
+      "gitBlobSha1": "90b620fd0dde585051ff33c5c73712d35c4dfd2f",
+      "sha256": "e7bc3e24b4aa859ca9aab91aa67fbabdf682719ac2ef4447e7317ba7aac1d009"
+    }
+  ]
+}
