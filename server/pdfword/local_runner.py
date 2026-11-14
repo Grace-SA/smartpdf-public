@@ -19,6 +19,12 @@ def run(directory):
     ):
         raise RuntimeError("The v2 reference runtime is local acceptance only")
     directory = Path(directory).resolve()
+    # A retry must not delete a result owned by an earlier invocation.
+    # Reject before entering the failure cleanup region, including dangling links.
+    output = directory / "output.docx"
+    if output.exists() or output.is_symlink():
+        emit(error="Choose a new Word output file.", code="INPUT_REJECTED")
+        return 2
     cancel = directory / "cancel"
     signal.signal(signal.SIGTERM, lambda *_: cancel.touch())
     signal.signal(signal.SIGINT, lambda *_: cancel.touch())
