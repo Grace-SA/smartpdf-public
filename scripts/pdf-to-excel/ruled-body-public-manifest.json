@@ -1,0 +1,43 @@
+{
+  "repository": "jsvine/pdfplumber",
+  "commit": "4c64b92d5caccd71c645e98e0fabb0c4dba7ff45",
+  "scope": "Six public documents selected for structural checks; not a representative accuracy sample. No input binaries redistributed.",
+  "files": [
+    {
+      "name": "150109DSP-Milw-505-90D.pdf",
+      "path": "tests/pdfs/150109DSP-Milw-505-90D.pdf",
+      "gitBlobSha1": "ad7182fcef9b57b67585e7513499b43bca82cab6",
+      "sha256": "901409e8e3d504a07ca1793e0b05d4b58e333760026dc1996d27edee9365a513"
+    },
+    {
+      "name": "cupertino_usd_4-6-16.pdf",
+      "path": "tests/pdfs/cupertino_usd_4-6-16.pdf",
+      "gitBlobSha1": "5af2fb8d60b081dcbe69476f4f70c6f6fc31baa0",
+      "sha256": "944ab863d7c83521d6250cc8682d2c985a6ae82622de1d461bb80c21a654206a"
+    },
+    {
+      "name": "issue-13-151201DSP-Fond-581-90D.pdf",
+      "path": "tests/pdfs/issue-13-151201DSP-Fond-581-90D.pdf",
+      "gitBlobSha1": "453b7574e14418ec28a4e566e36df0a3b962dc58",
+      "sha256": "ea25af844e659c5f760de43bff7232272af34a1feec717b43de4a94bee5abb92"
+    },
+    {
+      "name": "nics-background-checks-2015-11.pdf",
+      "path": "tests/pdfs/nics-background-checks-2015-11.pdf",
+      "gitBlobSha1": "75ee7ac748252790c85f54b24273da0645af4463",
+      "sha256": "4f0ae6e017b0e97de211da8fd97316e55bd927af5740d6ce95e1b7b1539f9407"
+    },
+    {
+      "name": "pr-138-example.pdf",
+      "path": "tests/pdfs/pr-138-example.pdf",
+      "gitBlobSha1": "f8a25118ac0805c09b17eb7b1d7306e0e1eabacd",
+      "sha256": "20bd9ee89a10cc92f679085a0d6cab85baa05ca3f781543f23f19d1e5ea7409f"
+    },
+    {
+      "name": "senate-expenditures.pdf",
+      "path": "tests/pdfs/senate-expenditures.pdf",
+      "gitBlobSha1": "246fa57c9a120f6c2c99070d32ceeefcb8f00b2d",
+      "sha256": "16921f0fc9b2c6039b23b694e0317917118ad7dd2b3a95a88518b7e144df527c"
+    }
+  ]
+}

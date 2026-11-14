@@ -880,6 +880,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
                     raise
             from layout_nested_guard import verify_nested_labels
 
+            from layout_body_rowspans import recover as recover_body_rowspans
+
+            table = recover_body_rowspans(table, native[index], pages[index])
             verify_nested_labels(table, native[index], pages[index])
             cell_count += len(table["widths"]) * len(table["heights"])
             if cell_count > 250000:
@@ -918,6 +921,9 @@ def extract_layout_tables(source, indices, models, pages, native_extractor):
         for table in recovered:
             from layout_nested_guard import verify_nested_labels
 
+            from layout_body_rowspans import recover as recover_body_rowspans
+
+            table = recover_body_rowspans(table, native[index], pages[index])
             verify_nested_labels(table, native[index], pages[index])
             cell_count += len(table["widths"]) * len(table["heights"])
             if cell_count > 250000:
