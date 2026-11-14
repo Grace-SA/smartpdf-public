@@ -54,7 +54,7 @@ def fingerprint():
             "layout_native_colspans.py",
             "layout_native_order.py",
             "layout_nested_guard.py",
-            "layout_body_rowspans.py", "layout_split_rows.py", "layout_numeric_guard.py", "source_row_visibility.py",
+            "layout_body_rowspans.py", "layout_split_rows.py", "layout_split_label.py", "layout_numeric_guard.py", "source_row_visibility.py",
             "layout_wrapped_stub.py",
             "layout_forms.py",
             "form_workbook.py",

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "diesel_engines",
+    "file": "diesel_engines.pdf",
+    "sha256": "6675404fa9f9cd8fb9d34d9d73056fe8e4823519adab13e8b91233d667ffd13c",
+    "sourceUrl": "https://raw.githubusercontent.com/camelot-dev/camelot/92777b852e00933a5c4b9ba642601784604356cd/tests/files/diesel_engines.pdf",
+    "gitBlob": "2f14f161675c1045764841a72d208df4cd6d8d2c",
+    "page": 11,
+    "expectedSheet": "Page 11 Table 1",
+    "expectedMergedRange": "A12:B12",
+    "expectedMergedText": "Turbocharger lubricating oil inlet pressure",
+    "priorFragments": [
+      "Turbocharger lubricating oil inlet",
+      "pressure"
+    ],
+    "scope": "Single source-backed label; not complete table accuracy"
+  }
+]
