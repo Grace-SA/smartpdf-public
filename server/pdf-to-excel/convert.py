@@ -668,6 +668,10 @@ def _write_workbook(tables, output, layout):
                 "Page-level context only; footnote associations and reading order "
                 "are not inferred.\n\n" + t["sourceContext"]
             )
+        if t.get("splitHeaderPhrase"):
+            from source_header_warning import NOTICE as HEADER_NOTICE
+
+            source_note += "\n\n" + HEADER_NOTICE
         if t.get("chartSourceContext"):
             source_note += "\n\n" + t["chartSourceContext"]
         s.cell(offset + 1, 1).comment = Comment(source_note, "SmartPDF")
@@ -964,6 +968,11 @@ def convert_pages(source, output, selected, count, layout, ocr):
                         t["fontSize"] = max(6, min(14, median(sizes)))
                 if index not in hidden_scans:
                     apply_source_typography(t, page)
+                if index not in hidden_scans and index + 1 not in ocr_pages and not image_only:
+                    from source_header_warning import split_header_phrase
+
+                    if split_header_phrase(t, page):
+                        t["splitHeaderPhrase"] = True
                 view = visible_box(page)
                 t["sourcePageOrientation"] = (
                     "landscape" if view[2] - view[0] > view[3] - view[1] else "portrait"
@@ -1015,6 +1024,10 @@ def convert_pages(source, output, selected, count, layout, ocr):
         warnings.append(
             "Table structure was reconstructed. Check merged cells and column alignment against the original PDF."
         )
+    if any(t.get("splitHeaderPhrase") for t in tables):
+        from source_header_warning import NOTICE as HEADER_NOTICE
+
+        warnings.append(HEADER_NOTICE)
     if any(t.get("separatedChartPanels") for t in tables):
         warnings.append("Separately framed charts were excluded from record fields. Their native tokens are retained in the first-cell comment, not interpreted as data. Plotted lines are not preserved; check the original PDF.")
     if any(t["method"] == "ruled-recovery" for t in tables):

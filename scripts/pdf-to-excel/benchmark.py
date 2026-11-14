@@ -27,7 +27,7 @@ def fingerprint():
             "layout_sections.py",
             "layout_ranges.py",
             "layout_regions.py",
-            "layout_chart_regions.py",
+            "layout_chart_regions.py", "source_header_warning.py",
             "layout_open.py",
             "layout_dense.py",
             "layout_dates.py",
