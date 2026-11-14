@@ -111,16 +111,10 @@ def table_from_pdf(table):
                 "Overlapping table cells could not be reconstructed reliably. Try selecting simpler pages."
             )
         occupied.update(region)
-    # Text strategy invents spacer rows. Remove only wholly empty rows with no spans.
-    if not any(e["rs"] > 1 for e in entries):
-        used = sorted({e["r"] for e in entries if e["text"].strip()})
-        if len(used) < len(ys) - 1:
-            entries = [dict(e, r=used.index(e["r"])) for e in entries if e["r"] in used]
-            heights = [ys[r + 1] - ys[r] for r in used]
-        else:
-            heights = [b - a for a, b in zip(ys, ys[1:])]
-    else:
-        heights = [b - a for a, b in zip(ys, ys[1:])]
+    # These boundaries come from a detected physical grid. Empty ruled rows
+    # are source structure (for example unused records), not inferred whitespace.
+    # Removing them shifts subsequent values to different source row positions.
+    heights = [b - a for a, b in zip(ys, ys[1:])]
     if len(heights) < 2:
         return None
     if sum(bool(e["text"].strip()) for e in entries) < 4:
@@ -1025,3 +1019,4 @@ if __name__ == "__main__":
             )
         )
         sys.exit(2)
+
