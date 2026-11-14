@@ -149,9 +149,33 @@ def ruled_tables(page):
     return tables
 
 
+def stacked_numeric_records(table):
+    """A physical body cell can contain many independent logical records.
+
+    Multiple numeric stacks in one ruled row cannot establish record alignment,
+    particularly when one column has omitted blank entries. Never guess a split.
+    """
+    columns_by_row = {}
+    for cell in table["cells"]:
+        if cell["rs"] != 1 or cell["cs"] != 1:
+            continue
+        lines = [line.strip() for line in cell["text"].splitlines() if line.strip()]
+        if len(lines) >= 3 and all(
+            any(ch.isdigit() for ch in line)
+            and re.fullmatch(r"[()\d.,%+−–\- €£$¥]+", line)
+            for line in lines
+        ):
+            columns_by_row.setdefault(cell["r"], set()).add(cell["c"])
+    return any(len(columns) >= 2 for columns in columns_by_row.values())
+
+
 def native_tables(page):
     tables = ruled_tables(page)
     if tables:
+        if any(stacked_numeric_records(table) for table in tables):
+            raise ConversionError(
+                "This table contains stacked records whose row alignment needs the table recognition models. Configure the models before converting it."
+            )
         return tables
     # Shared word starts in prose do not establish table columns. Require
     # repeated rows separated by actual horizontal whitespace instead.
