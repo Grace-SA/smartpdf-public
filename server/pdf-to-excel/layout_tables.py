@@ -679,17 +679,28 @@ def refine_predictions(item, page):
     from layout_header_tree import recover as recover_header_tree
 
     from layout_section_rows import recover as recover_section_rows
+    from layout_local_sections import recover as recover_local_sections
     from layout_columns import recover as recover_columns
     from layout_paragraph_rows import recover as recover_paragraphs
     from layout_header_spans import recover as recover_header_spans
     from layout_section_labels import recover as recover_section_labels
+    from layout_native_rowspans import recover as recover_native_rowspans
 
     refined = [
-        recover_header_spans(
-            recover_paragraphs(
-                recover_columns(
-                    recover_section_rows(
-                        recover_source_rows(recover_header_tree(part, page), page), page
+        recover_native_rowspans(
+            recover_header_spans(
+                recover_paragraphs(
+                    recover_columns(
+                        recover_local_sections(
+                            recover_section_rows(
+                                recover_source_rows(
+                                    recover_header_tree(part, page), page
+                                ),
+                                page,
+                            ),
+                            page,
+                        ),
+                        page,
                     ),
                     page,
                 ),

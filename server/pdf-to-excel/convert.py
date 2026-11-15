@@ -5,10 +5,12 @@ import io, json, os, re, sys, urllib.request, zipfile
 import math, unicodedata
 from statistics import median
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from copy import copy
 import pdfplumber
 from pypdf import PdfReader, PdfWriter
 from openpyxl import Workbook, load_workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.pagebreak import Break
@@ -68,6 +70,10 @@ def clean(text):
     text = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
     if len(text) > 32767:
         raise ConversionError("A cell exceeds the Excel text limit.")
+    if any(0xD800 <= ord(c) <= 0xDFFF or ord(c) in (0xFFFE, 0xFFFF) for c in text):
+        raise ConversionError(
+            "A cell contains characters that Excel cannot store safely."
+        )
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
 
 
@@ -284,6 +290,7 @@ def scan_tables(page):
         horizontal | vertical, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
     tables = []
+    raster_boxes = []
 
     def groups(values):
         out = []
@@ -364,6 +371,7 @@ def scan_tables(page):
                 }
             )
         if any(e["text"] for e in entries):
+            raster_boxes.append((xs[0], ys[0], xs[-1], ys[-1]))
             tables.append(
                 {
                     "widths": [(b - a) / 2 for a, b in zip(xs, xs[1:])],
@@ -372,6 +380,12 @@ def scan_tables(page):
                     "method": "ocr",
                 }
             )
+    if tables:
+        from source_context import ocr_page_context
+
+        context = ocr_page_context(result, raster_boxes, (im.shape[1], im.shape[0]))
+        if context:
+            tables[0].update(sourceContext=context, sourceContextOcr=True)
     return tables
 
 
@@ -468,6 +482,19 @@ def readable_heights(table, widths, font_size):
 
 
 def write_workbook(tables, output, layout):
+    output = Path(output)
+    # Never expose a partial ZIP or overwrite a previous valid output before
+    # serialization, drawing attachment and independent checks all succeed.
+    with TemporaryDirectory(prefix=".pdf-excel-workbook-", dir=output.parent) as tmp:
+        pending = Path(tmp) / "workbook.xlsx"
+        preview = _write_workbook(tables, pending, layout)
+        if pending.stat().st_size > MAX_BYTES:
+            raise ConversionError("The workbook exceeds the download size limit.")
+        os.replace(pending, output)
+        return preview
+
+
+def _write_workbook(tables, output, layout):
     original_tables = tables
     try:
         tables = shared_columns(tables, layout, MAX_CELLS)
@@ -487,14 +514,14 @@ def write_workbook(tables, output, layout):
             else book.create_sheet(
                 "Tables"
                 if layout == "single"
-                else f'Page {t["page"]} {label} {t["index"]}'
+                else f"Page {t['page']} {label} {t['index']}"
             )
         )
         offset = offset if layout == "single" else 0
         if layout == "single":
             if i and any(table.get("coordinateGrid") for table in tables):
                 s.row_breaks.append(Break(id=offset))
-            s.cell(offset + 1, 1, f'Page {t["page"]} · {label} {t["index"]}')
+            s.cell(offset + 1, 1, f"Page {t['page']} · {label} {t['index']}")
             offset += 1
         placements.append((book.index(s) + 1, offset))
         rows = len(t["heights"])
@@ -592,6 +619,18 @@ def write_workbook(tables, output, layout):
                 )
             if e["r"] < 12 and e["c"] < cols:
                 values[e["r"]][e["c"]] = e["text"][:250]
+        if t.get("sourceContext"):
+            label = (
+                "OCR text (uncorrected; verify against the scan)"
+                if t.get("sourceContextOcr")
+                else "native text"
+            )
+            s.cell(offset + 1, 1).comment = Comment(
+                f"Source page {t['page']}: {label} outside detected tables. "
+                "Page-level context only; footnote associations and reading order "
+                "are not inferred.\n\n" + t["sourceContext"],
+                "SmartPDF",
+            )
         s.freeze_panes = "A2"
         s.sheet_view.showGridLines = False
         s.sheet_properties.pageSetUpPr.fitToPage = True
@@ -644,6 +683,15 @@ def write_workbook(tables, output, layout):
                 tree = ET.fromstring(z.read(name))
                 if any(x.tag.rsplit("}", 1)[-1] == "f" for x in tree.iter()):
                     raise ConversionError("Unsafe spreadsheet output.")
+            elif name.endswith(".rels"):
+                tree = ET.fromstring(z.read(name))
+                if any(
+                    e.get("TargetMode", "").lower() == "external"
+                    or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", e.get("Target", ""))
+                    or e.get("Target", "").startswith(("//", "\\\\"))
+                    for e in tree
+                ):
+                    raise ConversionError("Unsafe spreadsheet external relationship.")
     return preview
 
 
@@ -682,19 +730,37 @@ def convert(source, output, options):
     from source_fonts import prepared_source
 
     with prepared_source(source, reader, output.parent) as prepared:
-        if os.environ.get("PDF_EXCEL_MODELS"):
-            from source_orientation import upright_source
+        from source_rotation import prepared_rotation
 
-            with upright_source(prepared, selected, output.parent) as (upright, pages):
-                result = convert_pages(upright, output, selected, count, layout, ocr)
-                if pages:
-                    result["warnings"].append(
-                        "Sideways page content was rotated upright on pages: "
-                        + ", ".join(map(str, pages))
-                        + ". Check table headers and number formatting."
+        with prepared_rotation(prepared, selected, output.parent) as (
+            normalized,
+            rotated,
+        ):
+            if os.environ.get("PDF_EXCEL_MODELS"):
+                from source_orientation import upright_source
+
+                with upright_source(normalized, selected, output.parent) as (
+                    upright,
+                    pages,
+                ):
+                    result = convert_pages(
+                        upright, output, selected, count, layout, ocr
                     )
-                return result
-        return convert_pages(prepared, output, selected, count, layout, ocr)
+                    if pages:
+                        result["warnings"].append(
+                            "Sideways page content was rotated upright on pages: "
+                            + ", ".join(map(str, pages))
+                            + ". Check table headers and number formatting."
+                        )
+            else:
+                result = convert_pages(normalized, output, selected, count, layout, ocr)
+            if rotated:
+                result["warnings"].append(
+                    "Native sideways text was oriented upright on pages: "
+                    + ", ".join(map(str, rotated))
+                    + ". Check table orientation against the source PDF."
+                )
+            return result
 
 
 def convert_pages(source, output, selected, count, layout, ocr):
@@ -703,6 +769,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
     missing = []
     ocr_pages = []
     aligned_pages = []
+    leader_pages = set()
     with pdfplumber.open(source) as doc:
         if len(doc.pages) != count:
             raise ConversionError("The PDF has an inconsistent page structure.")
@@ -715,7 +782,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 form = recover_form(page)
                 if form is None:
                     raise ConversionError(
-                        f"The form on page {index+1} contains ambiguous marks or unsupported text geometry. Its checkbox states could not be preserved reliably."
+                        f"The form on page {index + 1} contains ambiguous marks or unsupported text geometry. Its checkbox states could not be preserved reliably."
                     )
                 forms[index] = form
         models = os.environ.get("PDF_EXCEL_MODELS")
@@ -749,7 +816,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
             elif image_only:
                 if not ocr:
                     raise ConversionError(
-                        f"Page {index+1} needs OCR. Enable scanned-page recognition."
+                        f"Page {index + 1} needs OCR. Enable scanned-page recognition."
                     )
                 found = scan_tables(page)
                 if not found and models and _ocr is not None:
@@ -764,7 +831,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 ocr_pages.append(index + 1)
                 if not found:
                     raise ConversionError(
-                        f"No reliable table was recognized on scanned page {index+1}. Try a clearer scan with distinct rows and columns."
+                        f"No reliable table was recognized on scanned page {index + 1}. Try a clearer scan with distinct rows and columns."
                     )
             elif page.rotation:
                 if not os.environ.get("STIRLING_URL"):
@@ -775,7 +842,7 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 native = ruled_tables(page)
                 found = [restore_rotated_headers(table, native) for table in found]
                 warnings.append(
-                    f"Page {index+1}: rotated table was reconstructed; check number formatting."
+                    f"Page {index + 1}: rotated table was reconstructed; check number formatting."
                 )
             else:
                 found = (
@@ -817,10 +884,25 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 missing.append(index + 1)
             if any(t["method"] == "aligned" for t in found):
                 aligned_pages.append(index + 1)
+            from source_context import page_context
+
+            context = (
+                page_context(page, found)
+                if not page.rotation and not image_only
+                else ""
+            )
+            if context:
+                found[0]["sourceContext"] = context
             for j, t in enumerate(found):
                 if t.get("method", "").startswith("layout"):
                     t = restore_blank_merges(t, page, ruled_tables)
                     t = restore_fragmented_rows(t, page, table_from_pdf)
+                    from source_leaders import recover as recover_native_leaders
+
+                    recovered = recover_native_leaders(t, page)
+                    if recovered is not t:
+                        leader_pages.add(index + 1)
+                    t = recovered
                 t = restore_bidi_reading_order(t, page, ruled_tables)
                 t = restore_trailing_blank_rows(t, page, table_from_pdf)
                 if t.get("bbox"):
@@ -841,7 +923,14 @@ def convert_pages(source, output, selected, count, layout, ocr):
                 )
                 t.update(page=index + 1, index=j + 1)
                 tables.append(t)
-            if sum(len(e["text"]) for t in tables for e in t["cells"]) > 5_000_000:
+            if (
+                sum(
+                    sum(len(e["text"]) for e in t["cells"])
+                    + len(t.get("sourceContext", ""))
+                    for t in tables
+                )
+                > 5_000_000
+            ):
                 raise ConversionError("The extracted text exceeds the workbook budget.")
             if sum(len(t["heights"]) * len(t["widths"]) for t in tables) > MAX_CELLS:
                 raise ConversionError("The extracted tables exceed the cell budget.")
@@ -862,6 +951,12 @@ def convert_pages(source, output, selected, count, layout, ocr):
             + ", ".join(map(str, ocr_pages))
             + ". Check every number and merged cell against the original."
         )
+    if leader_pages:
+        warnings.append(
+            "Native dot-leader glyphs were kept with row labels on pages: "
+            + ", ".join(map(str, sorted(leader_pages)))
+            + ". Check label and numeric column boundaries against the PDF."
+        )
     if aligned_pages:
         warnings.append(
             "Column boundaries inferred from text spacing on pages: "
@@ -880,13 +975,17 @@ def convert_pages(source, output, selected, count, layout, ocr):
         warnings.append(
             "Detected native forms retain text and checkbox states as editable cells (☒ checked, ☐ unchecked). Review fields and marks against the PDF; checkbox cells are not interactive controls."
         )
+    if any(t.get("sourceContext") for t in tables):
+        warnings.append(
+            "Page text outside detected tables is preserved where supported in "
+            "a comment on the first cell of the first table from each page. "
+            "Open these comments to review titles and footnotes; associations "
+            "are not inferred and context may be incomplete."
+        )
     warnings.append(
-        "Only detected tables and supported forms are included. Text and numbers are stored as text to preserve spelling, leading zeros and precision."
+        "Only detected tables and supported forms are included as cells. Text and numbers are stored as text to preserve spelling, leading zeros and precision."
     )
     preview = write_workbook(tables, output, layout)
-    if output.stat().st_size > MAX_BYTES:
-        output.unlink()
-        raise ConversionError("The workbook exceeds the download size limit.")
     return {
         "pages": len(selected),
         "tables": len(tables),

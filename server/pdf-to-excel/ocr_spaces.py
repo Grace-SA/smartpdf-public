@@ -5,12 +5,21 @@ large blank gap, and two high-confidence padded recognitions must all agree.
 Only short ASCII alphabetic runs are eligible; uncertain results stay intact.
 """
 
+import math
 import re
 from statistics import median
+from numbers import Real
 import cv2, numpy as np
 
 
 def recover_spaces(image, result, reader):
+    from ocr_touching_spaces import recover_touching_spaces
+
+    projected = _recover_projected_spaces(image, result, reader)
+    return recover_touching_spaces(image, projected, reader)
+
+
+def _recover_projected_spaces(image, result, reader):
     if not result:
         return result
     candidates = []
@@ -72,10 +81,21 @@ def recover_spaces(image, result, reader):
     if not candidates:
         return result
     recognized, _ = reader.text_rec(crops)
+    if recognized is None or len(recognized) != len(crops):
+        return result
+    if any(not isinstance(row, (list, tuple)) or len(row) < 2 for row in recognized):
+        return result
     out = [list(row) for row in result]
     for j, (idx, expected) in enumerate(candidates):
         matches = recognized[j * 2 : j * 2 + 2]
-        if all(t == expected and s >= 0.95 for t, s, *_ in matches):
+        if len(matches) == 2 and all(
+            isinstance(t, str)
+            and t.strip(" \t\r\n") == expected
+            and isinstance(s, Real)
+            and math.isfinite(s)
+            and 0.95 <= s <= 1
+            for t, s, *_ in matches
+        ):
             out[idx][1] = expected
             out[idx][2] = min(out[idx][2], *(float(s) for _, s, *_ in matches))
     return out

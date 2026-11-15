@@ -29,6 +29,14 @@ class SpaceTests(unittest.TestCase):
         self,
     ):
         for replies in [
+            None,
+            [("L Ribs",)] * 2,
+            [],
+            [("L Ribs", 0.99)] * 3,
+            [("L Ribs", None)] * 2,
+            [("L Ribs", 0.99)],
+            [("L Ribs", float("nan"))] * 2,
+            [("L Ribs", 1.1)] * 2,
             [("L Ribs", 0.94)] * 2,
             [("L Rib5", 0.99)] * 2,
             [("L Ribs", 0.99), ("LRibs", 0.99)],
@@ -44,6 +52,15 @@ class SpaceTests(unittest.TestCase):
             text_rec=lambda _: self.fail("No geometric candidate should reach OCR")
         )
         self.assertEqual(recover_spaces(image, self.result, reader), self.result)
+
+    def test_crop_boundary_whitespace_does_not_veto_internal_consensus(self):
+        reader = SimpleNamespace(
+            text_rec=lambda crops: ([(" L Ribs", 0.99), ("L Ribs ", 0.98)], 0)
+        )
+        out = recover_spaces(self.image, self.result, reader)
+        self.assertEqual(out[0][1], "L Ribs")
+        self.assertEqual(out[0][2], 0.98)
+        self.assertEqual(self.result[0][1], "LRibs")
 
     def test_existing_spaces_or_numeric_values_are_not_rewritten(self):
         reader = SimpleNamespace(

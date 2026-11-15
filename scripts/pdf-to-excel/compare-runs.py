@@ -8,6 +8,7 @@ No references are supplied to the converter. The comparison never rewrites value
 from collections import Counter
 import hashlib
 import json
+import re
 from pathlib import Path
 import statistics
 import sys
@@ -26,8 +27,8 @@ def compare(baseline, candidate):
     before, after = ({r["id"]: r for r in run["results"]} for run in (old, new))
     if len(before) != len(old["results"]) or len(after) != len(new["results"]):
         raise ValueError("Duplicate sample identities")
-    if set(before) != set(after) or len(before) != 200:
-        raise ValueError("A complete comparison requires the same 200 samples")
+    if not before or set(before) != set(after):
+        raise ValueError("A complete comparison requires the same nonempty sample IDs")
     if any(before[k]["sha256"] != after[k]["sha256"] for k in before):
         raise ValueError("Source hashes changed")
     for field in (
@@ -41,7 +42,8 @@ def compare(baseline, candidate):
             raise ValueError("Benchmark runtime differs: " + field)
     old_eval_name = (
         "cell-evaluation-v2.json"
-        if (baseline / "cell-evaluation-v2.json").exists()
+        if read(baseline, "cell-evaluation.json").get("evaluationVersion") != 3
+        and (baseline / "cell-evaluation-v2.json").exists()
         else "cell-evaluation.json"
     )
     evaluations = [
@@ -52,9 +54,45 @@ def compare(baseline, candidate):
         "evaluationVersion"
     ):
         raise ValueError("Evaluate both runs using the same scoring version")
+    if evaluations[0].get("evaluationVersion") != 3 and len(before) != 200:
+        raise ValueError("Legacy comparison requires the same 200 samples")
     annotated = [{r["id"]: r for r in run["results"]} for run in evaluations]
     if set(annotated[0]) != set(annotated[1]):
         raise ValueError("Annotation identities differ")
+    if evaluations[0].get("evaluationVersion") == 3:
+        for evaluation, cells, root in zip(
+            evaluations, annotated, (baseline, candidate)
+        ):
+            for field, relative in (
+                ("benchmarkSha256", "benchmark.json"),
+                ("manifestSha256", "corpus/manifest.json"),
+            ):
+                path = root / relative
+                if not path.is_file() or evaluation.get(field) != digest(path):
+                    raise ValueError(
+                        f"Scoring report {field} binding changed or missing"
+                    )
+            hashes = evaluation.get("referenceSha256")
+            if evaluation.get("integrityMode") != "verified-manifest":
+                raise ValueError(
+                    "Scoring version 3 requires verified-manifest integrity mode"
+                )
+            if (
+                len(cells) != len(evaluation["results"])
+                or not set(cells).issubset(before)
+                or not isinstance(hashes, dict)
+                or not hashes
+                or set(hashes) != set(cells)
+                or any(
+                    not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h)
+                    for h in hashes.values()
+                )
+            ):
+                raise ValueError(
+                    "Verified reference hashes must cover every annotated sample"
+                )
+        if evaluations[0]["referenceSha256"] != evaluations[1]["referenceSha256"]:
+            raise ValueError("Reference hashes changed")
     metrics = (
         "exactTextAtPosition",
         "whitespaceNormalizedTextAtPosition",
@@ -89,7 +127,7 @@ def compare(baseline, candidate):
     if totals[0]["annotatedNonemptyCells"] != totals[1]["annotatedNonemptyCells"]:
         raise ValueError("Annotation denominator changed")
     summary = {
-        "samples": 200,
+        "samples": len(before),
         "statusBefore": dict(Counter(r["status"] for r in before.values())),
         "statusAfter": dict(Counter(r["status"] for r in after.values())),
         "recovered": [
@@ -129,10 +167,19 @@ def compare(baseline, candidate):
         "maxSeconds": [max(r["seconds"] for r in run["results"]) for run in (old, new)],
     }
     for label, root in (("before", baseline), ("after", candidate)):
-        counts = read(root, "reference-comparison.json")
-        summary[label + "TableCountMatches"] = counts["summary"]["tableCountMatches"]
+        counts = (
+            read(root, "reference-comparison.json")
+            if (root / "reference-comparison.json").is_file()
+            else None
+        )
+        summary[label + "TableCountMatches"] = (
+            counts["summary"]["tableCountMatches"] if counts else None
+        )
+        summary[label + "TableCountVerification"] = (
+            "legacy-report-present" if counts else "not-verified"
+        )
     return {
-        "scope": "Same 200 public PDFs, identical runtime budget and evaluator; recall is not overall accuracy. Unannotated outputs require separate review.",
+        "scope": f"Same {len(before)} public PDFs, identical runtime budget and evaluator; recall is not overall accuracy. Unannotated outputs require separate review.",
         "evaluationVersion": evaluations[0].get("evaluationVersion"),
         "baselineBenchmarkSha256": digest(baseline / "benchmark.json"),
         "candidateBenchmarkSha256": digest(candidate / "benchmark.json"),

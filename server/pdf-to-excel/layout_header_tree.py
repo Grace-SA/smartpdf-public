@@ -27,6 +27,17 @@ def source_header_edges(page):
             for v in (x0, x1, top, bottom)
         ) or not (0 < bottom - top <= 1.5 and x1 - x0 >= 10):
             continue
+        # Keep distinct line/rectangle layers for the bounded duplicate-rule
+        # proof below; collapsing them here would bypass its empty-strip check.
+        if any(
+            edge.get("object_type") == "line"
+            and edge.get("orientation") == "h"
+            and abs(edge["x0"] - x0) <= 0.1
+            and abs(edge["x1"] - x1) <= 0.1
+            and top - 0.1 <= edge["top"] <= bottom + 0.1
+            for edge in edges
+        ):
+            continue
         for edge in edges:
             if (
                 edge["orientation"] == "h"
@@ -136,11 +147,57 @@ def _recover(item, page, complete_words):
         for r in rules
         if len(r["columns"]) < cols and start + 0.5 < r["top"] < end - 0.5
     ]
-    levels = cluster_objects(internal, lambda r: r["top"], 0.5)
+    # Collapse a line/rectangle pair only with matching spans and no text between.
+    unique = []
+    duplicates = 0
+    for r in sorted(
+        (internal if len(internal) <= 120 and len(page.chars) <= 50000 else []),
+        key=lambda r: r["top"],
+    ):
+        prior = next(
+            (
+                q
+                for q in unique
+                if q["columns"] == r["columns"]
+                and abs(q["x0"] - r["x0"]) <= 0.1
+                and abs(q["x1"] - r["x1"]) <= 0.1
+                and 0 < r["top"] - q["top"] <= 1.2
+                and {q["object_type"], r["object_type"]} == {"line", "rect_edge"}
+                and not any(
+                    c["text"].strip()
+                    and c["top"] < r["top"]
+                    and c["bottom"] > q["top"]
+                    and c["x0"] < q["x1"]
+                    and c["x1"] > q["x0"]
+                    for c in page.chars
+                )
+            ),
+            None,
+        )
+        if prior is None:
+            unique.append(r)
+        else:
+            duplicates += 1
+            unique[unique.index(prior)] = dict(prior, top=r["top"])
+    levels = cluster_objects(unique, lambda r: r["top"], 0.5)
+    normalized_levels = bool(duplicates and header_end == 3 and len(levels) == 1)
+    if normalized_levels:
+        if not complete_words:
+            return item
+        stubs = [c for c in headers if c["start_col_offset_idx"] == 0]
+        if len(stubs) != 1 or stubs[0]["col_span"] != 1 or not stubs[0].get("bbox"):
+            return item
+        stub_box = model_box(stubs[0]["bbox"], page)
+        if not all(math.isfinite(v) for v in stub_box):
+            return item
+    elif not duplicates:
+        levels = cluster_objects(internal, lambda r: r["top"], 0.5)
     source_header_end = len(levels) + 1
     if not 2 <= source_header_end <= header_end:
         return item
     reducing = source_header_end < header_end
+    if header_end == 3 and source_header_end == 2 and not normalized_levels:
+        return item
     cuts = [start] + [median(r["top"] for r in group) for group in levels] + [end]
     if any(b - a < 5 for a, b in zip(cuts, cuts[1:])):
         return item
@@ -282,12 +339,29 @@ def _recover(item, page, complete_words):
                 w
                 for w in words
                 if (
-                    word_owners[id(w)] == col
-                    if id(w) in word_owners
-                    else left <= (w["x0"] + w["x1"]) / 2 < right
+                    stub_box[0] - 1 <= (w["x0"] + w["x1"]) / 2 <= stub_box[2] + 1
+                    and stub_box[1] - 1
+                    <= (w["top"] + w["bottom"]) / 2
+                    <= stub_box[3] + 1
+                    if normalized_levels and col == 0
+                    else (
+                        word_owners[id(w)] == col
+                        if not normalized_levels and id(w) in word_owners
+                        else left <= (w["x0"] + w["x1"]) / 2 < right
+                    )
                 )
                 and all(id(c) not in used for c in w["chars"] if c["text"].strip())
             ]
+            if (
+                normalized_levels
+                and col
+                and any(
+                    min(abs((w["x0"] + w["x1"]) / 2 - edge) for edge in (left, right))
+                    < 1
+                    for w in leaf_words
+                )
+            ):
+                return item
             part = [c for w in leaf_words for c in w["chars"] if id(c) in admitted]
             if not part or any(
                 (c["top"] + c["bottom"]) / 2 < cuts[first] for c in part
@@ -329,7 +403,9 @@ def _recover(item, page, complete_words):
             for c in headers
             if c["start_col_offset_idx"] <= col < c["end_col_offset_idx"]
             and (
-                c["col_span"] == 1 or c["start_row_offset_idx"] >= source_header_end - 1
+                normalized_levels
+                or c["col_span"] == 1
+                or (reducing and c["start_row_offset_idx"] >= source_header_end - 1)
             )
         )
         # Model fragments may place the middle line after the first/last lines.

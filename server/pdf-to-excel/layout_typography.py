@@ -274,8 +274,16 @@ def refine_widths(table):
         if lo > hi:
             continue
         value = (lo + hi) / 2
-        if abs(value - old[j]) > min(old[j] - old[j - 1], old[j + 1] - old[j]) * 0.3:
-            continue
+        limit = min(old[j] - old[j - 1], old[j + 1] - old[j]) * 0.3
+        if abs(value - old[j]) > limit:
+            if not (table.get("sourceLeaderBoundary") and j == 1 and value > old[j]):
+                continue
+            # A restored leader can make the exact midpoint exceed the normal
+            # width-change budget. A bounded move is safe only if it still lies
+            # wholly inside the gap between all verified left/right glyphs.
+            value = max(old[j] - limit, min(old[j] + limit, value))
+            if not lo <= value <= hi:
+                continue
         xs[j] = value
     if all(b - a >= 10 for a, b in zip(xs, xs[1:])):
         table["widths"] = [b - a for a, b in zip(xs, xs[1:])]
