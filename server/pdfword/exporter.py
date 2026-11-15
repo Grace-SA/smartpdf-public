@@ -193,6 +193,28 @@ def add_table(document, block, width, existing=None):
     return table
 
 
+def image_rows(blocks):
+    """Keep adjacent non-overlapping figures on their original horizontal band."""
+    result = []
+    index = 0
+    while index < len(blocks):
+        first = blocks[index]
+        group = [first]
+        if first["kind"] == "image":
+            while index + len(group) < len(blocks):
+                other = blocks[index + len(group)]
+                if other["kind"] != "image":
+                    break
+                a, b = group[-1]["bbox"], other["bbox"]
+                overlap = min(first["bbox"][3], b[3]) - max(first["bbox"][1], b[1])
+                if b[0] < a[2] or overlap < 0.5 * max(first["bbox"][3] - first["bbox"][1], b[3] - b[1]):
+                    break
+                group.append(other)
+        result.append(first if len(group) == 1 else dict(kind="image_row", images=group))
+        index += len(group)
+    return result
+
+
 def export_word(model, destination, assets):
     validate(model)
     destination = Path(destination)
@@ -243,7 +265,7 @@ def export_word(model, destination, assets):
         height = page["height"] - 2 * margin
         marked = False
         column_break = False
-        for block in column_flow(page["blocks"], page["width"]):
+        for block in image_rows(column_flow(page["blocks"], page["width"])):
             kind = block["kind"]
             if kind == "columns_start":
                 section = doc.add_section(WD_SECTION_START.CONTINUOUS)
@@ -318,19 +340,22 @@ def export_word(model, destination, assets):
             if not marked:
                 mark(paragraph, i)
                 marked = True
-            if kind in ("image", "formula"):
-                path = (assets / block["asset"]).resolve()
-                if path.parent != assets or path.suffix.lower() != ".png":
-                    raise Rejected("Invalid embedded image.")
-                from PIL import Image
-
-                with Image.open(path) as image:
-                    w, h = image.size
-                bw = block["bbox"][2] - block["bbox"][0]
-                bh = block["bbox"][3] - block["bbox"][1]
-                draw_width = bw * min(1, width / bw, height / bh)
-                paragraph.add_run().add_picture(str(path), width=Pt(draw_width))
-                image_count += 1
+            if kind in ("image", "formula", "image_row"):
+                group = block["images"] if kind == "image_row" else [block]
+                left = min(item["bbox"][0] for item in group)
+                span = max(item["bbox"][2] for item in group) - left
+                tallest = max(item["bbox"][3] - item["bbox"][1] for item in group)
+                scale = min(1, width / span, height / tallest)
+                for index, item in enumerate(group):
+                    path = (assets / item["asset"]).resolve()
+                    if path.parent != assets or path.suffix.lower() != ".png":
+                        raise Rejected("Invalid embedded image.")
+                    if index:
+                        paragraph.paragraph_format.tab_stops.add_tab_stop(Pt((item["bbox"][0] - left) * scale))
+                        paragraph.add_run().add_tab()
+                    draw_width = (item["bbox"][2] - item["bbox"][0]) * scale
+                    paragraph.add_run().add_picture(str(path), width=Pt(draw_width))
+                    image_count += 1
                 continue
             if kind == "heading":
                 paragraph.style = (

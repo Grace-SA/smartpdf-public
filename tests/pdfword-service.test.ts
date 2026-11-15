@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +30,7 @@ b=io.BytesIO();d.save(b);sys.stdout.buffer.write(b.getvalue())
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const fn of cleanup.splice(0)) await fn();
+  vi.unstubAllEnvs();
 });
 async function setup(execute?: (job: Task) => Promise<void>) {
   const root = await mkdtemp(path.join(tmpdir(), "pdfword-synthetic-"));
@@ -80,6 +81,26 @@ async function setup(execute?: (job: Task) => Promise<void>) {
   }
   return { service, root, url, api, cookie, wait };
 }
+
+it("advertises the native adapter only for an opted-in configured reconstruction service", async () => {
+  vi.stubEnv("PDFWORD_LOCAL_V2", "1");
+  vi.stubEnv("PDFWORD_NATIVE_ENGINE", "stirling");
+  vi.stubEnv("PDFWORD_STIRLING_RUNTIME", "");
+  const missing = await setup();
+  expect(
+    (await (await missing.api("/session")).json()).capabilities.stirlingNative,
+  ).toBe(false);
+  vi.stubEnv("PDFWORD_STIRLING_RUNTIME", "/synthetic/runtime");
+  const enabled = await setup();
+  expect(
+    (await (await enabled.api("/session")).json()).capabilities.stirlingNative,
+  ).toBe(true);
+  vi.stubEnv("PDFWORD_LOCAL_V2", "0");
+  const baseline = await setup();
+  expect(
+    (await (await baseline.api("/session")).json()).capabilities.stirlingNative,
+  ).toBe(false);
+});
 
 it("separates owners, enforces PDF uploads, options and origin", async () => {
   const s = await setup();

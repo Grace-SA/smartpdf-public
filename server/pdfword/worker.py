@@ -4,6 +4,7 @@ import argparse
 import ctypes
 import json
 import math
+import os
 import tempfile
 import unicodedata
 from contextlib import closing
@@ -16,6 +17,9 @@ from layout import native_page, repeated_margins, link_tables
 from exporter import export_word
 from ocr import OCR
 from math_export import unsupported
+from text_visibility import bright_text_visible, cosmetic_white_rectangles
+from text_geometry import glyph_geometry, ink_bounds, mapped_bounds
+from text_coverage import check_coverage, editable_block_text, editable_source_text
 
 
 def preflight(source):
@@ -52,7 +56,7 @@ def preflight(source):
     return len(reader.pages)
 
 
-def clips_text(obj):
+def clips_text(obj, bounds=None):
     clip = pdf.raw.FPDFPageObj_GetClipPath(obj)
     for i in range(pdf.raw.FPDFClipPath_CountPaths(clip)):
         count = pdf.raw.FPDFClipPath_CountPathSegments(clip, i)
@@ -78,7 +82,7 @@ def clips_text(obj):
             for a, b in zip(points, points[1:] + points[:1])
         ):
             return True
-        l, b, r, t = obj.get_bounds()
+        l, b, r, t = bounds if bounds is not None else obj.get_bounds()
         if (
             l < min(xs) - 0.5
             or r > max(xs) + 0.5
@@ -93,7 +97,9 @@ def needs_ocr(page):
     visible = 0
     images = 0
     unsafe = False
+    bright = []
     with closing(page.get_textpage()) as tp:
+        geometry = glyph_geometry(tp)
         objects = 0
         for obj in page.get_objects(max_depth=8, textpage=tp):
             objects += 1
@@ -106,6 +112,14 @@ def needs_ocr(page):
             value = obj.extract()
             if not value.strip():
                 continue
+            mapped = mapped_bounds(obj, geometry)
+            crop = page.get_bbox()
+            # Completely off-page text is not visible content. Ignore it only
+            # when every non-space glyph has an independently mapped box; the
+            # native extractor below is cropped to the same visible page.
+            if mapped and (mapped[2] <= crop[0] or mapped[0] >= crop[2]
+                           or mapped[3] <= crop[1] or mapped[1] >= crop[3]):
+                continue
             rgba = [ctypes.c_uint() for _ in range(4)]
             ok = pdf.raw.FPDFPageObj_GetFillColor(obj, *(ctypes.byref(v) for v in rgba))
             mode = pdf.raw.FPDFTextObj_GetTextRenderMode(obj)
@@ -116,13 +130,14 @@ def needs_ocr(page):
             unsafe |= (
                 not ok
                 or rgba[3].value != 255
-                or min(v.value for v in rgba[:3]) > 240
                 or "\ufffd" in value
             )
+            if min(v.value for v in rgba[:3]) > 240:
+                bright.append(obj)
             unsafe |= any(unicodedata.category(c) in ("Co", "Cn", "Cs") for c in value)
-            unsafe |= clips_text(obj)
-            l, b, r, t = obj.get_bounds()
-            crop = page.get_bbox()
+            bounds = ink_bounds(obj, geometry)
+            unsafe |= clips_text(obj, bounds)
+            l, b, r, t = bounds
             unsafe |= (
                 l < crop[0] - 0.5
                 or b < crop[1] - 0.5
@@ -136,6 +151,7 @@ def needs_ocr(page):
                 or matrix.a <= 0
                 or matrix.d <= 0
             )
+        unsafe |= not bright_text_visible(page, bright, geometry)
     return (
         (not visible and bool(images)) or unsafe or bool(page.get_rotation()),
         visible,
@@ -179,12 +195,13 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     p = textdoc.pages[i]
                     l, b, r, t = page.get_bbox()
                     top = p.height - t
-                    if not page.get_rotation() and (
-                        abs(width - p.width) > 1 or abs(height - p.height) > 1
-                    ):
-                        p = p.crop((l, top, r, top + height))
+                    if not page.get_rotation():
+                        # PDFium uses floats while pdfplumber retains PDF decimal
+                        # coordinates; their page edges can differ by micrometres.
+                        p = p.crop((l, top, r, top + height), strict=False)
                     try:
-                        blocks = native_page(p)
+                        blocks = native_page(p, cosmetic_white_rectangles(page))
+                        expected_text = editable_source_text(p, blocks)
                     except Rejected as error:
                         if str(error) not in (
                             "Incomplete native table grid.",
@@ -207,6 +224,16 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     )
                     # Outlined glyphs and image-only regions must be recognized, not silently omitted.
                     use_ocr = use_ocr or (not visible and bool(blocks))
+                    if not use_ocr:
+                        # Background rectangles can encompass text and be grouped
+                        # into a picture. That must not silently rasterize editable
+                        # native prose or table values in a mixed-content page.
+                        try:
+                            # A ruling can split one PDF text run into two cells;
+                            # compare all digits, allowing these verified splits.
+                            check_coverage([{"text": expected_text}], [editable_block_text(blocks)], numeric_tokens=False)
+                        except ValueError:
+                            use_ocr = True
                 if use_ocr:
                     scale = raster_scale(page)
                     pixels += math.ceil(width * scale) * math.ceil(height * scale)
@@ -308,7 +335,26 @@ def convert(source, destination, *, engine=None, cancel=None, progress=None):
     destination = Path(destination)
     if destination.exists():
         raise Rejected("Choose a new Word output file.")
+    preflight(source)
     with tempfile.TemporaryDirectory(dir=destination.parent) as temp:
+        native_reason = "disabled"
+        if os.environ.get("PDFWORD_NATIVE_ENGINE") == "stirling":
+            from stirling_native import profile, convert_native
+
+            try:
+                pages, native_reason = profile(source, cancel=cancel)
+            except Exception as error:
+                if cancel and Path(cancel).exists():
+                    raise Rejected("Conversion cancelled.") from error
+                pages, native_reason = None, "native-profile-fallback:" + type(error).__name__
+            if pages:
+                try:
+                    return convert_native(source, destination, temp, pages, cancel, progress)
+                except Rejected:
+                    raise
+                except Exception as error:
+                    # Keep the final file absent until a complete route has passed validation.
+                    native_reason = "native-fallback:" + type(error).__name__ + ":" + str(error)[:160]
         ocr = OCR(temp, cancel=cancel, engine=engine)
         try:
             model = parse_pdf(
@@ -322,7 +368,10 @@ def convert(source, destination, *, engine=None, cancel=None, progress=None):
             ocr.close()
         if cancel and Path(cancel).exists():
             raise Rejected("Conversion cancelled.")
-        return export_word(model, destination, temp)
+        report = export_word(model, destination, temp)
+        report["engine"] = "structured-ocr" if any("OCR" in v for v in model["warnings"]) else "structured-native"
+        report["nativeRoute"] = native_reason
+        return report
 
 
 if __name__ == "__main__":

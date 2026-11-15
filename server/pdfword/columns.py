@@ -1,12 +1,34 @@
 """Conservative geometric column bands; unsupported layouts keep editable flow."""
 
 
+def gutter_cuts(body, width, count):
+    """Infer clear gutters when unequal outer margins shift the column bands."""
+    candidates = [b for b in body if b["kind"] in {"paragraph", "list"}
+                  and 0 < b["bbox"][2] - b["bbox"][0] < width / count * 1.35]
+    groups = []
+    for block in sorted(candidates, key=lambda b: b["bbox"][0]):
+        left, _, right, _ = block["bbox"]
+        if groups and left - groups[-1][1] < 18:
+            groups[-1][1] = max(groups[-1][1], right)
+            groups[-1][2] += 1
+        else:
+            groups.append([left, right, 1])
+    if len(groups) != count or any(n < 2 for _, _, n in groups):
+        return None
+    return [(a[1] + b[0]) / 2 for a, b in zip(groups, groups[1:])]
+
+
 def column_flow(blocks, width):
     body = [b for b in blocks if b["kind"] not in ("header", "footer")]
     if len(body) < 4:
         return blocks
+    candidates = []
     for count in (3, 2):
-        cuts = [width * i / count for i in range(1, count)]
+        candidates.append((count, [width * i / count for i in range(1, count)]))
+        inferred = gutter_cuts(body, width, count)
+        if inferred:
+            candidates.append((count, inferred))
+    for count, cuts in candidates:
 
         def column(block):
             left, _, right, _ = block["bbox"]

@@ -171,6 +171,58 @@ def words_to_blocks(words, width, height):
     return result
 
 
+def refine_numeric_cells(boxes, xs, words):
+    """Infer missing body rules only from repeated numeric columns under a grid."""
+    replacements = {}
+    numeric = re.compile(r"[-+($€£¥]?\s*\d[\d,.%()−-]*")
+    for index, bounds in enumerate(boxes):
+        edges = [x for x in xs if bounds[0] - .5 <= x <= bounds[2] + .5]
+        if len(edges) < 4:
+            continue
+        inside = [word for word in words if contains(bounds, [word['x0'], word['top'], word['x1'], word['bottom']])]
+        lines = []
+        for word in sorted(inside, key=lambda item: (item['top'], item['x0'])):
+            if not lines or abs(word['top'] - lines[-1][0]['top']) > 3:
+                lines.append([])
+            lines[-1].append(word)
+        aligned = []
+        for line in lines:
+            columns = [[] for _ in range(len(edges)-1)]
+            for word in line:
+                centre = (word['x0'] + word['x1']) / 2
+                for col, (left, right) in enumerate(zip(edges, edges[1:])):
+                    if left <= centre < right:
+                        columns[col].append(word)
+                        break
+            values = [join_words(group) for group in columns]
+            active = tuple(i for i, value in enumerate(values) if value and numeric.fullmatch(value))
+            aligned.append((values, active, columns))
+        patterns = [active for values, active, _ in aligned if len(active) >= 2 and any(values[:active[0]])]
+        if not patterns:
+            continue
+        pattern = patterns[0]
+        anchors = []
+        for values, active, columns in aligned:
+            if not active or not any(values[:pattern[0]]):
+                continue
+            # Once two columns establish the grid, a missing value in one of
+            # those columns must remain an empty cell, not merge two data rows.
+            if set(active) - set(pattern):
+                anchors = []
+                break
+            anchors.append(min(word['top'] for col in active for word in columns[col]))
+        if len(anchors) < 2:
+            continue
+        # Start a new row just above its values. This leaves a wrapped label
+        # attached to the preceding row instead of cutting it at a midpoint.
+        cuts = [bounds[1]] + [top-1 for top in anchors[1:] if bounds[1]+1 < top-1 < bounds[3]-1] + [bounds[3]]
+        if len(cuts) < 3 or any(b-a < 3 for a, b in zip(cuts, cuts[1:])):
+            continue
+        replacements[index] = [[left, top, right, bottom] for top, bottom in zip(cuts, cuts[1:])
+                               for left, right in zip(edges, edges[1:])]
+    return [cell for index, bounds in enumerate(boxes) for cell in replacements.get(index, [bounds])]
+
+
 def native_tables(page, words):
     result = []
     for table in page.find_tables():
@@ -178,6 +230,8 @@ def native_tables(page, words):
             continue
         boxes = [list(c) for c in table.cells if c]
         xs = sorted(set(round(v, 1) for c in boxes for v in (c[0], c[2])))
+        original_count = len(boxes)
+        boxes = refine_numeric_cells(boxes, xs, words)
         ys = sorted(set(round(v, 1) for c in boxes for v in (c[1], c[3])))
         if (len(xs) - 1) * (len(ys) - 1) > 10000:
             raise Rejected("Table exceeds cell budget.")
@@ -217,6 +271,24 @@ def native_tables(page, words):
             )
         if sum(bool(c["text"]) for c in cells) < 2:
             continue
+        if len(boxes) != original_count:
+            # Partial rules in empty columns can add phantom grid rows between
+            # the inferred data rows. Keep every boundary used by actual text;
+            # collapse only boundaries that subdivide blank neighbour cells.
+            from bisect import bisect_right
+            boundaries = {0, len(ys)-1}
+            for cell in cells:
+                if cell["text"].strip():
+                    boundaries.update((cell["row"], cell["row"]+cell["rowspan"]))
+            boundaries = sorted(boundaries)
+            compacted = []
+            for cell in cells:
+                start = bisect_right(boundaries, cell["row"]) - 1
+                end = bisect_right(boundaries, cell["row"]+cell["rowspan"]) - 1
+                if end > start:
+                    cell["row"], cell["rowspan"] = start, end-start
+                    compacted.append(cell)
+            cells, ys = compacted, [ys[index] for index in boundaries]
         slots = set()
         for c in cells:
             covered = {
@@ -366,11 +438,23 @@ def graphics(page, tables):
     return [
         [max(0, b[0]), max(0, b[1]), min(page.width, b[2]), min(page.height, b[3])]
         for b in merged
-        if b[2] - b[0] > 12 and b[3] - b[1] > 12
+        # Narrow filled vector strokes can be meaningful glyphs (for example I),
+        # not just decoration. Retain them alongside wider neighbouring regions.
+        if min(b[2] - b[0], b[3] - b[1]) >= 2 and max(b[2] - b[0], b[3] - b[1]) > 12
     ]
 
 
-def native_page(page):
+def native_page(page, cosmetic_rectangles=()):
+    if cosmetic_rectangles:
+        def retain(obj):
+            color = obj.get("non_stroking_color")
+            white = color == 1 or color == (1, 1, 1) or color == [1, 1, 1]
+            if obj.get("object_type") != "rect" or not white or obj.get("stroke") or not obj.get("fill"):
+                return True
+            bounds = (obj["x0"], obj["top"], obj["x1"], obj["bottom"])
+            return not any(all(abs(a-b) < .01 for a, b in zip(bounds, box))
+                           for box in cosmetic_rectangles)
+        page = page.filter(retain)
     if len(page.chars) > 60000:
         raise Rejected("Page exceeds text budget.")
     clean = page.dedupe_chars(tolerance=0.5)
@@ -520,3 +604,18 @@ def link_tables(pages):
         b["repeat_header"] = repeats
         if repeats:
             a["header_rows"] = 1
+        if continuation and explicit:
+            shared = set(titles(previous)) & set(titles(current))
+            candidates = []
+            for value in current["blocks"]:
+                if value["kind"] not in ("paragraph", "heading") or value["bbox"][1] >= current["height"] * 0.15:
+                    continue
+                title = re.sub(r"\s*(?:\(?continued\)?|续表|（续）)\s*$", "", value.get("text", "").strip(), flags=re.I).casefold()
+                if title in shared:
+                    candidates.append(value)
+            remainder = [v for v in current["blocks"] if v["kind"] not in ("header", "footer") and v not in candidates]
+            if remainder == [b]:
+                # A local table caption need not repeat on 60% of the entire
+                # document to be recognized as a continuation heading.
+                for value in candidates:
+                    value["kind"] = "header"

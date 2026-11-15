@@ -23,7 +23,11 @@ type Service = {
   region: string;
   retentionMinutes: number;
   mode?: string;
-  capabilities?: { reconstruction?: boolean; ocr?: boolean };
+  capabilities?: {
+    reconstruction?: boolean;
+    ocr?: boolean;
+    stirlingNative?: boolean;
+  };
 };
 const mime = "application/pdf";
 const outputMime =
@@ -592,6 +596,14 @@ export function PdfWordPage() {
         <footer className="site-footer">
           <a href="/privacy/">Privacy and file handling</a>
           <a href="/notices/index.html">Third-party notices</a>
+          {service?.capabilities?.stirlingNative && (
+            <span>
+              PDF conversion:{" "}
+              <a href="https://github.com/Stirling-Tools/Stirling-Office-Convert">
+                Stirling Office Convert
+              </a>
+            </span>
+          )}
           {service?.capabilities?.reconstruction && (
             <span>
               OCR technology:{" "}

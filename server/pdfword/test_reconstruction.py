@@ -25,6 +25,63 @@ class ReconstructionTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_overlapping_ocr_list_regions_do_not_duplicate_lines(self):
+        records = [
+            dict(label="text", bbox=[100, 100, 400, 400], content="Alpha 123\nBeta 456\nGamma 789"),
+            dict(label="text", bbox=[102, 105, 390, 195], content="Alpha   123"),
+            dict(label="text", bbox=[102, 205, 390, 395], content="Beta 456\nGamma 789"),
+        ]
+        blocks = normalize(records, 600, 800, "oxr")
+        self.assertEqual([b["text"] for b in blocks], [records[0]["content"]])
+        # Layout order is retained even when a small region preceded its parent.
+        self.assertEqual(normalize(records[1:] + records[:1], 600, 800, "oxr"), blocks)
+
+    def test_legitimate_repetitions_and_unique_ocr_content_survive(self):
+        parent = dict(label="text", bbox=[100, 100, 400, 400], content="Repeated\nMiddle\nLast")
+        for child in [
+            dict(label="text", bbox=[110, 305, 390, 395], content="Repeated"),
+            dict(label="text", bbox=[500, 105, 790, 195], content="Repeated"),
+            dict(label="text", bbox=[110, 105, 390, 195], content="Repeated 123"),
+            dict(label="text", bbox=[110, 105, 390, 195], content="Repeat"),
+        ]:
+            with self.subTest(child=child):
+                self.assertEqual(len(normalize([parent, child], 600, 800, "oxr")), 2)
+
+    def test_duplicate_ocr_region_requires_same_physical_location(self):
+        first = dict(label="text", bbox=[100, 100, 400, 150], content="Same label")
+        same = dict(first, bbox=[101, 100, 399, 150])
+        adjacent = dict(first, bbox=[100, 160, 400, 210])
+        result = normalize([first, same, adjacent], 600, 800, "oxr")
+        self.assertEqual(len(result), 2)
+        self.assertEqual([b["text"] for b in result], ["Same label", "Same label"])
+
+    def test_repeated_lines_keep_multiplicity_in_ocr_parent_region(self):
+        records = [
+            dict(label="text", bbox=[100, 100, 400, 400], content="Again\nMiddle\nAgain"),
+            dict(label="text", bbox=[101, 305, 399, 395], content="Again"),
+        ]
+        result = normalize(records, 600, 800, "oxr")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"].splitlines().count("Again"), 2)
+
+    def test_side_by_side_figures_remain_on_one_line(self):
+        from PIL import Image
+        from docx.oxml.ns import qn
+
+        for name, color in (("left.png", "blue"), ("right.png", "orange")):
+            Image.new("RGB", (60, 60), color).save(self.root / name)
+        blocks = [dict(id="title", kind="paragraph", text="Two figures", bbox=[36, 20, 200, 40])]
+        for key, asset, bounds in (("left", "left.png", [36, 60, 136, 160]),
+                                   ("right", "right.png", [200, 60, 300, 160]),
+                                   ("below", "left.png", [36, 200, 136, 300])):
+            blocks.append(dict(id=key, kind="image", asset=asset, bbox=bounds))
+        report = export_word(dict(schema=2, pages=[dict(index=0, width=612, height=792, blocks=blocks)]), self.output, self.root)
+        doc = Document(self.output)
+        self.assertEqual(report["images"], 3)
+        self.assertEqual([len(list(p._p.iter(qn("a:blip")))) for p in doc.paragraphs], [0, 2, 1])
+        tabs = doc.paragraphs[1].paragraph_format.tab_stops
+        self.assertAlmostEqual(tabs[0].position.pt, 164, places=1)
+
     def test_crop_and_edit(self):
         fixture(self.source, crop=True)
         report = convert(self.source, self.output)
@@ -48,6 +105,20 @@ class ReconstructionTests(unittest.TestCase):
         self.assertEqual(
             sorted(["L1", "L2", "R1", "R2"], key=text.index), ["L1", "L2", "R1", "R2"]
         )
+
+    def test_offset_three_columns_use_real_gutters(self):
+        from columns import column_flow
+        blocks = [dict(kind="paragraph", text=f"{name}{row}",
+                       bbox=[left, 100 + row * 40, right, 125 + row * 40])
+                  for row in range(2)
+                  for name, left, right in [("L", 54, 404), ("M", 425, 775), ("R", 796, 1146)]]
+        result = column_flow(blocks, 1200)
+        self.assertEqual(result[0]["kind"], "columns_start")
+        self.assertEqual(result[0]["count"], 3)
+        self.assertEqual([b["text"] for b in result if "text" in b], ["L0", "L1", "M0", "M1", "R0", "R1"])
+        # A full-width figure intersecting the text is still ambiguous.
+        overlapping = dict(kind="image", bbox=[40, 110, 1160, 130])
+        self.assertEqual(column_flow(blocks + [overlapping], 1200), blocks + [overlapping])
 
     def test_native_table_is_editable_cells(self):
         commands = b"48 600 m 300 600 l S 48 630 m 300 630 l S 48 660 m 300 660 l S 48 600 m 48 660 l S 170 600 m 170 660 l S 300 600 m 300 660 l S "
@@ -401,6 +472,20 @@ class ReconstructionTests(unittest.TestCase):
         self.assertEqual(
             Document(self.output)._element.xml.count('w:name="smartpdf_page_'), 2
         )
+
+    def test_local_continuation_caption_does_not_require_document_wide_repetition(self):
+        pages = [dict(index=0, width=612, height=792, blocks=[dict(id="intro", kind="paragraph", bbox=[40, 40, 500, 80], text="Introduction")])]
+        for i, value in enumerate(("12.34", "56.78"), 1):
+            table = table_from_html(f"<table><tr><td>A</td><td>{value}</td></tr></table>")
+            table.update(id=f"table-{i}", kind="table", bbox=[40, 90, 570, 740], widths=[1, 1])
+            title = dict(id=f"title-{i}", kind="heading", bbox=[40, 30, 500, 55], text="Measurements" + (" continued" if i == 2 else ""))
+            pages.append(dict(index=i, width=612, height=792, blocks=[title, table]))
+        link_tables(pages)
+        report = export_word(dict(schema=2, pages=pages), self.output, self.root)
+        self.assertEqual(report["tables"], 1)
+        document = Document(self.output)
+        self.assertEqual([[c.text for c in row.cells] for row in document.tables[0].rows], [["A", "12.34"], ["A", "56.78"]])
+        self.assertEqual(document._element.xml.count('w:name="smartpdf_page_'), 3)
 
     def test_independent_adjacent_tables_remain_separate_in_word(self):
         blocks = []

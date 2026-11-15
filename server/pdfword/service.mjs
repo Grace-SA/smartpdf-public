@@ -17,6 +17,10 @@ export function createPdfWordService(options = {}) {
     format: "pdfword",
     capabilities: {
       reconstruction: process.env.PDFWORD_LOCAL_V2 === "1",
+      stirlingNative:
+        process.env.PDFWORD_LOCAL_V2 === "1" &&
+        process.env.PDFWORD_NATIVE_ENGINE === "stirling" &&
+        Boolean(process.env.PDFWORD_STIRLING_RUNTIME),
       ocr:
         process.env.PDFWORD_LOCAL_V2 === "1" &&
         Boolean(

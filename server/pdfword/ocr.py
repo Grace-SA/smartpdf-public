@@ -7,8 +7,61 @@ import signal
 import shutil
 import subprocess
 import time
+import unicodedata
 from pathlib import Path
 from model import Rejected, box, plain, table_from_html
+
+
+def suppress_duplicate_text_regions(blocks):
+    """Remove duplicate OCR regions, never deduplicate text across the page.
+
+    Layout detectors can return both a complete multiline region and its lines.
+    Require spatial containment, exact normalized line sequences and matching
+    vertical positions. A repeated phrase elsewhere, a partial line, a changed
+    number, or uncertain wrapping retains its separate region.
+    """
+    if len(blocks) > 2000:
+        return blocks
+    compact = lambda value: "".join(unicodedata.normalize("NFKC", value).split())
+    area = lambda bounds: (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+    candidates = [i for i, b in enumerate(blocks)
+                  if b["kind"] in {"paragraph", "list"} and b.get("text", "").strip()]
+    lines = {i: [compact(line) for line in blocks[i]["text"].splitlines() if line.strip()]
+             for i in candidates}
+    kept, removed = [], set()
+    for index in sorted(candidates, key=lambda i: -area(blocks[i]["bbox"])):
+        small = blocks[index]["bbox"]
+        small_area = area(small)
+        if small_area <= 0:
+            kept.append(index)
+            continue
+        for parent in kept:
+            large = blocks[parent]["bbox"]
+            overlap = max(0, min(small[2], large[2]) - max(small[0], large[0])) * max(
+                0, min(small[3], large[3]) - max(small[1], large[1]))
+            if overlap < .98 * small_area:
+                continue
+            union = small_area + area(large) - overlap
+            if lines[index] == lines[parent] and overlap >= .9 * union:
+                removed.add(index)
+                break
+            count, total = len(lines[index]), len(lines[parent])
+            if not 0 < count < total:
+                continue
+            line_height = (large[3] - large[1]) / total
+            for start in range(total - count + 1):
+                if lines[parent][start:start + count] != lines[index]:
+                    continue
+                expected_top = large[1] + start * line_height
+                expected_bottom = expected_top + count * line_height
+                if max(abs(small[1] - expected_top), abs(small[3] - expected_bottom)) <= .55 * line_height:
+                    removed.add(index)
+                    break
+            if index in removed:
+                break
+        if index not in removed:
+            kept.append(index)
+    return [b for i, b in enumerate(blocks) if i not in removed]
 
 
 def parse_u2(raw):
@@ -158,7 +211,7 @@ def normalize(records, width, height, engine):
                 continue
             b.update(kind=kinds.get(base, "paragraph"), text=text, size=11)
         result.append(b)
-    return result
+    return suppress_duplicate_text_regions(result)
 
 
 class OCR:
