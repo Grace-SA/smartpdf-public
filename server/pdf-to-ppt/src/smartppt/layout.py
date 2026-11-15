@@ -57,6 +57,9 @@ def cjk_text(text):
 
 
 def font_family(name,text,flags=0,base_name=None):
+    # Embedded subset fonts can omit the family name while retaining a valid
+    # base name. Keep punctuation and Latin text in the same known CJK face.
+    name=name.strip() or (base_name or '').strip()
     modern=modern_face(base_name or name);directory=os.getenv('SMARTPPT_CMU_FONT_DIR')
     if modern and directory and not cjk_text(text):
         files={'CMU Serif':'cmunrm.ttf','CMU Sans Serif':'cmunss.ttf','CMU Typewriter Text':'cmuntt.ttf'}

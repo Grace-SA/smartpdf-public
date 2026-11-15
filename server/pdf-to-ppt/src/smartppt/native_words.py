@@ -16,6 +16,54 @@ from .render_gate import render_presentations,metric,accept_candidate
 from .selected_render import render_selected,location,page_metric
 
 
+def refine_sparse_shapes(slide,targets,observed):
+    """Retry at most three residual words, without changing any text.
+
+    Font hinting and character-spacing quantization can leave a small residual
+    after the first optical fit. Every failed word must have a bounded fit;
+    otherwise leave the whole page's candidate unchanged.
+    """
+    from pptx.shapes.autoshape import Shape
+    from .ocr_fit import fit_shape
+    failed=[t for t in targets if t['shape'] not in observed or
+            max(abs(a-b) for a,b in zip(t['bbox'],observed[t['shape']]))>2]
+    if not failed or len(failed)>3:return 0
+    pending=[]
+    for target in failed:
+        if target['shape'] not in observed:return 0
+        shape=slide.shapes[target['shape']]
+        if not shape.has_text_frame:return 0
+        candidate=Shape(deepcopy(shape._element),slide.shapes)
+        if not fit_shape(candidate,target['bbox'],observed[target['shape']]):return 0
+        pending.append((shape,candidate))
+    for shape,candidate in pending:shape._element.getparent().replace(shape._element,candidate._element)
+    return len(pending)
+
+
+def refine_sparse_words(path,prs,pages,candidates,rendered,folder,settings):
+    from .table_layout import word_targets
+    from .ocr_fit import observed_boxes
+    outputs={number:rendered for number in candidates};evidence={}
+    for iteration in range(2):
+        probe=Presentation(path);changed={}
+        for number,(parts,_) in candidates.items():
+            targets=word_targets(probe,pages[number],parts);output,index=location(outputs[number],number)
+            with pdfium.PdfDocument(output) as doc,closing(doc[index]) as page:
+                observed=observed_boxes(page,probe.slides[number-1],targets)
+            count=refine_sparse_shapes(probe.slides[number-1],targets,observed)
+            if count:changed[number]=count
+        if not changed:break
+        candidate=folder/f'word-residual-{iteration}.pptx';probe.save(candidate)
+        try:measured=render_selected([candidate],folder,settings,tuple(sorted(changed)))[0]
+        except ConversionError:break
+        prs,path=probe,candidate
+        for number,count in changed.items():
+            outputs[number]=measured
+            record=evidence.setdefault(number,{'passes':0,'word_adjustments':0})
+            record['passes']+=1;record['word_adjustments']+=count
+    return prs,path,outputs,evidence
+
+
 def join_word_fragments(runs):
     """Keep a literal word/number together across adjacent PDF text objects.
 
@@ -94,15 +142,25 @@ def repair_native_words(source,target,report,settings,trim_spacing=False):
                 draw_objects(prs,prs.slides[number-1],pages[number],parts)
             calibrated=folder/'calibrated.pptx';prs.save(calibrated)
             rendered=render([calibrated])[0]
+            prs,calibrated,word_renders,residuals=refine_sparse_words(calibrated,prs,pages,candidates,rendered,folder,settings)
+            # A valid word layout can supply surrounding text without forcing
+            # an existing table to lose its cells. Measure that hybrid separately.
+            table_parts={number:parts for number,(parts,_) in candidates.items()
+                         if any(s.has_table for s in fallback.slides[number-1].shapes)
+                         and all(rendered_word_regions(prs,number,pages[number],parts,word_renders[number]))
+                         and accept_candidate(page_metric(source,baseline_pdf,number),page_metric(source,word_renders[number],number))}
+            from .table_layout import try_restore_tables
+            tables,table_prs=try_restore_tables(calibrated,fallback,source,pages,table_parts,baseline_pdf,settings,folder) if table_parts else ({},None)
             accepted=0
             for item in eligible:
                 number=item['page']
                 if number not in candidates:continue
                 parts,warnings=candidates[number]
-                geometry=rendered_word_regions(prs,number,pages[number],parts,rendered)
-                old,new=page_metric(source,baseline_pdf,number),page_metric(source,rendered,number)
+                geometry=rendered_word_regions(prs,number,pages[number],parts,word_renders[number])
+                old,new=page_metric(source,baseline_pdf,number),page_metric(source,word_renders[number],number)
                 passed=all(boxes is not None for boxes in geometry) and accept_candidate(old,new)
                 evidence={'spacing_retry':trim_spacing,'accepted':passed,'words':len(parts),'position_passed':sum(b is not None for b in geometry),'position_tolerance_points':2,'baseline':old,'candidate':new}
+                if number in residuals:evidence['residual_calibration']=residuals[number]
                 if not passed:
                     slide=prs.slides[number-1]
                     for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
@@ -115,7 +173,16 @@ def repair_native_words(source,target,report,settings,trim_spacing=False):
                     source_text_characters=sum(len(r['text']) for r in runs),word_layout_attempt=evidence,prior_attempt=previous,
                     font_substitutions=sorted({r['source_font']+' → '+r['font'] for r in runs if r['substituted']}),
                     warnings=warnings,graphics='raster; not editable')
-                if previous['route']=='stirling-table':item['warnings'].append('table_rebuilt_as_positioned_text')
+                if number in tables:
+                    slide=prs.slides[number-1]
+                    for shape in list(slide.shapes):shape._element.getparent().remove(shape._element)
+                    for shape in table_prs.slides[number-1].shapes:
+                        slide.shapes._spTree.insert_element_before(deepcopy(shape._element),'p:extLst')
+                    item.update(route='stirling-table',text_granularity='cell',table_layout=tables[number],
+                                graphics='original graphics; semantics not verified')
+                    item['warnings'].append('table_layout_requires_review')
+                elif any(s.has_table for s in fallback.slides[number-1].shapes):
+                    item['warnings'].append('table_rebuilt_as_positioned_text')
             if accepted:
                 final=folder/'verified.pptx';prs.save(final);final.replace(target)
         finally:

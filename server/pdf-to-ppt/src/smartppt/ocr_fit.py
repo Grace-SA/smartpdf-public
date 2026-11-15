@@ -202,7 +202,7 @@ def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
                         # Already aligned glyphs need no second fit. Moving them
                         # can add raster noise and reject a useful correction
                         # elsewhere on the same page.
-                        if n not in raster or max(abs(a-b) for a,b in zip(*raster[n]))<=2:continue
+                        if n not in raster or max(abs(a-b) for a,b in zip(*raster[n]))<=row.get('refinement_tolerance_points',2):continue
                         fitted=fit_local(shape,*raster[n])
                     else:fitted=fit_shape(shape,row['bbox'],observed[n]) if shape.rotation in (0,90,180,270) else (fit_local(shape,*raster[n]) if n in raster else False)
                     if fitted:originals[n]=original
@@ -225,10 +225,10 @@ def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
                         if n not in changed[index] or n not in observed:continue
                         shape=slide.shapes[n]
                         if prefer_ink or shape.rotation not in (0,90,180,270):
-                            if n not in ink or max(abs(a-b) for a,b in zip(*ink[n]))<=2:continue
+                            if n not in ink or max(abs(a-b) for a,b in zip(*ink[n]))<=row.get('refinement_tolerance_points',2):continue
                             refined=fit_local(shape,*ink[n]) or refined
                         else:
-                            if max(abs(a-b) for a,b in zip(row['bbox'],observed[n]))<=2:continue
+                            if max(abs(a-b) for a,b in zip(row['bbox'],observed[n]))<=row.get('refinement_tolerance_points',2):continue
                             refined=fit_shape(shape,row['bbox'],observed[n]) or refined
             if not refined:break
             iteration=tmp/f'iteration-{retry+2}.pptx';prs.save(iteration)

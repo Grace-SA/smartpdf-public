@@ -30,3 +30,30 @@ def trim_line_padding(image,lines):
             for point in second['polygon'][:2]:point[1]=max(point[1],cut+1)
             changed.update((i,j))
     return refined,sorted(changed)
+
+
+def extend_tight_padding(image,lines):
+    """Extend an upright tight detection by at most two pixels to an empty ring.
+
+    All proposed erase boxes participate in ordinary overlap checks afterwards.
+    Text, confidence and the original record stay unchanged.
+    """
+    refined=deepcopy(lines);pixels=np.asarray(image);changed=[]
+    for i,line in enumerate(refined):
+        p=line['polygon']
+        if not (p[0][1]==p[1][1] and p[2][1]==p[3][1] and
+                p[0][0]==p[3][0] and p[1][0]==p[2][0] and
+                p[0][0]<p[1][0] and p[0][1]<p[3][1]):continue
+        l,t,r,b=erase_bounds(line)
+        if l<0 or t<0 or r>pixels.shape[1] or b>pixels.shape[0] or r-l<2 or b-t<2:continue
+        crop=pixels[t:b,l:r];border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1])).astype(float)
+        if np.quantile(np.abs(border-np.median(border,axis=0)),.95)<=12:continue
+        for extra in (1,2):
+            left,top,right,bottom=l-extra,t-extra,r+extra,b+extra
+            if left<0 or top<0 or right>pixels.shape[1] or bottom>pixels.shape[0]:continue
+            crop=pixels[top:bottom,left:right]
+            border=np.concatenate((crop[0],crop[-1],crop[:,0],crop[:,-1])).astype(float)
+            if np.max(np.abs(border-np.median(border,axis=0)))>12:continue
+            line['polygon']=[[left+1,top+1],[right-1,top+1],[right-1,bottom-1],[left+1,bottom-1]]
+            changed.append(i);break
+    return refined,changed

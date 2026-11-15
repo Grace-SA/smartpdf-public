@@ -34,8 +34,14 @@ def script_segments(text):
 
 
 def font_shapes(prs):
-    return [(i,s) for i,slide in enumerate(prs.slides) for s in slide.shapes if s.has_text_frame and
-            any(r.font.name in FAMILIES for p in s.text_frame.paragraphs for r in p.runs)]
+    frames=[]
+    for i,slide in enumerate(prs.slides):
+        for shape in slide.shapes:
+            objects=([shape] if shape.has_text_frame else [])+(
+                [cell for row in shape.table.rows for cell in row.cells if not cell.is_spanned] if shape.has_table else [])
+            frames.extend((i,s) for s in objects if
+                          any(r.font.name in FAMILIES for p in s.text_frame.paragraphs for r in p.runs))
+    return frames
 
 
 def split_script_shapes(prs,rendered,small_text_pages=()):
@@ -190,6 +196,6 @@ def try_portable_fonts(source,target,report,settings):
     try:finalize_portable_fonts(source,target,pending,settings)
     except ConversionError as error:
         report['font_portability']={'embedded':False,'error':error.code}
-        return report
-    report.clear();report.update(pending)
-    return report
+    else:report.clear();report.update(pending)
+    from .final_words import try_finalize_words
+    return try_finalize_words(source,target,report,settings)

@@ -63,6 +63,30 @@ def test_optional_cjk_serif_keeps_latin_in_same_family(tmp_path,monkeypatch):
     assert font_family('SimSun','中文')[0]=='Noto Sans SC'
 
 
+@pytest.mark.parametrize('name',['','   '])
+@pytest.mark.parametrize('text',['中文预算','English 123.45','“－”'])
+def test_missing_family_uses_embedded_cjk_base_name(tmp_path,monkeypatch,name,text):
+    font=tmp_path/'operator-serif.ttf';font.write_bytes(b'availability only')
+    monkeypatch.setenv('SMARTPPT_CJK_SERIF_FONT',str(font))
+    assert font_family(name,text,base_name='ABCDEF+SimSun')==('Noto Serif SC',True)
+
+
+@pytest.mark.parametrize('base,flags,expected',[
+    ('ABCDEF+Times-Roman',1,'Times New Roman'),
+    ('HelveticaNeue-Roman',2,'Arial'),
+    ('Courier',2,'Courier New'),
+])
+def test_missing_family_uses_known_base_before_descriptor_flags(base,flags,expected):
+    assert font_family('','Budget 123',flags,base_name=base)[0]==expected
+
+
+def test_base_name_fallback_preserves_explicit_family_and_optional_font_gate(tmp_path,monkeypatch):
+    monkeypatch.setenv('SMARTPPT_CJK_SERIF_FONT',str(tmp_path/'missing.ttf'))
+    assert font_family('','中文',base_name='ABCDEF+SimSun')[0]=='Noto Sans SC'
+    assert font_family('Times-Roman','Budget',base_name='Courier')[0]=='Times New Roman'
+    assert font_family('','Budget',base_name=None)[0]=='Arial'
+
+
 def sample_record(tmp_path):
     path=tmp_path/'image.png';Image.new('RGB',(100,50),'white').save(path)
     return path,{'input_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'image_size':[100,50],

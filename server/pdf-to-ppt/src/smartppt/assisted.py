@@ -99,8 +99,9 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
     a=np.array(image);accepted=[];accepted_indices=[];font_evidence={};warnings=[]
     if line_approvals is not None and (len(line_approvals)!=len(record['lines']) or any(type(x)!=bool for x in line_approvals)):
         raise ConversionError('invalid_ocr_consensus')
-    from .ocr_bounds import trim_line_padding
+    from .ocr_bounds import trim_line_padding,extend_tight_padding
     lines,trimmed=trim_line_padding(a,record['lines'])
+    lines,extended=extend_tight_padding(a,lines)
     overlaps=overlapping_lines(lines,a)
     for index,line in enumerate(lines):
         if (line_approvals is not None and not line_approvals[index]) or (line_approvals is None and verified is False):
@@ -171,7 +172,7 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
     scale=min(sw/w,sh/h);ox=(sw-w*scale)/2;oy=(sh-h*scale)/2
     clear_shapes(slide);add_background(slide,Image.fromarray(a),w*scale,h*scale,(ox,oy))
     font_choices=[];targets=[]
-    for line,l,t,r,b,color,background,working,mapping in accepted:
+    for line_index,(line,l,t,r,b,color,background,working,mapping) in zip(accepted_indices,accepted):
         sx=w*scale/image.width;sy=h*scale/image.height;size=(b-t)*sy/0.75
         family,_=font_family('Arial',line['text'])
         # Glyph height alone is not evidence of bold (especially mixed CJK/Latin).
@@ -206,14 +207,14 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         points=[(l,t),(r,t),(r,b),(l,b)]
         if mapping is not None:points=[mapped_point(mapping,x,y) for x,y in points]
         points=[restore_point(ox+x*sx,oy+y*sy,orientation,sw,sh) for x,y in points]
-        targets.append({'shape':len(slide.shapes)-1,'erase_box':list(erase_bounds(line)),'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
+        targets.append({'shape':len(slide.shapes)-1,'refinement_tolerance_points':1 if line_index in extended else 2,'erase_box':list(erase_bounds(line)),'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
     restore_shapes(slide,orientation,round(sw*12700),round(sh*12700))
     if not record['lines']:warnings.append('no_ocr_text_detected')
     if len(accepted)<len(record['lines']):warnings.append('partial_ocr_editability')
     return {'route':'paddle-ocr','orientation_degrees':orientation,'detected_lines':len(record['lines']),'editable_lines':len(accepted),
         'independent_model_agreement':verified,
         'region_verified_lines':sum(line_approvals) if line_approvals is not None else None,
-        'trimmed_detection_indices':trimmed,'ocr_line_indices':accepted_indices,'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
+        'trimmed_detection_indices':trimmed,'extended_detection_indices':extended,'ocr_line_indices':accepted_indices,'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
         'warnings':sorted(set(warnings+['ocr_requires_review'])),'graphics':'raster; not editable'}
 
 
