@@ -269,3 +269,27 @@ test("back from a completed task returns home and forward opens a fresh picker w
     "completed-navigation",
   );
 });
+
+for (const destination of ["/split-pdf/", "/"]) {
+  test(`history rate limit safely navigates to ${destination}`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/images-to-pdf/");
+    await expect(page.locator("#photo-files")).toBeVisible();
+    await page.evaluate(() => {
+      window.history.pushState = () => {
+        throw new DOMException("Synthetic history rate limit", "SecurityError");
+      };
+    });
+    if (destination === "/")
+      await page.getByText("← All tools", { exact: true }).click();
+    else await selectToolPath(page, "split-pdf");
+    await expect(page).toHaveURL(new RegExp(`${destination}$`));
+    if (destination === "/")
+      await expect(page.locator(".tool-home")).toBeVisible();
+    else await checkPicker(page, "pdf-file");
+    expect(errors).toEqual([]);
+  });
+}
