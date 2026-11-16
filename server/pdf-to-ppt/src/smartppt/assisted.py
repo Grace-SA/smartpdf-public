@@ -102,12 +102,16 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
     from .ocr_bounds import trim_line_padding,extend_tight_padding
     lines,trimmed=trim_line_padding(a,record['lines'])
     lines,extended=extend_tight_padding(a,lines)
+    from .ocr_leaders import trim_dot_leaders
+    lines,leader_trimmed,leader_ambiguous,leader_verified=trim_dot_leaders(a,lines)
     overlaps=overlapping_lines(lines,a)
     for index,line in enumerate(lines):
         if (line_approvals is not None and not line_approvals[index]) or (line_approvals is None and verified is False):
             warnings.append('ocr_models_disagree_kept_as_image');continue
         if index in overlaps:
             warnings.append('overlapping_ocr_kept_as_image');continue
+        if index in leader_ambiguous:
+            warnings.append('ambiguous_dot_leader_kept_as_image');continue
         box=np.array(line['polygon']);working=image;mapping=None
         edge=box[1]-box[0];height=np.linalg.norm(box[3]-box[0]);width=np.linalg.norm(edge)
         if abs(math.degrees(math.atan2(edge[1],edge[0])))>8 or (height>width*2 and len(normalized(line['text']))>1):
@@ -207,14 +211,14 @@ def ocr_slide(prs,slide,page,image_path,record,verified=None,line_approvals=None
         points=[(l,t),(r,t),(r,b),(l,b)]
         if mapping is not None:points=[mapped_point(mapping,x,y) for x,y in points]
         points=[restore_point(ox+x*sx,oy+y*sy,orientation,sw,sh) for x,y in points]
-        targets.append({'shape':len(slide.shapes)-1,'refinement_tolerance_points':1 if line_index in extended else 2,'erase_box':list(erase_bounds(line)),'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
+        targets.append({'shape':len(slide.shapes)-1,'refinement_tolerance_points':1 if line_index in extended or line_index in leader_verified else 2,'erase_box':list(erase_bounds(line)),'quad':points,'bbox':[min(x for x,y in points),min(y for x,y in points),max(x for x,y in points),max(y for x,y in points)]})
     restore_shapes(slide,orientation,round(sw*12700),round(sh*12700))
     if not record['lines']:warnings.append('no_ocr_text_detected')
     if len(accepted)<len(record['lines']):warnings.append('partial_ocr_editability')
     return {'route':'paddle-ocr','orientation_degrees':orientation,'detected_lines':len(record['lines']),'editable_lines':len(accepted),
         'independent_model_agreement':verified,
         'region_verified_lines':sum(line_approvals) if line_approvals is not None else None,
-        'trimmed_detection_indices':trimmed,'extended_detection_indices':extended,'ocr_line_indices':accepted_indices,'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
+        'trimmed_detection_indices':trimmed,'extended_detection_indices':extended,'leader_trimmed_detection_indices':leader_trimmed,'leader_boundary_verified_indices':leader_verified,'ocr_line_indices':accepted_indices,'estimated_fonts':sorted(set(font_choices)),'deskewed_lines':sum(x[-1] is not None for x in accepted),'ink_targets':targets,
         'warnings':sorted(set(warnings+['ocr_requires_review'])),'graphics':'raster; not editable'}
 
 

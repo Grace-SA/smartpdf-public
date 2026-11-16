@@ -21,6 +21,48 @@ def line_bounds(line):
             max(p[0] for p in points), max(p[1] for p in points))
 
 
+def row_order(lines, indices):
+    """Order unambiguous upright fragments by row without changing their text.
+
+    Different glyph heights can put a right-hand page number above its title.
+    Only disjoint fragments with mutually close vertical centers form a row;
+    uncertain orientation or row membership retains the previous ordering.
+    The caller must still compare the resulting text with spatial evidence.
+    """
+    boxes = {i: line_bounds(lines[i]) for i in indices}
+    original = sorted(indices, key=lambda i: (boxes[i][1], boxes[i][0]))
+    for i in indices:
+        p, q = lines[i]['polygon'][:2]
+        angle = math.degrees(math.atan2(q[1]-p[1], q[0]-p[0]))
+        if abs(angle) > 1 or boxes[i][3] <= boxes[i][1]:
+            return original
+
+    def same_row(i, j):
+        a, b = boxes[i], boxes[j]
+        return abs((a[1]+a[3]-b[1]-b[3])/2) <= min(a[3]-a[1], b[3]-b[1])*.5
+
+    rows = []
+    for i in original:
+        candidates = [row for row in rows if any(same_row(i, j) for j in row)]
+        if len(candidates) > 1:
+            return original
+        if not candidates:
+            rows.append([i])
+            continue
+        row = candidates[0]
+        if any(not same_row(i, j) or
+               min(boxes[i][2], boxes[j][2]) >= max(boxes[i][0], boxes[j][0])
+               for j in row):
+            return original
+        row.append(i)
+    # A tall fragment can bridge two otherwise distinct rows without being
+    # close to either center. Such vertical ambiguity must not reorder text.
+    if any(max(boxes[i][3] for i in a) >= min(boxes[i][1] for i in b)
+           for a, b in zip(rows, rows[1:])):
+        return original
+    return [i for row in rows for i in sorted(row, key=lambda i: boxes[i][0])]
+
+
 def simple_grid_agreement(content, lines, indices):
     """Match a rectangular HTML grid to one spatially aligned OCR line per cell.
 
@@ -126,7 +168,7 @@ def region_agreement(record, verifier):
         if indices and label=='table':
             if simple_grid_agreement(block['content'],lines,indices):accepted.update(indices)
         elif indices and label in TEXT_LABELS:
-            indices.sort(key=lambda i: (line_bounds(lines[i])[1], line_bounds(lines[i])[0]))
+            indices = row_order(lines, indices)
             actual=normalized(''.join(lines[i]['text'] for i in indices))
             whole=bool(actual) and actual==normalized(block['content'])
             if whole:accepted.update(indices)
