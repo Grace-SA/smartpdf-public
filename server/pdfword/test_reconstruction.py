@@ -25,6 +25,68 @@ class ReconstructionTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def zero_width_source(self, text="2", size=12):
+        from pypdf.generic import DictionaryObject
+        fixture(self.source, content=f"BT /F1 {size} Tf 48 750 Td ({text}) Tj ET".encode())
+        reader = PdfReader(self.source)
+        font = reader.pages[0]["/Resources"]["/Font"]["/F1"]
+        font.update({NameObject("/BaseFont"): NameObject("/SyntheticZeroWidth"),
+                     NameObject("/FirstChar"): NumberObject(50),
+                     NameObject("/LastChar"): NumberObject(50),
+                     NameObject("/Widths"): ArrayObject([NumberObject(0)]),
+                     NameObject("/FontDescriptor"): DictionaryObject({
+                         NameObject("/Type"): NameObject("/FontDescriptor"),
+                         NameObject("/FontName"): NameObject("/SyntheticZeroWidth"),
+                         NameObject("/Flags"): NumberObject(32),
+                         NameObject("/FontBBox"): ArrayObject([NumberObject(v) for v in (0, -200, 1000, 900)]),
+                         NameObject("/Ascent"): NumberObject(800),
+                         NameObject("/Descent"): NumberObject(-200),
+                         NameObject("/ItalicAngle"): NumberObject(0),
+                         NameObject("/StemV"): NumberObject(80),
+                     })})
+        writer = PdfWriter(); writer.append_pages_from_reader(reader)
+        path = self.root / "zero-width.pdf"; writer.write(path)
+        return path
+
+    def test_zero_width_visible_glyph_uses_independent_ink_bounds(self):
+        import pdfplumber
+        from unittest.mock import Mock
+        source = self.zero_width_source()
+        with pdfplumber.open(source) as pdf:
+            word = pdf.pages[0].extract_words()[0]
+            self.assertEqual((word["text"], word["x0"], word["x1"]), ("2", 48, 48))
+        ocr = Mock(last_engine="test")
+        model = parse_pdf(source, self.root, ocr=ocr)
+        ocr.recognize.assert_not_called()
+        block = model["pages"][0]["blocks"][0]
+        self.assertEqual(block["text"], "2")
+        self.assertGreater(block["bbox"][2], block["bbox"][0])
+        self.assertEqual(model["warnings"], [])
+        self.assertFalse((self.root / "page-0.png").exists())
+
+    def test_unmapped_zero_width_glyph_uses_page_ocr(self):
+        from unittest.mock import Mock
+        source = self.zero_width_source(size=36)
+        ocr = Mock(last_engine="test")
+        ocr.recognize.return_value = [dict(kind="paragraph", bbox=[48, 30, 55, 43],
+                                         text="2", size=12, source="test")]
+        model = parse_pdf(source, self.root, ocr=ocr)
+        ocr.recognize.assert_called_once()
+        self.assertEqual(model["pages"][0]["blocks"][0]["text"], "2")
+        self.assertTrue((self.root / "page-0.png").exists())
+        self.assertTrue(any("OCR" in warning for warning in model["warnings"]))
+        with self.assertRaisesRegex(Rejected, "OCR worker is not configured"):
+            parse_pdf(source, self.root)
+
+    def test_native_geometry_fallback_keeps_strict_ocr_bounds(self):
+        from unittest.mock import Mock
+        ocr = Mock(last_engine="test")
+        ocr.recognize.return_value = [dict(kind="paragraph", bbox=[-3, 30, 55, 43],
+                                         text="2", size=12, source="test")]
+        with self.assertRaisesRegex(Rejected, "Content falls outside"):
+            parse_pdf(self.zero_width_source(size=36), self.root, ocr=ocr)
+        ocr.recognize.assert_called_once()
+
     def test_overlapping_ocr_list_regions_do_not_duplicate_lines(self):
         records = [
             dict(label="text", bbox=[100, 100, 400, 400], content="Alpha 123\nBeta 456\nGamma 789"),
@@ -54,6 +116,31 @@ class ReconstructionTests(unittest.TestCase):
         result = normalize([first, same, adjacent], 600, 800, "oxr")
         self.assertEqual(len(result), 2)
         self.assertEqual([b["text"] for b in result], ["Same label", "Same label"])
+
+    def test_wrapped_parent_does_not_repeat_its_leading_long_lines(self):
+        from ocr import suppress_duplicate_text_regions
+        first = "The development of an editable document requires a reliable conversion process."
+        second = "The recognized paragraph retains the complete source content and its numeric values."
+        parent = dict(kind="paragraph", bbox=[100, 100, 500, 260],
+                      text="\n".join([first, second, "Long wrapped content " * 25, "Last line"]))
+        children = [dict(kind="paragraph", bbox=[101, 101, 499, 115],
+                         text=first),
+                    dict(kind="paragraph", bbox=[120, 117, 480, 131], text=second)]
+        result = suppress_duplicate_text_regions([parent, *children])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], parent["text"])
+
+    def test_long_overlap_keeps_changed_numbers_and_other_positions(self):
+        from ocr import suppress_duplicate_text_regions
+        first = "The document contains 12345 units and must preserve every value during conversion."
+        for text, bounds in [(first.replace("12345", "12346"), [101, 101, 499, 115]),
+                             (first, [101, 220, 499, 234]),
+                             (first.replace("preserve", "remove"), [101, 101, 499, 115])]:
+            with self.subTest(text=text, bounds=bounds):
+                parent = dict(kind="paragraph", bbox=[100, 100, 500, 260],
+                              text=first + "\n" + "Other wrapped prose " * 25 + "\nLast line")
+                child = dict(kind="paragraph", bbox=bounds, text=text)
+                self.assertEqual(len(suppress_duplicate_text_regions([parent, child])), 2)
 
     def test_repeated_lines_keep_multiplicity_in_ocr_parent_region(self):
         records = [
@@ -108,17 +195,25 @@ class ReconstructionTests(unittest.TestCase):
 
     def test_offset_three_columns_use_real_gutters(self):
         from columns import column_flow
-        blocks = [dict(kind="paragraph", text=f"{name}{row}",
+        blocks = [dict(kind="paragraph", text=f"{name}{row}" + " continuous prose" * 6,
                        bbox=[left, 100 + row * 40, right, 125 + row * 40])
                   for row in range(2)
                   for name, left, right in [("L", 54, 404), ("M", 425, 775), ("R", 796, 1146)]]
         result = column_flow(blocks, 1200)
         self.assertEqual(result[0]["kind"], "columns_start")
         self.assertEqual(result[0]["count"], 3)
-        self.assertEqual([b["text"] for b in result if "text" in b], ["L0", "L1", "M0", "M1", "R0", "R1"])
+        self.assertEqual([b["text"][:2] for b in result if "text" in b], ["L0", "L1", "M0", "M1", "R0", "R1"])
         # A full-width figure intersecting the text is still ambiguous.
         overlapping = dict(kind="image", bbox=[40, 110, 1160, 130])
         self.assertEqual(column_flow(blocks + [overlapping], 1200), blocks + [overlapping])
+
+    def test_offset_labels_do_not_become_independent_columns(self):
+        from columns import column_flow
+        blocks = [dict(kind="paragraph", text=text, bbox=[x, y, x+80, y+12])
+                  for y, label, value in [(100, "Certificate", "2019"), (130, "Language", "2020"), (160, "Skill", "2021")]
+                  for x, text in [(40, label), (250, value)]]
+        self.assertIsNone(__import__('columns').gutter_cuts(blocks, 600, 2))
+        self.assertFalse(any(b['kind'] == 'columns_start' for b in column_flow(blocks, 600)))
 
     def test_native_table_is_editable_cells(self):
         commands = b"48 600 m 300 600 l S 48 630 m 300 630 l S 48 660 m 300 660 l S 48 600 m 48 660 l S 170 600 m 170 660 l S 300 600 m 300 660 l S "
@@ -142,6 +237,37 @@ class ReconstructionTests(unittest.TestCase):
         self.assertEqual(
             Document(self.root / "edited.docx").tables[0].cell(1, 0).text, "99"
         )
+
+    def test_cosmetic_cell_paint_keeps_numeric_grid_boundaries(self):
+        import pdfplumber
+        from layout import native_page
+        content = b""
+        for row in range(3):
+            for col in range(2):
+                x, y = 48 + col * 100, 600 + row * 30
+                content += (f"1 1 1 rg {x} {y} 100 30 re f 0 0 0 rg "
+                            f"BT /F1 12 Tf {x+5} {y+10} Td ({row*2+col+1}) Tj ET ").encode()
+        fixture(self.source, content=content)
+        with pdfplumber.open(self.source) as document:
+            page = document.pages[0]
+            rectangles = [(o['x0'], o['top'], o['x1'], o['bottom']) for o in page.rects]
+            blocks = native_page(page, rectangles)
+        tables = [b for b in blocks if b['kind'] == 'table']
+        self.assertEqual(len(tables), 1)
+        table = tables[0]
+        self.assertEqual((table['rows'], table['cols']), (3, 2))
+        self.assertEqual({(c['row'], c['col']): c['text'] for c in table['cells']},
+                         {(0, 0): '5', (0, 1): '6', (1, 0): '3', (1, 1): '4', (2, 0): '1', (2, 1): '2'})
+
+    def test_decorative_grid_with_dominant_prose_requests_ocr(self):
+        import pdfplumber
+        from layout import native_page
+        fixture(self.source)
+        ambiguous = dict(cells=[dict(text="Long continuous prose. " * 30), dict(text="Footer")])
+        with pdfplumber.open(self.source) as document:
+            with patch("layout.native_tables", return_value=[ambiguous]):
+                with self.assertRaisesRegex(Rejected, "Layout needs OCR"):
+                    native_page(document.pages[0], [(0, 0, 612, 792)])
 
     def test_fine_merged_grid_reserves_word_cell_padding_without_overflow(self):
         from docx.oxml.ns import qn

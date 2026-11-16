@@ -454,7 +454,6 @@ def native_page(page, cosmetic_rectangles=()):
             bounds = (obj["x0"], obj["top"], obj["x1"], obj["bottom"])
             return not any(all(abs(a-b) < .01 for a, b in zip(bounds, box))
                            for box in cosmetic_rectangles)
-        page = page.filter(retain)
     if len(page.chars) > 60000:
         raise Rejected("Page exceeds text budget.")
     clean = page.dedupe_chars(tolerance=0.5)
@@ -463,6 +462,14 @@ def native_page(page, cosmetic_rectangles=()):
     )
     words = [w for w in words if w["text"].strip()]
     tables = native_tables(clean, words)
+    if cosmetic_rectangles:
+        for table in tables:
+            lengths = [len(c.get("text", "")) for c in table["cells"]]
+            # Page decoration may form a false grid containing almost all prose
+            # in one cell. Keep real grid boundaries, but ask OCR to resolve this
+            # ambiguous case instead of exporting a giant collapsed table.
+            if lengths and max(lengths) > 500 and max(lengths) > .85 * sum(lengths):
+                raise Rejected("Layout needs OCR.")
     remaining_words = [
         w
         for w in words
@@ -472,7 +479,9 @@ def native_page(page, cosmetic_rectangles=()):
         )
     ]
     tables.extend(borderless_tables(remaining_words, clean))
-    images = graphics(clean, tables)
+    # Invisible paint boundaries can still define the source table grid.
+    # Exclude proven cosmetic rectangles only from figure grouping.
+    images = graphics(clean.filter(retain) if cosmetic_rectangles else clean, tables)
     excluded = [t["bbox"] for t in tables] + images
     remaining = [
         w

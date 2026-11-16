@@ -23,6 +23,7 @@ export function ToolNavigation({
   const [open, setOpen] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const expanded = open && !disabled;
   function close(restoreFocus = false) {
     setOpen(false);
@@ -93,6 +94,14 @@ export function ToolNavigation({
         aria-controls="header-tools"
         disabled={disabled}
         onClick={() => setOpen(!open)}
+        onKeyDown={(event) => {
+          // Safari can skip buttons during native Tab navigation. Enter the
+          // expanded menu explicitly before focus leaves and closes it.
+          if (expanded && event.key === "Tab" && !event.shiftKey) {
+            event.preventDefault();
+            closeButton.current?.focus();
+          }
+        }}
       >
         <span className="tools-desktop-label">All PDF tools</span>
         <span className="tools-mobile-label">Tools</span>
@@ -109,6 +118,7 @@ export function ToolNavigation({
         <div className="tools-menu-heading">
           <strong>All PDF tools</strong>
           <button
+            ref={closeButton}
             className="tools-close secondary"
             aria-label="Close tools"
             onClick={() => close(true)}

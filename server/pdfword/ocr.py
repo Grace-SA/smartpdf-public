@@ -48,6 +48,28 @@ def suppress_duplicate_text_regions(blocks):
             count, total = len(lines[index]), len(lines[parent])
             if not 0 < count < total:
                 continue
+            # A wrapped paragraph's logical lines have unequal visual heights.
+            # Its first two long, single-line children can instead be anchored
+            # using their own measured height. Never apply this to short labels.
+            child_height = small[3] - small[1]
+            if (count == 1 and 60 <= len(lines[index][0]) <= 1000
+                    and small[2] - small[0] >= .7 * (large[2] - large[0])
+                    and child_height < .3 * (large[3] - large[1])):
+                for start in range(min(2, total)):
+                    a, b = lines[index][0], lines[parent][start]
+                    if any(len(line) > 1.25 * len(a) for line in lines[parent][:start]):
+                        continue
+                    if abs(small[1] - large[1] - start * child_height) > .55 * child_height:
+                        continue
+                    exact = a == b
+                    if exact:
+                        removed.add(index)
+                        break
+                    if start == 0 and a[:10] == b[:10] and a[-10:] == b[-10:]:
+                        # Do not silently pick between conflicting words/numbers.
+                        blocks[parent]["ocr_overlap_review"] = True
+                if index in removed:
+                    break
             line_height = (large[3] - large[1]) / total
             for start in range(total - count + 1):
                 if lines[parent][start:start + count] != lines[index]:

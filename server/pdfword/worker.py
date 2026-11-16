@@ -18,7 +18,7 @@ from exporter import export_word
 from ocr import OCR
 from math_export import unsupported
 from text_visibility import bright_text_visible, cosmetic_white_rectangles
-from text_geometry import glyph_geometry, ink_bounds, mapped_bounds
+from text_geometry import glyph_geometry, ink_bounds, mapped_bounds, repair_zero_width_blocks
 from text_coverage import check_coverage, editable_block_text, editable_source_text
 
 
@@ -215,6 +215,16 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                                 v - (l if n % 2 == 0 else top)
                                 for n, v in enumerate(block["bbox"])
                             ]
+                    # Recover a uniquely mapped ink box for zero-width metrics;
+                    # otherwise re-recognize this page. Never drop the glyph or
+                    # relax final geometry checks to finish a long document.
+                    if not use_ocr:
+                        repair_zero_width_blocks(page, blocks)
+                        try:
+                            for block in blocks:
+                                box(block["bbox"], width, height)
+                        except Rejected:
+                            use_ocr = True
                     use_ocr = use_ocr or any(
                         b["kind"] == "image"
                         and (b["bbox"][2] - b["bbox"][0])
@@ -268,6 +278,10 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                         f"Page {i+1}: text was recognized with OCR; check names and numbers."
                     )
                 for j, block in enumerate(blocks):
+                    if block.get("ocr_overlap_review"):
+                        model["warnings"].append(
+                            f"Page {i+1}: overlapping OCR readings differ; check repeated text against the source."
+                        )
                     block["bbox"] = box(block["bbox"], width, height)
                     block["id"] = f"p{i}-b{j}"
                     block["reading_order"] = j

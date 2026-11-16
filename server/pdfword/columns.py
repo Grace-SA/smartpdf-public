@@ -15,6 +15,11 @@ def gutter_cuts(body, width, count):
             groups.append([left, right, 1])
     if len(groups) != count or any(n < 2 for _, _, n in groups):
         return None
+    # Short labels and dates form aligned records, not independent prose columns.
+    if any(sum(len(b.get("text", "").strip()) for b in candidates
+               if left <= b["bbox"][0] and b["bbox"][2] <= right) < 80
+           for left, right, _ in groups):
+        return None
     return [(a[1] + b[0]) / 2 for a, b in zip(groups, groups[1:])]
 
 
