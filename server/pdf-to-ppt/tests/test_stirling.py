@@ -5,6 +5,29 @@ from smartppt.config import ConversionError
 from smartppt.stirling import StirlingProvider
 
 
+def test_stirling_is_only_available_provider(monkeypatch, tmp_path):
+    from smartppt.config import Settings
+    monkeypatch.delenv('SMARTPPT_EDITABLE_PROVIDER', raising=False)
+    monkeypatch.setenv('SMARTPPT_STIRLING_URL', 'http://127.0.0.1:8766')
+    settings = Settings(root=tmp_path)
+    assert settings.editable_provider == 'stirling' and settings.editable_available
+    settings.editable_provider = 'adobe'
+    assert not settings.editable_available
+    assert not hasattr(settings, 'adobe_id') and not hasattr(settings, 'adobe_secret')
+
+
+def test_capabilities_never_advertise_cloud_ocr(settings):
+    from fastapi.testclient import TestClient
+    from smartppt.api import create_app
+    settings.stirling_url = 'http://127.0.0.1:8766'
+    with TestClient(create_app(settings)) as client:
+        data = client.get('/api/capabilities').json()
+    assert data['editable_provider'] == 'stirling'
+    assert data['cloud_provider'] is None
+    assert data['ocr_language_selection'] is False
+    assert data['ocr_available'] is False
+
+
 def configured(settings):
     settings.editable_provider='stirling'
     settings.stirling_url='http://127.0.0.1:8766'

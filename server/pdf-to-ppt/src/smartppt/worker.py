@@ -21,7 +21,6 @@ def stop_worker(child):
 def run_job(settings, job_id):
     from .pdf import inspect_pdf
     from .preserve import convert_preserve
-    from .providers import AdobeProvider
     from .stirling import StirlingProvider
     from .quality import inspect_pptx
     store = Store(settings)
@@ -36,7 +35,7 @@ def run_job(settings, job_id):
         if job['mode'] == 'editable':
             if not settings.editable_available:
                 raise ConversionError('provider_not_configured')
-            provider = StirlingProvider(settings) if settings.editable_provider == 'stirling' else AdobeProvider(settings)
+            provider = StirlingProvider(settings)
             try:
                 provider.convert(source, target, job['language'],
                     submitted=lambda url: store.update(job_id, 'processing', ('processing',), provider_job=url),

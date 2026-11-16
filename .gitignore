@@ -58,6 +58,7 @@ private-samples/
 
 # Historical reports can contain personal file names and local paths.
 /docs/*
+!/docs/pdf-to-ppt-stirling-only.md
 !/docs/requirements-v1.1.md
 !/docs/dependency-licenses.json
 !/docs/repository-workflow.md

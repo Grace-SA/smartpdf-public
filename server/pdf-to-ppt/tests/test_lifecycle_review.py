@@ -4,7 +4,7 @@ import pytest
 
 from smartppt.api import create_app
 from smartppt.config import ConversionError
-from smartppt.providers import AdobeProvider
+from smartppt.stirling import StirlingProvider
 from smartppt.store import Store
 from smartppt.worker import work_once
 
@@ -89,11 +89,9 @@ def test_spawn_failure_does_not_abandon_processing_state(settings, monkeypatch):
 def test_provider_does_not_use_ambient_proxy(settings, monkeypatch):
     monkeypatch.setenv('ALL_PROXY', 'socks5h://127.0.0.1:9')
     monkeypatch.setenv('HTTPS_PROXY', 'http://127.0.0.1:9')
-    settings.adobe_id = settings.adobe_secret = ''
-    provider = AdobeProvider(settings)
+    settings.stirling_url = 'http://127.0.0.1:8766'
+    provider = StirlingProvider(settings)
     try:
         assert provider.client._trust_env is False
-        with pytest.raises(ConversionError, match='provider_not_configured'):
-            provider.convert(None, None)
     finally:
         provider.client.close()

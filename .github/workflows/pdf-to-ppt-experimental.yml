@@ -1,7 +1,7 @@
 name: PDF to PPT experimental checks
 on:
   push:
-    branches: ["feature/**", "fix/**", "codex/pdf-to-ppt-stirling-evaluation"]
+    branches: ["feature/**", "fix/**", "development/pdf-to-ppt", "main"]
     paths:
       - "server/pdf-to-ppt/**"
       - ".github/workflows/pdf-to-ppt-experimental.yml"

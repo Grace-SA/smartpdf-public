@@ -123,7 +123,7 @@ def test_real_worker_smoke(settings,pdf_file):
     assert not work_once(settings)
 
 def test_worker_fails_closed_without_cloud(settings,pdf_file):
-    settings.adobe_id=settings.adobe_secret=''
+    settings.stirling_url=''
     store=Store(settings);job,_=store.create('editable','en-US')
     (settings.root/job/'input.pdf').write_bytes(pdf_file.read_bytes())
     store.update(job,'processing',('uploading',));run_job(settings,job)

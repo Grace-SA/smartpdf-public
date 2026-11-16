@@ -26,7 +26,7 @@ def test_api_end_to_end(settings,pdf_file):
         assert not (settings.root/job).exists()
 
 def test_api_missing_provider(settings,pdf_file):
-    settings.adobe_id=settings.adobe_secret=''
+    settings.stirling_url=''
     with TestClient(create_app(settings)) as client:
         assert not client.get('/api/capabilities').json()['editable_available']
         assert upload(client,pdf_file,'editable').status_code==503

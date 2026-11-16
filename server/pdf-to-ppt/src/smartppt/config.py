@@ -11,9 +11,7 @@ class Settings:
     retention_seconds: int = 3600
     job_timeout: int = 600
     max_queue: int = 20
-    adobe_id: str = field(default_factory=lambda: os.getenv('PDF_SERVICES_CLIENT_ID', ''))
-    adobe_secret: str = field(default_factory=lambda: os.getenv('PDF_SERVICES_CLIENT_SECRET', ''))
-    editable_provider: str = field(default_factory=lambda: os.getenv('SMARTPPT_EDITABLE_PROVIDER', 'adobe'))
+    editable_provider: str = field(default_factory=lambda: os.getenv('SMARTPPT_EDITABLE_PROVIDER', 'stirling'))
     stirling_url: str = field(default_factory=lambda: os.getenv('SMARTPPT_STIRLING_URL', ''))
     stirling_key: str = field(default_factory=lambda: os.getenv('SMARTPPT_STIRLING_KEY', ''))
     layout_assistance: bool = field(default_factory=lambda: os.getenv('SMARTPPT_LAYOUT_ASSISTANCE', '0') == '1')
@@ -34,7 +32,7 @@ class Settings:
     def editable_available(self):
         if self.editable_provider == 'stirling':
             return bool(self.stirling_url)
-        return self.editable_provider == 'adobe' and bool(self.adobe_id and self.adobe_secret)
+        return False
 
 
 class ConversionError(Exception):

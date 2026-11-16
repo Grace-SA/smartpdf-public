@@ -8,7 +8,7 @@ function refresh() {
   $('language-row').hidden = !editable || !capabilities?.ocr_available || !capabilities?.ocr_language_selection;
   $('availability').textContent = editable && capabilities && !capabilities.editable_available ? messages.provider_not_configured : '';
   $('convert').disabled = busy || !selected || !capabilities || (editable && !capabilities.editable_available);
-  $('privacy').textContent = capabilities ? `${editable && capabilities.cloud_provider ? 'Your file will be sent to Adobe PDF Services for conversion. ' : 'Your file will be processed by our self-hosted service. '}${editable && !capabilities.ocr_available ? 'Scanned text remains an image; OCR is unavailable. ' : ''}Files on this server expire after ${Math.round(capabilities.retention_seconds/60)} minutes. You can delete them earlier.` : '';
+  $('privacy').textContent = capabilities ? `Your file will be processed by our self-hosted service. ${editable && !capabilities.ocr_available ? 'Scanned text remains an image; OCR is unavailable. ' : ''}Files on this server expire after ${Math.round(capabilities.retention_seconds/60)} minutes. You can delete them earlier.` : '';
   document.querySelectorAll('input[name="mode"],#language,#file').forEach(x=>x.disabled=busy);
 }
 function choose(file) {

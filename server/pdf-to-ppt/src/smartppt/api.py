@@ -8,7 +8,8 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from .config import Settings, ConversionError
-from .providers import LANGUAGES
+# Accepted legacy request locales; OCR language is detected locally.
+LANGUAGES = {'en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES'}
 from .store import Store
 
 
@@ -44,9 +45,9 @@ def create_app(settings=None):
                 'retention_seconds':settings.retention_seconds,
                 'languages':sorted(LANGUAGES),
                 'editable_provider':settings.editable_provider,
-                'cloud_provider':'Adobe PDF Services' if settings.editable_provider=='adobe' else None,
-                'ocr_available':settings.local_ocr_available or (settings.editable_provider=='adobe' and settings.editable_available),
-                'ocr_language_selection':settings.editable_provider=='adobe',
+                'cloud_provider':None,
+                'ocr_available':settings.local_ocr_available,
+                'ocr_language_selection':False,
                 'release_status':'development; quality acceptance pending'}
 
     @app.get('/healthz')
