@@ -31,7 +31,8 @@ def run(directory):
         raise Rejected("Conversion exceeded the local task time limit.")
 
     signal.signal(signal.SIGALRM, timeout)
-    signal.alarm(270)
+    policy = json.loads(Path(__file__).with_name("task-policy.json").read_text())
+    signal.alarm(policy["localWorkerSeconds"])
     try:
         emit(state="checking")
         report = convert(

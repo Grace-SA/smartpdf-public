@@ -3,7 +3,85 @@ import math
 from contextlib import closing
 import pypdfium2 as pdf
 from PIL import ImageChops
-from text_geometry import ink_bounds
+from text_geometry import ink_bounds, mapped_bounds, handle
+
+
+def fully_clipped_number(obj, geometry):
+    """Only fully mapped root-level numeric labels outside rectangular clips."""
+    import ctypes
+    import re
+    if obj.level or not re.fullmatch(r"[0-9]{1,16}", obj.extract().strip()):
+        return False
+    if pdf.raw.FPDFTextObj_GetTextRenderMode(obj) not in (0, 1, 2):
+        return False
+    bounds = mapped_bounds(obj, geometry)
+    if bounds is None:
+        return False
+    clip = pdf.raw.FPDFPageObj_GetClipPath(obj)
+    paths = pdf.raw.FPDFClipPath_CountPaths(clip)
+    if not 1 <= paths <= 64:
+        return False
+    outside = False
+    for index in range(paths):
+        count = pdf.raw.FPDFClipPath_CountPathSegments(clip, index)
+        if count not in (4, 5):
+            return False
+        points = []
+        for part in range(count):
+            segment = pdf.raw.FPDFClipPath_GetPathSegment(clip, index, part)
+            x, y = ctypes.c_float(), ctypes.c_float()
+            if (pdf.raw.FPDFPathSegment_GetType(segment) not in (0, 2)
+                    or not pdf.raw.FPDFPathSegment_GetPoint(segment, ctypes.byref(x), ctypes.byref(y))):
+                return False
+            points.append((round(x.value, 3), round(y.value, 3)))
+        if any(not math.isfinite(v) for point in points for v in point):
+            return False
+        xs, ys = {p[0] for p in points}, {p[1] for p in points}
+        if (len(xs) != 2 or len(ys) != 2 or len(set(points)) != 4
+                or any(a[0] != b[0] and a[1] != b[1]
+                       for a, b in zip(points, points[1:] + points[:1]))):
+            return False
+        l, b, r, t = bounds
+        outside |= (r < min(xs) - .5 or l > max(xs) + .5
+                    or t < min(ys) - .5 or b > max(ys) + .5)
+    return outside
+
+
+def confirm_invisible_numbers(page, objects):
+    """Confirm geometric exclusion by RGB equality; never rewrite the source PDF."""
+    if not objects or len(objects) > 32:
+        return not objects
+    width, height = page.get_size()
+    scale = min(3, math.sqrt(8000000 / (width * height)))
+    with closing(page.render(scale=scale)) as bitmap:
+        before = bitmap.to_pil().convert("RGB")
+    modes = [(obj, pdf.raw.FPDFTextObj_GetTextRenderMode(obj)) for obj in objects]
+    try:
+        try:
+            for obj, _ in modes:
+                if not pdf.raw.FPDFTextObj_SetTextRenderMode(obj, 3):
+                    return False
+            with closing(page.render(scale=scale)) as bitmap:
+                after = bitmap.to_pil().convert("RGB")
+            with after, ImageChops.difference(before, after) as difference:
+                return difference.getbbox() is None
+        finally:
+            for obj, mode in modes:
+                pdf.raw.FPDFTextObj_SetTextRenderMode(obj, mode)
+    finally:
+        before.close()
+
+
+def text_without_objects(textpage, objects):
+    excluded = {handle(obj) for obj in objects}
+    result = []
+    for index in range(textpage.count_chars()):
+        if handle(pdf.raw.FPDFText_GetTextObject(textpage, index)) in excluded:
+            continue
+        code = pdf.raw.FPDFText_GetUnicode(textpage, index)
+        if code:
+            result.append(chr(code))
+    return "".join(result)
 
 
 def bright_text_visible(page, objects, geometry=None):

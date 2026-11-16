@@ -2,8 +2,13 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { createWordService, runStirling } from "../word/service.mjs";
 import { checkDocx } from "./docx-check.mjs";
+
+const taskPolicy = JSON.parse(
+  readFileSync(new URL("./task-policy.json", import.meta.url), "utf8"),
+);
 
 const runner = fileURLToPath(
   new URL(
@@ -12,11 +17,17 @@ const runner = fileURLToPath(
   ),
 );
 export function createPdfWordService(options = {}) {
+  const reconstruction = process.env.PDFWORD_LOCAL_V2 === "1";
   return createWordService({
     ...options,
     format: "pdfword",
+    processingTtlMs:
+      1000 *
+      (reconstruction
+        ? taskPolicy.queuedTaskSeconds
+        : taskPolicy.legacyQueuedTaskSeconds),
     capabilities: {
-      reconstruction: process.env.PDFWORD_LOCAL_V2 === "1",
+      reconstruction,
       stirlingNative:
         process.env.PDFWORD_LOCAL_V2 === "1" &&
         process.env.PDFWORD_NATIVE_ENGINE === "stirling" &&
@@ -36,7 +47,14 @@ export function createPdfWordService(options = {}) {
       process.env.PDFWORD_PUBLIC_ORIGIN ||
       "http://127.0.0.1:4280",
     execute:
-      options.execute || ((job, update) => runStirling(job, update, runner)),
+      options.execute ||
+      ((job, update) =>
+        runStirling(
+          job,
+          update,
+          runner,
+          reconstruction ? taskPolicy.workerGuardSeconds * 1000 : 300000,
+        )),
     validate:
       options.validate ||
       (async (file) => {

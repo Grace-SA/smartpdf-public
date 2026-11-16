@@ -73,6 +73,44 @@ class NativeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             check_coverage([dict(text="Page ONE 123"), dict(text="Page TWO 456")], ["Page ONE 123", "Page ONE 123"])
 
+    def test_proven_fully_clipped_number_is_excluded_without_rewriting_source(self):
+        source = self.root / "clipped-number.pdf"
+        fixture(source, content=(b'BT /F1 12 Tf 48 750 Td (Visible 123) Tj ET '
+                                 b'q 40 500 200 200 re W n '
+                                 b'BT /F1 12 Tf 350 600 Td (987654) Tj ET Q'))
+        original = source.read_bytes()
+        with pdf.PdfDocument(source) as document, closing(document[0]) as page:
+            with closing(page.render(scale=2)) as bitmap:
+                before = bitmap.to_pil().tobytes()
+        pages, reason = profile(source)
+        self.assertEqual(reason, "native-text")
+        self.assertNotIn("987654", pages[0]["text"])
+        self.assertIn("123", pages[0]["text"])
+        self.assertTrue(pages[0]["excludeClippedNumbers"])
+        check_coverage(pages, ["Visible 123"])
+        with self.assertRaisesRegex(ValueError, "exposed excluded"):
+            check_coverage(pages, ["Visible 123 987654"])
+        self.assertEqual(source.read_bytes(), original)
+        with pdf.PdfDocument(source) as document, closing(document[0]) as page:
+            with closing(page.render(scale=2)) as bitmap:
+                self.assertEqual(bitmap.to_pil().tobytes(), before)
+
+    def test_partial_clipping_and_non_numeric_hidden_content_keep_fallback(self):
+        source = self.root / "partial.pdf"
+        for text, x in [(b'987654', 230), (b'Secret', 350)]:
+            fixture(source, content=(b'BT /F1 12 Tf 48 750 Td (Visible 123) Tj ET '
+                                     b'q 40 500 200 200 re W n BT /F1 12 Tf '
+                                     + str(x).encode() + b' 600 Td (' + text + b') Tj ET Q'))
+            self.assertEqual(profile(source)[1], "clipped-native-text")
+
+    def test_clipping_geometry_alone_cannot_bypass_render_verification(self):
+        source = self.root / "unverified.pdf"
+        fixture(source, content=(b'BT /F1 12 Tf 48 750 Td (Visible 123) Tj ET '
+                                 b'q 40 500 200 200 re W n '
+                                 b'BT /F1 12 Tf 350 600 Td (987654) Tj ET Q'))
+        with patch("stirling_native.confirm_invisible_numbers", return_value=False):
+            self.assertEqual(profile(source)[1], "unverified-clipped-text")
+
     def test_hidden_text_and_known_columns_keep_existing_route(self):
         source = self.root / "source.pdf"
         fixture(source, content=b'BT /F1 12 Tf 3 Tr 48 750 Td (Invisible) Tj ET')

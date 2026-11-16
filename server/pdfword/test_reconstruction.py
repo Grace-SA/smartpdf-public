@@ -68,12 +68,15 @@ class ReconstructionTests(unittest.TestCase):
         from unittest.mock import Mock
         source = self.zero_width_source(size=36)
         ocr = Mock(last_engine="test")
-        ocr.recognize.return_value = [dict(kind="paragraph", bbox=[48, 30, 55, 43],
-                                         text="2", size=12, source="test")]
+        def recognize(image, *args, **kwargs):
+            self.assertTrue(image.exists())
+            return [dict(kind="paragraph", bbox=[48, 30, 55, 43],
+                         text="2", size=12, source="test")]
+        ocr.recognize.side_effect = recognize
         model = parse_pdf(source, self.root, ocr=ocr)
         ocr.recognize.assert_called_once()
         self.assertEqual(model["pages"][0]["blocks"][0]["text"], "2")
-        self.assertTrue((self.root / "page-0.png").exists())
+        self.assertFalse((self.root / "page-0.png").exists())
         self.assertTrue(any("OCR" in warning for warning in model["warnings"]))
         with self.assertRaisesRegex(Rejected, "OCR worker is not configured"):
             parse_pdf(source, self.root)
@@ -86,6 +89,49 @@ class ReconstructionTests(unittest.TestCase):
         with self.assertRaisesRegex(Rejected, "Content falls outside"):
             parse_pdf(self.zero_width_source(size=36), self.root, ocr=ocr)
         ocr.recognize.assert_called_once()
+
+    def test_orientation_conflict_is_visible_in_page_warnings(self):
+        from unittest.mock import Mock
+        ocr = Mock(last_engine="test")
+        ocr.recognize.return_value = [dict(kind="paragraph", bbox=[48, 30, 55, 43],
+                                         text="2", size=12, source="test",
+                                         ocr_orientation_review=True)]
+        model = parse_pdf(self.zero_width_source(size=36), self.root, ocr=ocr)
+        self.assertTrue(any("uncertain OCR rotation" in w for w in model["warnings"]))
+
+    def test_upright_ocr_canvas_drives_word_page_and_retained_image_crop(self):
+        from unittest.mock import Mock
+        from PIL import Image
+        ocr = Mock(last_engine="test", last_page_size=(792, 612))
+
+        def recognize(path, width, height, **kwargs):
+            self.assertEqual((width, height), (612, 792))
+            canvas = Image.new("RGB", (792, 612), "white")
+            canvas.paste("blue", (600, 100, 700, 200))
+            canvas.save(path)
+            return [dict(kind="paragraph", bbox=[30, 30, 700, 60],
+                         text="Wide corrected page", size=12, source="test"),
+                    dict(kind="image", bbox=[600, 100, 700, 200], source="test")]
+
+        ocr.recognize.side_effect = recognize
+        model = parse_pdf(self.zero_width_source(size=36), self.root, ocr=ocr)
+        page = model["pages"][0]
+        self.assertEqual((page["width"], page["height"]), (792, 612))
+        with Image.open(self.root / page["blocks"][1]["asset"]) as crop:
+            self.assertEqual(crop.size, (100, 100))
+            self.assertEqual(crop.getpixel((50, 50)), (0, 0, 255))
+        export_word(model, self.output, self.root)
+        section = Document(self.output).sections[0]
+        self.assertEqual((section.page_width.pt, section.page_height.pt), (792, 612))
+
+    def test_invalid_corrected_ocr_canvas_is_rejected(self):
+        from unittest.mock import Mock
+        for size in [(float("nan"), 612), (10, 612), (792,), (792, 612, 1)]:
+            with self.subTest(size=size):
+                ocr = Mock(last_engine="test", last_page_size=size)
+                ocr.recognize.return_value = []
+                with self.assertRaisesRegex(Rejected, "Invalid corrected page geometry"):
+                    parse_pdf(self.zero_width_source(size=36), self.root, ocr=ocr)
 
     def test_overlapping_ocr_list_regions_do_not_duplicate_lines(self):
         records = [

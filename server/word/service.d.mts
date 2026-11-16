@@ -34,6 +34,7 @@ export function createWordService(options?: {
   ) => Promise<(healthy?: boolean) => Promise<void>>;
   available?: () => boolean;
   capabilities?: Record<string, unknown>;
+  processingTtlMs?: number;
   onUnsafe?: () => void;
   execute?: (
     job: Task,

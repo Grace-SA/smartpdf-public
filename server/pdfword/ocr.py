@@ -245,6 +245,7 @@ class OCR:
         self.model_root = os.environ.get("PDFWORD_MODEL_ROOT")
         self.calls = 0
         self.last_engine = None
+        self.last_page_size = None
         self.processes = {}
 
     def close(self):
@@ -320,6 +321,7 @@ class OCR:
         if not self.python or not self.model_root:
             raise Rejected("This page needs OCR. The OCR worker is not configured.")
         self.last_engine = None
+        self.last_page_size = None
         if self.engine != "auto" or not (Path(self.model_root) / "u2").is_dir():
             engine = "oxr" if self.engine == "auto" else self.engine
             result = self._recognize(image, width, height, engine, 180)
@@ -432,4 +434,21 @@ class OCR:
                 if prepared.width * prepared.height > 16000000:
                     raise Rejected("Corrected image exceeds pixel budget.")
                 prepared.convert("RGB").save(image)
-        return normalize(data["pages"][0], width, height, engine)
+        quality_path = Path(str(output) + ".quality.json")
+        quality = {}
+        if quality_path.exists():
+            if quality_path.stat().st_size > 16384:
+                raise Rejected("Invalid image preparation report.")
+            quality = json.loads(quality_path.read_text())
+            if not isinstance(quality, dict):
+                raise Rejected("Invalid image preparation report.")
+        angle = quality.get("orientation_applied", 0)
+        if type(angle) is not int or angle not in (0, 90, 180, 270):
+            raise Rejected("Invalid corrected page orientation.")
+        if angle in (90, 270):
+            width, height = height, width
+        blocks = normalize(data["pages"][0], width, height, engine)
+        self.last_page_size = (width, height)
+        if blocks and quality.get("orientation_rejected"):
+            blocks[0]["ocr_orientation_review"] = True
+        return blocks

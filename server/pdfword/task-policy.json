@@ -1,0 +1,7 @@
+{
+  "localWorkerSeconds": 600,
+  "workerGuardSeconds": 630,
+  "queuedTaskSeconds": 1950,
+  "clientWaitSeconds": 1980,
+  "legacyQueuedTaskSeconds": 960
+}

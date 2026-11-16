@@ -7,6 +7,7 @@ import type { AddressInfo } from "node:net";
 import type { Task } from "../server/word/service.mjs";
 import { createPdfWordService } from "../server/pdfword/service.mjs";
 import { checkDocx } from "../server/pdfword/docx-check.mjs";
+import taskPolicy from "../server/pdfword/task-policy.json";
 
 const outputMime =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -32,12 +33,16 @@ afterEach(async () => {
   for (const fn of cleanup.splice(0)) await fn();
   vi.unstubAllEnvs();
 });
-async function setup(execute?: (job: Task) => Promise<void>) {
+async function setup(
+  execute?: (job: Task) => Promise<void>,
+  now?: () => number,
+) {
   const root = await mkdtemp(path.join(tmpdir(), "pdfword-synthetic-"));
   const origin = "http://127.0.0.1:4240";
   const service = await createPdfWordService({
     root,
     origin,
+    now,
     execute:
       execute ||
       (async (job: Task) => {
@@ -81,6 +86,61 @@ async function setup(execute?: (job: Task) => Promise<void>) {
   }
   return { service, root, url, api, cookie, wait };
 }
+
+it.each(["0", "1"])(
+  "expires bounded queued work using the mode-specific window (%s)",
+  async (mode) => {
+    vi.stubEnv("PDFWORD_LOCAL_V2", mode);
+    let time = Date.now();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const s = await setup(
+      async () => {
+        await gate;
+      },
+      () => time,
+    );
+    try {
+      const created = await (await s.api("/jobs", "POST")).json();
+      expect(
+        (await s.api(`/jobs/${created.id}/input`, "PUT", "synthetic")).status,
+      ).toBe(202);
+      const job = s.service.jobs.get(created.id)!;
+      const seconds =
+        mode === "1"
+          ? taskPolicy.queuedTaskSeconds
+          : taskPolicy.legacyQueuedTaskSeconds;
+      expect(job.expiresAt).toBe(time + seconds * 1000);
+      time += seconds * 1000 - 1;
+      await s.service.sweep();
+      expect(job.state).not.toBe("expired");
+      time += 2;
+      await s.service.sweep();
+      expect(job.state).toBe("expired");
+      expect((await s.api(`/jobs/${created.id}`)).status).toBe(410);
+    } finally {
+      release();
+    }
+  },
+);
+
+it("keeps the PDF reconstruction worker, three queue slots and client wait consistent", () => {
+  expect(taskPolicy.localWorkerSeconds).toBeGreaterThan(300);
+  expect(taskPolicy.localWorkerSeconds).toBeLessThanOrEqual(900);
+  expect(
+    taskPolicy.workerGuardSeconds - taskPolicy.localWorkerSeconds,
+  ).toBeGreaterThanOrEqual(30);
+  expect(taskPolicy.queuedTaskSeconds).toBeGreaterThanOrEqual(
+    3 * taskPolicy.workerGuardSeconds + 60,
+  );
+  expect(taskPolicy.clientWaitSeconds).toBeGreaterThan(
+    taskPolicy.queuedTaskSeconds,
+  );
+  expect(taskPolicy.clientWaitSeconds).toBeLessThan(3600);
+  expect(taskPolicy.legacyQueuedTaskSeconds).toBe(16 * 60);
+});
 
 it("advertises the native adapter only for an opted-in configured reconstruction service", async () => {
   vi.stubEnv("PDFWORD_LOCAL_V2", "1");

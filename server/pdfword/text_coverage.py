@@ -20,6 +20,8 @@ def check_coverage(expected, actual, *, numeric_tokens=True):
         numbers = lambda t: collections.Counter(re.findall(pattern, unicodedata.normalize("NFKC", t)))
         if score < 0.995 or numbers(source["text"]) - numbers(result):
             raise ValueError("Native output lost page text or numbers")
+        if source.get("excludeClippedNumbers") and numbers(result) != numbers(source["text"]):
+            raise ValueError("Native output exposed excluded numeric text")
         scores.append(round(score, 6))
     return scores
 

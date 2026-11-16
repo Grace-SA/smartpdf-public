@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 def main(request):
     from paddleocr import PaddleOCRVL
     from openai.resources.chat.completions import AsyncCompletions
+    from prepare_image import main as prepare
 
     original = AsyncCompletions.create
 
@@ -29,6 +30,7 @@ def main(request):
     ):
         raise ValueError("Paddle inference must use a local endpoint")
     root = Path(request["model_root"])
+    prepare(request)
     pipeline = PaddleOCRVL(
         pipeline_version="v1.5",
         device="cpu",
@@ -39,8 +41,8 @@ def main(request):
         vl_rec_max_concurrency=1,
         doc_orientation_classify_model_dir=str(root / "paddle-orientation"),
         doc_unwarping_model_dir=str(root / "paddle-unwarp"),
-        use_doc_orientation_classify=True,
-        use_doc_unwarping=os.environ.get("PDFWORD_PADDLE_UNWARP") == "1",
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
         use_chart_recognition=False,
         use_seal_recognition=False,
         use_ocr_for_image_block=False,

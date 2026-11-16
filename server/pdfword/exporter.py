@@ -234,6 +234,7 @@ def export_word(model, destination, assets):
     tables = {}
     text = []
     image_count = 0
+    active_margins = {"header": False, "footer": False}
     for i, page in enumerate(model["pages"]):
         body = [b for b in page["blocks"] if b["kind"] not in ("header", "footer")]
         continuing = bool(
@@ -261,6 +262,21 @@ def export_word(model, destination, assets):
         ) = Pt(margin)
         section.header_distance = section.footer_distance = Pt(min(16, margin / 2))
         set_columns(section)
+        if not continuing:
+            # Each source page owns its margins, including an explicitly empty
+            # margin. Later continuous column sections inherit this page only.
+            for edge in ("header", "footer"):
+                edge_blocks = [b for b in page["blocks"] if b["kind"] == edge]
+                owner = getattr(section, edge)
+                if edge_blocks or active_margins[edge]:
+                    owner.is_linked_to_previous = False
+                active_margins[edge] = bool(edge_blocks)
+                for block in edge_blocks:
+                    paragraph = (owner.paragraphs[0] if not owner.paragraphs[0].text
+                                 else owner.add_paragraph())
+                    run_text(paragraph, block["text"],
+                             {**block, "size": min(block.get("size", 9), 9)})
+                    text.append(block["text"])
         width = page["width"] - 2 * margin
         height = page["height"] - 2 * margin
         marked = False
@@ -288,21 +304,6 @@ def export_word(model, destination, assets):
                 width = page["width"] - 2 * margin
                 continue
             if kind in ("header", "footer"):
-                if continuing:
-                    continue
-                owner = getattr(section, kind)
-                owner.is_linked_to_previous = False
-                paragraph = (
-                    owner.paragraphs[0]
-                    if not owner.paragraphs[0].text
-                    else owner.add_paragraph()
-                )
-                run_text(
-                    paragraph,
-                    block["text"],
-                    {**block, "size": min(block.get("size", 9), 9)},
-                )
-                text.append(block["text"])
                 continue
             if kind == "table":
                 if column_break:

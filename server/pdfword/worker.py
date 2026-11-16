@@ -18,7 +18,7 @@ from exporter import export_word
 from ocr import OCR
 from math_export import unsupported
 from text_visibility import bright_text_visible, cosmetic_white_rectangles
-from text_geometry import glyph_geometry, ink_bounds, mapped_bounds, repair_zero_width_blocks
+from text_geometry import repair_unmapped_glyphs, glyph_geometry, ink_bounds, mapped_bounds, repair_zero_width_blocks
 from text_coverage import check_coverage, editable_block_text, editable_source_text
 
 
@@ -199,6 +199,7 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                         # PDFium uses floats while pdfplumber retains PDF decimal
                         # coordinates; their page edges can differ by micrometres.
                         p = p.crop((l, top, r, top + height), strict=False)
+                    p = repair_unmapped_glyphs(page, p)
                     try:
                         blocks = native_page(p, cosmetic_white_rectangles(page))
                         expected_text = editable_source_text(p, blocks)
@@ -268,6 +269,16 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     blocks = ocr.recognize(
                         full, width, height, complex_layout=bool(visible)
                     )
+                    corrected_size = getattr(ocr, "last_page_size", None)
+                    if isinstance(corrected_size, (tuple, list)):
+                        if len(corrected_size) != 2 or any(
+                            type(v) not in (int, float) or not math.isfinite(v)
+                            or not 72 <= v <= 1584 for v in corrected_size
+                        ):
+                            raise Rejected("Invalid corrected page geometry.")
+                        # Regions and retained image crops now use the upright
+                        # OCR canvas; Word must use the same physical page size.
+                        width, height = corrected_size
                     if getattr(ocr, "last_engine", None) == "u2-fallback":
                         model["warnings"].append(
                             f"Page {i+1}: alternative OCR recovered an incomplete result; review the page."
@@ -278,6 +289,10 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                         f"Page {i+1}: text was recognized with OCR; check names and numbers."
                     )
                 for j, block in enumerate(blocks):
+                    if block.get("ocr_orientation_review"):
+                        model["warnings"].append(
+                            f"Page {i+1}: uncertain OCR rotation was not applied; check the page direction."
+                        )
                     if block.get("ocr_overlap_review"):
                         model["warnings"].append(
                             f"Page {i+1}: overlapping OCR readings differ; check repeated text against the source."
@@ -331,6 +346,9 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                             stage="reconstructing",
                         )
                     )
+                # Retained figure/formula crops have separate asset files.
+                # Release full page rasters before processing the next page.
+                full.unlink(missing_ok=True)
                 textdoc.pages[i].close()
     repeated_margins(model["pages"])
     link_tables(model["pages"])

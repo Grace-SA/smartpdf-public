@@ -8,6 +8,7 @@ import { checkPdfLocally } from "./preflight";
 import { wordRequest as request } from "../word/errors";
 import "../word/word.css";
 import "./pdfword.css";
+import taskPolicy from "../../server/pdfword/task-policy.json";
 
 type Job = {
   id: string;
@@ -293,7 +294,12 @@ export function PdfWordPage() {
         else xhr.send(input);
       });
       setProgress(undefined);
-      const until = Date.now() + 16 * 60000;
+      const until =
+        Date.now() +
+        1000 *
+          (service?.capabilities?.reconstruction
+            ? taskPolicy.clientWaitSeconds
+            : taskPolicy.legacyQueuedTaskSeconds);
       while (!abort.signal.aborted) {
         if (Date.now() > until)
           throw Error(
@@ -579,7 +585,7 @@ export function PdfWordPage() {
               ? [
                   [
                     "Is my PDF uploaded?",
-                    "Only when you choose Upload and convert. The processing location is shown above. Temporary files expire within one hour and can be deleted sooner.",
+                    "Only when you choose Upload and convert. The processing location is shown above. Results expire one hour after conversion and can be deleted sooner.",
                   ],
                   [
                     "Which PDFs are supported?",

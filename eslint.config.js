@@ -54,7 +54,13 @@ export default ts.config(
     rules: { ...hooks.configs.recommended.rules },
   },
   {
-    files: ["scripts/*.mjs", "infra/**/*.mjs", "server/**/*.mjs", "*.js"],
+    files: [
+      "scripts/*.mjs",
+      "scripts/excel/*.mjs",
+      "infra/**/*.mjs",
+      "server/**/*.mjs",
+      "*.js",
+    ],
     languageOptions: {
       globals: {
         console: "readonly",

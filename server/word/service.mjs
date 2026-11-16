@@ -101,8 +101,10 @@ function linuxPath(value) {
     .replaceAll("\\", "/");
 }
 
-export function runStirling(job, update, adapter = runner) {
+export function runStirling(job, update, adapter = runner, timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 3600000)
+      throw new Error("Invalid conversion worker deadline");
     const windows = process.platform === "win32";
     const command = windows
       ? process.env.WORD_WSL || "C:/Program Files/WSL/wsl.exe"
@@ -155,7 +157,7 @@ export function runStirling(job, update, adapter = runner) {
           code: "WORKER_TIMEOUT",
         }),
       );
-    }, 300000);
+    }, timeoutMs);
     let buffer = "";
     let error;
     let cleanupFailed = false;
@@ -213,6 +215,15 @@ export function runStirling(job, update, adapter = runner) {
 export async function createWordService(options = {}) {
   const ppt = options.format === "ppt";
   const pdfword = options.format === "pdfword";
+  const processingTtlMs = pdfword
+    ? (options.processingTtlMs ?? 16 * 60000)
+    : 16 * 60000;
+  if (
+    !Number.isInteger(processingTtlMs) ||
+    processingTtlMs < 16 * 60000 ||
+    processingTtlMs > 3600000
+  )
+    throw new Error("Invalid processing expiry");
   const outputName = pdfword ? "output.docx" : "output.pdf";
   const outputMime = pdfword
     ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -752,8 +763,8 @@ export async function createWordService(options = {}) {
           if (!bytes) throw new Error("empty");
           if (job.state === "uploading") {
             job.state = "queued";
-            // Three bounded slots can each consume the 300-second worker guard.
-            job.expiresAt = now() + 16 * 60000;
+            // Include all three admitted slots, worker guards and cleanup margin.
+            job.expiresAt = now() + processingTtlMs;
             void drain();
           }
         } catch {

@@ -84,3 +84,65 @@ def repair_zero_width_blocks(page, blocks):
                        and bounds[1] >= y0-1 and bounds[3] <= y1+1]
             if len(matches) == 1:
                 block["bbox"] = matches[0]
+
+
+def repair_unmapped_glyphs(page, native):
+    """Recover unmapped native glyphs only from unique independent Unicode/ink boxes.
+
+    This returns a separate pdfplumber view. Ambiguous, rotated or cropped pages
+    remain untouched, so native extraction's CID guard can require OCR.
+    """
+    import re
+    import unicodedata
+    from contextlib import closing
+
+    if len(native.chars) > 60000:
+        return native
+    targets = [(i, c) for i, c in enumerate(native.chars)
+               if re.fullmatch(r"\(cid:\d+\)", c.get("text", ""))]
+    if not targets or page.get_rotation() or native.rotation:
+        return native
+    width, height = page.get_size()
+    expected = (0, 0, width, height)
+    if any(abs(a-b) > .01 for bounds in (page.get_bbox(), native.bbox)
+           for a, b in zip(bounds, expected)):
+        return native
+    if len(targets) > 256:
+        return native
+    with closing(page.get_textpage()) as textpage:
+        count = textpage.count_chars()
+        if count > 100000 or count * len(targets) > 1000000:
+            return native
+        glyphs = []
+        for index in range(count):
+            code = pdf.raw.FPDFText_GetUnicode(textpage, index)
+            char = chr(code) if 0 < code <= 0x10ffff else None
+            if char and char.isspace():
+                continue
+            l, b, r, t = textpage.get_charbox(index)
+            bounds = (l, height-t, r, height-b)
+            if (all(math.isfinite(v) for v in bounds)
+                    and bounds[0] < bounds[2] and bounds[1] < bounds[3]):
+                glyphs.append((index, char, bounds))
+    replacements, used = {}, set()
+    for index, target in targets:
+        bounds = [target[k] for k in ("x0", "top", "x1", "bottom")]
+        if (not all(math.isfinite(v) for v in bounds)
+                or bounds[0] >= bounds[2] or bounds[1] >= bounds[3]):
+            return native
+        matches = [(i, char) for i, char, b in glyphs
+                   if b[0] >= bounds[0]-.5 and b[1] >= bounds[1]-.5
+                   and b[2] <= bounds[2]+.5 and b[3] <= bounds[3]+.5]
+        if len(matches) != 1:
+            return native
+        glyph, char = matches[0]
+        if glyph in used or char is None or char == "\ufffd" or unicodedata.category(char)[0] in "CM":
+            return native
+        used.add(glyph)
+        replacements[index] = char
+    repaired = native.filter(lambda _: True)
+    # pdfplumber's own dedupe_chars uses this same independent object-cache view.
+    repaired._objects = dict(native.objects)
+    repaired._objects["char"] = [dict(c, text=replacements[i]) if i in replacements else c
+                                  for i, c in enumerate(native.chars)]
+    return repaired

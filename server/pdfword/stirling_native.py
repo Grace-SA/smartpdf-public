@@ -17,7 +17,8 @@ from layout import native_page
 from model import Rejected
 from stirling_build import CORE_SHA256, digest
 from stirling_package import normalize_package
-from text_visibility import bright_text_visible
+from text_visibility import (bright_text_visible, fully_clipped_number,
+                             confirm_invisible_numbers, text_without_objects)
 from text_geometry import glyph_geometry, ink_bounds
 from text_coverage import compact, check_coverage
 
@@ -44,7 +45,7 @@ def profile(source, cancel=None):
                 width, height = page.get_size()
                 if not all(math.isfinite(v) and 72 <= v <= 1584 for v in (width, height)):
                     return None, "page-dimensions"
-                visible, objects, bright = [], 0, []
+                visible, objects, bright, clipped_numbers = [], 0, [], []
                 has_images = False
                 for obj in page.get_objects(max_depth=8, textpage=textpage):
                     objects += 1
@@ -70,6 +71,9 @@ def profile(source, cancel=None):
                     if "\ufffd" in value or any(unicodedata.category(c) in ("Co", "Cn", "Cs") for c in value):
                         return None, "unreliable-text-layer"
                     bounds = ink_bounds(obj, geometry)
+                    if clips_text(obj, bounds) and fully_clipped_number(obj, geometry):
+                        clipped_numbers.append(obj)
+                        continue
                     l, b, r, t = bounds
                     crop = page.get_bbox()
                     if (clips_text(obj, bounds) or l < crop[0] - 0.5 or b < crop[1] - 0.5
@@ -80,10 +84,15 @@ def profile(source, cancel=None):
                     visible.append(value)
                 if not visible:
                     return None, "no-native-text"
+                if not confirm_invisible_numbers(page, clipped_numbers):
+                    return None, "unverified-clipped-text"
                 if not bright_text_visible(page, bright, geometry):
                     return None, "invisible-bright-text"
                 pages.append(dict(width=width, height=height,
-                                  text=textpage.get_text_range(), hasVisualContent=has_images))
+                                  text=(text_without_objects(textpage, clipped_numbers)
+                                        if clipped_numbers else textpage.get_text_range()),
+                                  excludeClippedNumbers=bool(clipped_numbers),
+                                  hasVisualContent=has_images))
     # Preserve established reading order and precise glyph-to-cell ownership where
     # the existing native reconstruction already knows the complete structure.
     with pdfplumber.open(source) as document:

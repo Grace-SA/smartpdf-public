@@ -454,6 +454,10 @@ def native_page(page, cosmetic_rectangles=()):
             bounds = (obj["x0"], obj["top"], obj["x1"], obj["bottom"])
             return not any(all(abs(a-b) < .01 for a, b in zip(bounds, box))
                            for box in cosmetic_rectangles)
+    # pdfminer uses a multi-character placeholder for an unmapped source glyph.
+    # A literal printed "(cid:123)" is several separate chars and is not rejected.
+    if any(re.fullmatch(r"\(cid:\d+\)", char.get("text", "")) for char in page.chars):
+        raise Rejected("Layout needs OCR.")
     if len(page.chars) > 60000:
         raise Rejected("Page exceeds text budget.")
     clean = page.dedupe_chars(tolerance=0.5)
