@@ -55,7 +55,7 @@ PYTHONPATH=src .venv/bin/python -m smartppt.worker
 
 可选的 `SMARTPPT_CJK_SERIF_FONT` 用于明确标识的宋体/明体及其拉丁字符，指向 [Noto 官方固定版本](https://github.com/notofonts/noto-cjk/blob/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/google-fonts/NotoSerifSC%5Bwght%5D.ttf)，文件 25,125,512 字节，SHA-256 `050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9`。部署准备阶段下载并校验，服务运行时不联网下载；未配置或文件缺失时保留原字体策略。仅固定哈希的字体允许嵌入，完整版权/OFL 随字体元数据保留。字体名称仍标明替代关系，不承诺宋体字形完全相同。
 
-最新验证及未通过项见 [本轮质量报告](../../../docs/pdf-to-ppt-quality-round8-11-2026-11-13.md)，前一阶段数据见[第六、七轮报告](../../../docs/pdf-to-ppt-quality-round6-7-2026-11-13.md)。本模块仍是独立验收服务，尚未达到通用上线标准。
+当前引擎、验证范围和合并验收记录见 [Stirling-only 验证记录](../../../docs/pdf-to-ppt-stirling-only.md)，历史质量基线见 [第八至十一轮报告](../../../docs/pdf-to-ppt-quality-round8-11-2026-11-13.md)，前一阶段数据见[第六、七轮报告](../../../docs/pdf-to-ppt-quality-round6-7-2026-11-13.md)。本模块仍是独立验收服务，尚未达到通用上线标准。
 
 ## 可选的 Unlimited OCR 2
 
