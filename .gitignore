@@ -58,6 +58,7 @@ private-samples/
 
 # Historical reports can contain personal file names and local paths.
 /docs/*
+!/docs/pdf-to-ppt-stirling-only.md
 !/docs/requirements-v1.1.md
 !/docs/dependency-licenses.json
 !/docs/repository-workflow.md
@@ -145,3 +146,10 @@ private-samples/
 /server/ppt/__pycache__/
 !/docs/ux/ppt-to-pdf-research-2026-11-05.md
 !/docs/ppt-report.md
+!/docs/pdf-to-ppt-stirling-evaluation.md
+!/docs/pdf-to-ppt-ocr-improvement.md
+!/docs/pdf-to-ppt-acceptance-2026-11-12.md
+!/server/pdf-to-ppt/
+!/docs/pdf-to-ppt-quality-round5-2026-11-13.md
+!/docs/pdf-to-ppt-quality-round6-7-2026-11-13.md
+!/docs/pdf-to-ppt-quality-round8-11-2026-11-13.md

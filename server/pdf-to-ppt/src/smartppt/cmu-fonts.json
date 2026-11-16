@@ -1,0 +1,61 @@
+{
+  "version": "0.7.0",
+  "url": "https://downloads.sourceforge.net/project/cm-unicode/cm-unicode/0.7.0/cm-unicode-0.7.0-ttf.tar.xz",
+  "archive_sha256": "2609c14450f42d0bcd40203900afcb1d693521a9b24a18c65e14b6b0585ff150",
+  "families": {
+    "CMU Serif": {
+      "regular": {
+        "file": "cmunrm.ttf",
+        "sha256": "cf2b28d1f36b680bc5851196c0da97d32ed564d8a703a9636f094092934babe6"
+      },
+      "bold": {
+        "file": "cmunbx.ttf",
+        "sha256": "82d500c7092f44de9de332b8ffdc16a6e7ce5b042832b7aa0203a6cea8f4f263"
+      },
+      "italic": {
+        "file": "cmunti.ttf",
+        "sha256": "0473b87393141b7ba311e8a590c568e8a82e29dc417574eb748c0093cce0911d"
+      },
+      "boldItalic": {
+        "file": "cmunbi.ttf",
+        "sha256": "fd4e94d71d778bbd334d7203227f20a9bf3c0ca98e3e58c0b2a0662cb4930972"
+      }
+    },
+    "CMU Sans Serif": {
+      "regular": {
+        "file": "cmunss.ttf",
+        "sha256": "e0760f13b32ff4ed789ef14badc8995c780e052195c2b57f5661a079d0ab9d52"
+      },
+      "bold": {
+        "file": "cmunsx.ttf",
+        "sha256": "ae1647047d75535a48dbcb9bd1346261e786354bd590af9d39340d85ed7097fb"
+      },
+      "italic": {
+        "file": "cmunsi.ttf",
+        "sha256": "ebb2bc739e7ab8b4a779f6194003976db1f58bbb2d63245159fc72fdb246e932"
+      },
+      "boldItalic": {
+        "file": "cmunso.ttf",
+        "sha256": "e7b8145ee770eacd540bfc7917bb128a6b782d2d7dadffdabea91ea007053e44"
+      }
+    },
+    "CMU Typewriter Text": {
+      "regular": {
+        "file": "cmuntt.ttf",
+        "sha256": "408c037330446e5f3225add1fcca336e2072c459deb39f5318390004a780de82"
+      },
+      "bold": {
+        "file": "cmuntb.ttf",
+        "sha256": "e488ed347793444ea4bbd187a0b9b8d7d09e48f96fd33437fe9e39b007425cbc"
+      },
+      "italic": {
+        "file": "cmunit.ttf",
+        "sha256": "b68ad49974986df848878c75aeb8af7a00d010367adf16381daaa430f8f0f867"
+      },
+      "boldItalic": {
+        "file": "cmuntx.ttf",
+        "sha256": "387f889e3c05510654f25fec0e40c5af312fd41858d68091bc9c09bfd7bf5575"
+      }
+    }
+  }
+}

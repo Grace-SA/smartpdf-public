@@ -1,0 +1,48 @@
+{
+  "repository": "mlx-community/Unlimited-OCR-2-bf16",
+  "revision": "850d1e483f5a82a0597f0a45aac31b07ba840df2",
+  "source": "https://huggingface.co/api/models/mlx-community/Unlimited-OCR-2-bf16/revision/850d1e483f5a82a0597f0a45aac31b07ba840df2?blobs=true",
+  "weight_evidence": "Pinned Hugging Face Git LFS SHA-256 metadata; weights not downloaded or inferred in this review. Configuration and tokenizer bytes independently fetched and Git-blob-verified.",
+  "files": {
+    "chat_template.jinja": {
+      "bytes": 224,
+      "sha256": "d46440846e0e99c13450d42551936db0624aa3fa390aee58be7c7463402d23a3"
+    },
+    "config.json": {
+      "bytes": 6685,
+      "sha256": "7b306db5229b0fee36059f778cc4538702223323054b56e40df822cde081ba6c"
+    },
+    "generation_config.json": {
+      "bytes": 111,
+      "sha256": "dcd0479f3a12e5e4413d956197f8a4074408e4901834b38c7e036519134e05af"
+    },
+    "model-00001-of-00002.safetensors": {
+      "bytes": 5247030176,
+      "sha256": "1dde15597f56b6416eca589a38759a253369456b5f1a7de72de65952bd7f225e"
+    },
+    "model-00002-of-00002.safetensors": {
+      "bytes": 1433142079,
+      "sha256": "c026f79748721d0b5a9ebb1dd5b2176802b396278e8dcd649598d377af7a4208"
+    },
+    "model.safetensors.index.json": {
+      "bytes": 67012,
+      "sha256": "59f74c904c97bbeb531bf11e15bee6a0377855faec88972c6ea67177b9626c86"
+    },
+    "processor_config.json": {
+      "bytes": 506,
+      "sha256": "7dc5f3c9aab298f845c5664f276eca5692153654b0082067c3f295585fc89712"
+    },
+    "special_tokens_map.json": {
+      "bytes": 549,
+      "sha256": "9e89493d7938e7710c524dbaff613c3648f0a018262417af78505128004e5cb4"
+    },
+    "tokenizer.json": {
+      "bytes": 9980278,
+      "sha256": "c55c165e32c5a67830362a53e1f548c8930dcc8469efa30ff3252a982799c589"
+    },
+    "tokenizer_config.json": {
+      "bytes": 567,
+      "sha256": "6835b63b4534bac1094a9f4e6b136b4569772b38b81d78cc773f3aa6e6b7aa47"
+    }
+  }
+}

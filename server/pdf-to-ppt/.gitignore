@@ -1,0 +1,9 @@
+.venv/
+.ocr-venv/
+.mlx-venv/
+.pytest_cache/
+.coverage
+var/
+ocr/models/
+ocr/.venv/
+reports/

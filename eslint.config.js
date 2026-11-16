@@ -7,6 +7,7 @@ export default ts.config(
       "dist/**",
       "dist-*/**",
       ".local-python/**",
+      ".research/**",
       "test-results-*/**",
       "node_modules/**",
       "public/**",
@@ -54,7 +55,13 @@ export default ts.config(
     rules: { ...hooks.configs.recommended.rules },
   },
   {
-    files: ["scripts/*.mjs", "infra/**/*.mjs", "server/**/*.mjs", "*.js"],
+    files: [
+      "scripts/*.mjs",
+      "scripts/excel/*.mjs",
+      "infra/**/*.mjs",
+      "server/**/*.mjs",
+      "*.js",
+    ],
     languageOptions: {
       globals: {
         console: "readonly",
@@ -67,6 +74,19 @@ export default ts.config(
         setInterval: "readonly",
         clearInterval: "readonly",
         AbortController: "readonly",
+      },
+    },
+  },
+  {
+    files: ["server/pdf-to-ppt/web/*.js"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        fetch: "readonly",
+        XMLHttpRequest: "readonly",
+        URL: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
       },
     },
   },
