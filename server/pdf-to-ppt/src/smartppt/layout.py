@@ -316,7 +316,8 @@ def merge_native_runs(page,runs):
                         separator=separator.replace('\r','').replace('\n','')
                         # Some producers position each glyph separately; PDFium
                         # reports artificial newlines even on a shared baseline.
-                        if had_break and not separator and b[0]-a[2]>size*.22:separator=' '
+                        adjacent_digits=previous['text'][-1:].isdigit() and run['text'][:1].isdigit()
+                        if had_break and not separator and not adjacent_digits and b[0]-a[2]>size*.22:separator=' '
                         previous['text']+=separator+run['text'];previous['end_index']=run['end_index']
                         previous['object_ids'].append(run['object_id'])
                         previous['box']=[min(a[0],b[0]),min(a[1],b[1]),max(a[2],b[2]),max(a[3],b[3])]

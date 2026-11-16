@@ -7,6 +7,25 @@ from pptx.util import Pt
 from smartppt.layout import extract_native,merge_native_runs,native_slide
 from smartppt.assisted import content_error
 from smartppt.quality import shape_text
+import pytest
+
+
+@pytest.mark.parametrize('separator,generated,expected', [
+    ('\r\n', True, '12'), (' ', False, '1 2'), (' ', True, '1 2'),
+])
+def test_generated_line_break_cannot_split_adjacent_digits(monkeypatch, separator, generated, expected):
+    class TextPage:
+        def close(self):pass
+        def get_text_range(self, start, count):return separator
+    class Page:
+        def get_textpage(self):return TextPage()
+    monkeypatch.setattr(pdfium.raw, 'FPDFText_GetUnicode', lambda tp,i:ord(separator[i-1]))
+    monkeypatch.setattr(pdfium.raw, 'FPDFText_IsGenerated', lambda tp,i:int(generated))
+    common=dict(size=12,font='Arial',source_font='Helvetica',source_base_font='Helvetica',
+                bold=False,italic=False,color=(0,0,0),baseline=50)
+    first=dict(common,text='1',index=0,end_index=1,object_id=1,box=[0,40,4,50])
+    second=dict(common,text='2',index=1+len(separator),end_index=2+len(separator),object_id=2,box=[8,40,14,50])
+    assert merge_native_runs(Page(),[first,second])[0]['text']==expected
 
 
 def fragmented(path):
