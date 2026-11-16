@@ -344,18 +344,24 @@ export function App() {
   function openPreview(file: File) {
     if (engine.current) setPreviewFile({ file, engine: engine.current });
   }
-  function updatePath(path: string) {
+  const approvedDocumentNavigation = useRef(false);
+  function commitLocalPath(path: string, reuse = false) {
     if (window.location.pathname === path) return true;
     try {
       window.history.pushState({}, "", path);
       return true;
     } catch (error) {
-      // WebKit limits rapid history updates. Complete a real navigation instead
-      // of leaving the URL and React's tool state out of sync.
       if (!(error instanceof DOMException) || error.name !== "SecurityError")
         throw error;
-      resourceController.current?.abort();
-      window.location.assign(path);
+      // WebKit limits rapid history writes. Commit the URL before changing
+      // the task, and use a normal navigation only after the leave guard.
+      if (reuse) {
+        setMessage("Please wait a moment, then choose the tool again.");
+      } else {
+        approvedDocumentNavigation.current = true;
+        resourceController.current?.abort();
+        window.location.assign(path);
+      }
       return false;
     }
   }
@@ -369,7 +375,7 @@ export function App() {
         window.location.assign(toolPaths[next]);
         return;
       }
-      if (next !== "read" && !updatePath(toolPaths[next])) return;
+      if (next !== "read" && !commitLocalPath(toolPaths[next], reuse)) return;
       if (!reuse) resetTask();
       completed.current = false;
       setTaskKey((key) => key + 1);
@@ -411,7 +417,7 @@ export function App() {
     guard(abandonToHome);
   }
   function abandonToHome() {
-    if (!updatePath("/")) return;
+    if (!commitLocalPath("/")) return;
     setPhotos(false);
     setCombining(false);
     setOrganizing(false);
@@ -573,6 +579,7 @@ export function App() {
   }
   useEffect(() => {
     const before = (event: BeforeUnloadEvent) => {
+      if (approvedDocumentNavigation.current) return;
       if (
         photoDirty ||
         hasGenerated ||

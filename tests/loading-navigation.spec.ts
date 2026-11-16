@@ -289,3 +289,55 @@ for (const destination of ["/split-pdf/", "/"]) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const destination of ["organize-pdf", "home"] as const) {
+  test(`history quota recovery keeps ${destination} content and URL together after the leave guard`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/images-to-pdf/");
+    await page
+      .locator("#photo-files")
+      .setInputFiles("docs/ux/public-synthetic-only/image-a.png");
+    await expect(page.locator(".photo-list>li")).toHaveCount(1);
+    await page.evaluate(() => {
+      history.pushState = () => {
+        throw new DOMException(
+          "Synthetic browser history quota",
+          "SecurityError",
+        );
+      };
+    });
+    const choose = () =>
+      destination === "home"
+        ? page.getByText("← All tools", { exact: true }).click()
+        : selectToolPath(page, destination);
+    await choose();
+    const dialog = page.getByRole("dialog", {
+      name: "Leave this task?",
+      exact: true,
+    });
+    await dialog
+      .getByRole("button", { name: "Keep editing", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/images-to-pdf\/$/);
+    await expect(page.locator(".photo-list>li")).toHaveCount(1);
+    await choose();
+    await dialog
+      .getByRole("button", { name: "Discard task and leave", exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      destination === "home" ? /\/$/ : /\/organize-pdf\/$/,
+    );
+    if (destination === "home")
+      await expect(page.locator(".tool-home")).toBeVisible();
+    else {
+      await expect(
+        page.getByRole("heading", { name: "Organize PDF", exact: true }),
+      ).toBeVisible();
+      await checkPicker(page, "pdf-file");
+    }
+    expect(errors).toEqual([]);
+  });
+}
