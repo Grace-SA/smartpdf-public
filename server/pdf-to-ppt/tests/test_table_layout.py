@@ -184,6 +184,29 @@ def test_horizontal_cell_translation_preserves_width_and_requires_every_word():
     assert not align_cell_horizontal(cell,words,observed)
 
 
+
+def test_cell_translation_leaves_room_for_office_save_rounding():
+    from pptx.enum.text import PP_ALIGN
+    from smartppt.table_layout import align_cell_horizontal
+    _,_,frame=table_slide();cell=frame.table.cell(0,0)
+    cell.text_frame.paragraphs[0].alignment=PP_ALIGN.LEFT
+    words=[{'shape':1,'bbox':(25,75,50,85)},{'shape':2,'bbox':(55,75,80,85)}]
+    observed={1:(24.98,75,48.66,85),2:(53.32,75,78.004,85)}
+    width=cell.margin_left+cell.margin_right;left=cell.margin_left
+    assert align_cell_horizontal(cell,words,observed)
+    shift=(cell.margin_left-left)/12700
+    assert cell.margin_left+cell.margin_right==width
+    # A small Office export rounding change must not push a formerly passing
+    # word outside the unchanged 2pt bound.
+    assert all(abs(observed[t['shape']][k]+shift-.03-t['bbox'][k])<1.1
+               for t in words for k in (0,2))
+    snapshot=cell._tc.xml
+    centered={i:(b[0]+shift,b[1],b[2]+shift,b[3]) for i,b in observed.items()}
+    assert not align_cell_horizontal(cell,words,centered)
+    # Opposing edge errors need width/shape correction, not endless shifts.
+    assert not align_cell_horizontal(cell,words,{1:(23.1,75,51.9,85),2:(53.1,75,81.9,85)})
+    assert cell._tc.xml==snapshot
+
 def test_cell_fonts_are_included_in_portable_font_inventory():
     prs,_,frame=table_slide();frame.table.cell(0,0).text_frame.paragraphs[0].runs[0].font.name='Noto Serif SC'
     frames=font_shapes(prs);assert len(frames)==1

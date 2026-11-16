@@ -236,10 +236,15 @@ def align_cell_horizontal(cell,words,observed):
         heights=[b[3]-b[1] for b in boxes]
         if min(heights)<=0 or min(b[3] for b in boxes)-max(b[1] for b in boxes)<min(heights)*.5:return False
     deltas=[observed[t['shape']][k]-t['bbox'][k] for t in words for k in (0,2)]
-    if not all(math.isfinite(v) for v in deltas) or max(abs(v) for v in deltas)<=2:return False
+    if not all(math.isfinite(v) for v in deltas):return False
+    error=max(abs(v) for v in deltas)
+    # Keep headroom for Office's coordinate rounding on save/reopen.
+    # The acceptance gate stays at 2pt; already well-centered cells stay put.
+    if error<=1.5:return False
     # A translation must bring every word edge within the existing 2pt gate.
     shift=-(min(deltas)+max(deltas))/2
     if abs(shift)>2 or any(abs(v+shift)>2 for v in deltas):return False
+    if error-max(abs(v+shift) for v in deltas)<.01:return False
     left=cell.margin_left+Pt(shift);right=cell.margin_right-Pt(shift)
     if min(left,right)<0:return False
     cell.margin_left=left;cell.margin_right=right
