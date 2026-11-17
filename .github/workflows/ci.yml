@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --target .local-python -r scripts/requirements-test.txt
-      - run: python -m pip install --target .pdfword-python -r server/pdfword/requirements-v2.txt
+      - run: python -m pip install --target .pdfword-python -r server/pdfword/requirements-test.txt
       - name: PDF to Word importer and editable-output checks
         run: python -B -m unittest discover -s server/pdfword -p 'test_*.py'
         env:

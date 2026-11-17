@@ -1,0 +1,5 @@
+# Synthetic reconstruction and OCR preprocessing tests; no model downloads.
+-r requirements-v2.txt
+numpy==2.3.5
+opencv-python-headless==4.11.0.86
+reportlab==4.4.9
