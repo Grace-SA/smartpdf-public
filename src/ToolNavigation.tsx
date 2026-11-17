@@ -70,22 +70,28 @@ export function ToolNavigation({
       ref={host}
       data-open={expanded}
       onKeyDown={(event) => {
-        if (!expanded || event.key !== "Tab") return;
-        // Keep the menu's tab order usable even when Safari's platform setting
-        // skips buttons/links in ordinary keyboard navigation. Do not trap focus.
-        const controls = [
+        if (
+          !expanded ||
+          event.key !== "Tab" ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey
+        )
+          return;
+        // WebKit can skip buttons and links in its native Tab order. Keep
+        // the open panel reachable, while leaving both boundaries untrapped.
+        const stops = [
           toggle.current,
-          ...Array.from(
-            host.current?.querySelectorAll<HTMLElement>(
-              ".tools-close, .tool-nav a[href]",
-            ) ?? [],
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            '.tool-nav button:not(:disabled), .tool-nav a[href]:not([aria-disabled="true"])',
           ),
         ];
-        const index = controls.indexOf(document.activeElement as HTMLElement);
-        const next = controls[index + (event.shiftKey ? -1 : 1)];
-        if (index >= 0 && next) {
+        const index = stops.indexOf(document.activeElement as HTMLElement);
+        if (index < 0) return;
+        const next = stops[index + (event.shiftKey ? -1 : 1)];
+        if (next) {
           event.preventDefault();
-          next.focus();
+          next.focus({ preventScroll: true });
         }
       }}
       onBlur={(event) => {

@@ -2,6 +2,33 @@ import { test, expect } from "@playwright/test";
 import { openTools } from "./navigation";
 import { publicTools, toolPaths, toolCatalog, toolGroups } from "../src/routes";
 
+test("open tools support forward and reverse Tab without trapping focus", async ({
+  page,
+}) => {
+  await page.goto("/split-pdf/");
+  const toggle = page.locator(".tools-toggle");
+  const close = page.getByRole("button", { name: "Close tools", exact: true });
+  const links = page.locator(".tool-nav a");
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(links.first()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(links.nth(1)).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(links.first()).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(toggle).toBeFocused();
+  await links.last().focus();
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".tool-nav")).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
 for (const width of [320, 390, 844, 1099, 1100, 1440, 1920]) {
   test(`${width}: grouped menu is bounded, stationary and fully reachable`, async ({
     page,

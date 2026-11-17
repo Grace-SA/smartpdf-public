@@ -1,0 +1,38 @@
+name: PDF to PPT experimental checks
+on:
+  push:
+    branches: ["feature/**", "fix/**", "development/pdf-to-ppt", "main"]
+    paths:
+      - "server/pdf-to-ppt/**"
+      - ".github/workflows/pdf-to-ppt-experimental.yml"
+  pull_request:
+    paths:
+      - "server/pdf-to-ppt/**"
+      - ".github/workflows/pdf-to-ppt-experimental.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install experimental API/test dependencies
+        run: python -m pip install -r server/pdf-to-ppt/requirements-lock.txt
+      - name: Prepare pinned open fonts for CJK regression
+        env:
+          SERIF_URL: https://raw.githubusercontent.com/notofonts/noto-cjk/985fa52c81c1d6692ccdd82bc3656e8fb932fd89/google-fonts/NotoSerifSC%5Bwght%5D.ttf
+        run: |
+          curl --fail --location --retry 3 "$SERIF_URL" -o "$RUNNER_TEMP/NotoSerifSC-variable.ttf"
+          echo "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9  $RUNNER_TEMP/NotoSerifSC-variable.ttf" | sha256sum --check
+          echo "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da  vendor-fonts/NotoSansSC-variable.ttf" | sha256sum --check
+          echo "SMARTPPT_CJK_FONT=$GITHUB_WORKSPACE/vendor-fonts/NotoSansSC-variable.ttf" >> "$GITHUB_ENV"
+          echo "SMARTPPT_CJK_SERIF_FONT=$RUNNER_TEMP/NotoSerifSC-variable.ttf" >> "$GITHUB_ENV"
+      - name: Synthetic unit and integration regression
+        working-directory: server/pdf-to-ppt
+        run: python -m pytest -q
+      # No real PDFs, corpus inventory, model weights or rendering artifacts enter CI.

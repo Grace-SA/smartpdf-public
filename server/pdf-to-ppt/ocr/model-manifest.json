@@ -1,0 +1,66 @@
+{
+  "models": [
+    {
+      "repository": "PaddlePaddle/PP-OCRv6_medium_rec_onnx",
+      "revision": "50c7eacafc52fa7bcf4194e8cd08e46f8558504b",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "file": "README.md",
+          "bytes": 16587,
+          "sha256": "ebce8d28436623ecab4952e24935aed86b3f8ecaf8f8736b92d5544f60fae1e9",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b/README.md"
+        },
+        {
+          "file": "inference.yml",
+          "bytes": 150580,
+          "sha256": "991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b/inference.yml"
+        },
+        {
+          "file": "inference.json",
+          "bytes": 221814,
+          "sha256": "0b2e25e990bd072f1bf77d59d67d508bce6c4bd44af6624e0fb27d6da2cd00e8",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b/inference.json"
+        },
+        {
+          "file": "inference.onnx",
+          "bytes": 76554979,
+          "sha256": "9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b/inference.onnx"
+        }
+      ]
+    },
+    {
+      "repository": "PaddlePaddle/PP-OCRv6_medium_det_onnx",
+      "revision": "61323801669c338b7891481ec7bac61ce31b576a",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "file": "README.md",
+          "bytes": 16089,
+          "sha256": "3046e3aab0194a2291bb3941c93b980c2b3a938a24a5be88354968f6d6187ac8",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a/README.md"
+        },
+        {
+          "file": "inference.yml",
+          "bytes": 886,
+          "sha256": "7298d5ead546584af2504d03355f881ac7a7bc0eb1e282d3e159277c1d0af871",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a/inference.yml"
+        },
+        {
+          "file": "inference.json",
+          "bytes": 312150,
+          "sha256": "0f1a7ec35da36173529c7a60238b7f7919e3831929c3f700ad90ad4896adecd5",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a/inference.json"
+        },
+        {
+          "file": "inference.onnx",
+          "bytes": 62032837,
+          "sha256": "eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1",
+          "url": "https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a/inference.onnx"
+        }
+      ]
+    }
+  ]
+}

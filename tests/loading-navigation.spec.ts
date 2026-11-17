@@ -92,6 +92,62 @@ async function navigate(page: Page, path: string) {
   await selectToolPath(page, path);
 }
 
+for (const [destination, failure] of ["organize-pdf", "home"].flatMap(
+  (destination) =>
+    ["quota", "silent"].map((failure) => [destination, failure] as const),
+)) {
+  test(`history ${failure} recovery keeps ${destination} content and URL together after the leave guard`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/images-to-pdf/");
+    await page
+      .locator("#photo-files")
+      .setInputFiles("docs/ux/public-synthetic-only/image-a.png");
+    await expect(page.locator(".photo-list>li")).toHaveCount(1);
+    await page.evaluate((failure) => {
+      history.pushState = () => {
+        if (failure === "quota")
+          throw new DOMException(
+            "Synthetic browser history quota",
+            "SecurityError",
+          );
+      };
+    }, failure);
+    const choose = () =>
+      destination === "home"
+        ? page.getByText("← All tools", { exact: true }).click()
+        : selectToolPath(page, destination);
+    await choose();
+    const dialog = page.getByRole("dialog", {
+      name: "Leave this task?",
+      exact: true,
+    });
+    await dialog
+      .getByRole("button", { name: "Keep editing", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/images-to-pdf\/$/);
+    await expect(page.locator(".photo-list>li")).toHaveCount(1);
+    await choose();
+    await dialog
+      .getByRole("button", { name: "Discard task and leave", exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      destination === "home" ? /\/$/ : /\/organize-pdf\/$/,
+    );
+    if (destination === "home")
+      await expect(page.locator(".tool-home")).toBeVisible();
+    else {
+      await expect(
+        page.getByRole("heading", { name: "Organize PDF", exact: true }),
+      ).toBeVisible();
+      await checkPicker(page, "pdf-file");
+    }
+    expect(errors).toEqual([]);
+  });
+}
+
 for (const width of [390, 1280]) {
   test(`${width}: every tool-to-tool transition keeps the real picker responsive`, async ({
     page,
@@ -269,3 +325,27 @@ test("back from a completed task returns home and forward opens a fresh picker w
     "completed-navigation",
   );
 });
+
+for (const destination of ["/split-pdf/", "/"]) {
+  test(`history rate limit safely navigates to ${destination}`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/images-to-pdf/");
+    await expect(page.locator("#photo-files")).toBeVisible();
+    await page.evaluate(() => {
+      window.history.pushState = () => {
+        throw new DOMException("Synthetic history rate limit", "SecurityError");
+      };
+    });
+    if (destination === "/")
+      await page.getByText("← All tools", { exact: true }).click();
+    else await selectToolPath(page, "split-pdf");
+    await expect(page).toHaveURL(new RegExp(`${destination}$`));
+    if (destination === "/")
+      await expect(page.locator(".tool-home")).toBeVisible();
+    else await checkPicker(page, "pdf-file");
+    expect(errors).toEqual([]);
+  });
+}

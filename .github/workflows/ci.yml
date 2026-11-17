@@ -113,7 +113,9 @@ jobs:
           docker run -d --name pdf-excel-smoke --network none --read-only --memory 4g --cpus 2 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=768m,mode=1777 -v "$PWD/.pdf-excel-fixtures:/fixtures:ro" smartpdf-excel:test
           trap 'docker rm -f pdf-excel-smoke' EXIT
           docker exec -i pdf-excel-smoke node --input-type=module < scripts/pdf-to-excel/container-smoke.mjs
-          docker cp pdf-excel-smoke:/tmp/smoke-workbooks .pdf-excel-container-output
+          # docker cp cannot read the container's tmpfs mount; stream from inside it.
+          mkdir -p .pdf-excel-container-output
+          docker exec pdf-excel-smoke tar -C /tmp/smoke-workbooks -cf - . | tar -C .pdf-excel-container-output -xf -
           .pdf-excel-env/bin/python scripts/pdf-to-excel/verify-container.py .pdf-excel-fixtures .pdf-excel-container-output
       - name: Build publication scope
         run: pnpm build
