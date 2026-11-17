@@ -27,7 +27,8 @@ describe("public tool routes and search metadata", () => {
           : tool === "numbers" ||
               tool === "unlock" ||
               tool === "excel" ||
-              tool === "pdfword"
+              tool === "pdfword" ||
+              tool === "pdfExcel"
             ? 3
             : 2,
       );

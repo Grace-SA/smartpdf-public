@@ -1,0 +1,187 @@
+{
+  "repository": "camelot-dev/camelot",
+  "commit": "92777b852e00933a5c4b9ba642601784604356cd",
+  "selection": "EU007\u2013012 and US007\u2013012 fixed before inspecting conversion quality; exact eu-009 and us-011 PDF/reference pairs unavailable, excluded without substitution before conversion; research only, do not redistribute inputs",
+  "files": [
+    {
+      "id": "eu-007",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-007.pdf",
+        "gitBlobSha1": "46cf9b6e39e87fa4915be4a05bfab5ef48a6ddb1"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-007-str.xml",
+        "gitBlobSha1": "c9d5b40c14007a6fd981ba213e7442cbfdb71c79"
+      }
+    },
+    {
+      "id": "eu-008",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-008.pdf",
+        "gitBlobSha1": "533a16c5ff9aa2a2f7e3b019f37bda6120acf179"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-008-str.xml",
+        "gitBlobSha1": "0b50733f776e7187ebe76f50abe28de6106ffc03"
+      }
+    },
+    {
+      "id": "eu-010",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-010.pdf",
+        "gitBlobSha1": "76f113e1e9aaa95da1eebf03919dd64df8ee25d1"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-010-str.xml",
+        "gitBlobSha1": "a5b5f3172cc58cab28c7271258763962413e0307"
+      }
+    },
+    {
+      "id": "eu-011",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-011.pdf",
+        "gitBlobSha1": "c18929d2b624acb2b89b3f7dcdd85d966e03bbe6"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-011-str.xml",
+        "gitBlobSha1": "744f2f9568599be1314c20a51352979e1d85e057"
+      }
+    },
+    {
+      "id": "eu-012",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-012.pdf",
+        "gitBlobSha1": "f614de46e273a35866123826bcc27b642cb5d992"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-012-str.xml",
+        "gitBlobSha1": "1eca2428bf95222bfa8569074dbcf40bb33848a2"
+      }
+    },
+    {
+      "id": "us-007",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-007.pdf",
+        "gitBlobSha1": "c2fa93d83c01ee312cd9dd414c45829452672a27"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-007-str.xml",
+        "gitBlobSha1": "228b5cfa58c59d2909ee67245eebcc3a81d59721"
+      }
+    },
+    {
+      "id": "us-008",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-008.pdf",
+        "gitBlobSha1": "e2aaad38f578e82ad86bf04a03f65765303818f5"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-008-str.xml",
+        "gitBlobSha1": "60f6e54078578db6055f3446ac4774ab8ec0d3bc"
+      }
+    },
+    {
+      "id": "us-009",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-009.pdf",
+        "gitBlobSha1": "ea4ab573e5b71a8b864e3f186ee488a797f19a05"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-009-str.xml",
+        "gitBlobSha1": "d0659680b8db384353f59b79bdf3647b799f025e"
+      }
+    },
+    {
+      "id": "us-010",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-010.pdf",
+        "gitBlobSha1": "d39e02e5de7c8825627a17d2ade2c05187188848"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-010-str.xml",
+        "gitBlobSha1": "32f83dfc74c75ccced0e0d841e35eb4fb7162e63"
+      }
+    },
+    {
+      "id": "us-012",
+      "pdf": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-012.pdf",
+        "gitBlobSha1": "f9c4e6be5681d772aaf7a731d769b2678bfb1aa2"
+      },
+      "reference": {
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-012-str.xml",
+        "gitBlobSha1": "edfbc0d64f279778d81791e12e14384888527a2b"
+      }
+    }
+  ],
+  "preselection": {
+    "selectedBeforeQualityInspection": true,
+    "originalSelection": [
+      "eu-007",
+      "eu-008",
+      "eu-009",
+      "eu-010",
+      "eu-011",
+      "eu-012",
+      "us-007",
+      "us-008",
+      "us-009",
+      "us-010",
+      "us-011",
+      "us-012"
+    ],
+    "missingExactPairs": [
+      "eu-009",
+      "us-011"
+    ],
+    "reason": "Canonical .pdf and -str.xml absent in pinned GitHub directory metadata; no suffix substitution or conversion-based exclusion",
+    "directorySources": [
+      "https://github.com/camelot-dev/camelot/tree/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-eu",
+      "https://github.com/camelot-dev/camelot/tree/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-us"
+    ],
+    "observedAlternativeMetadata": [
+      {
+        "name": "eu-009a-str.xml",
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-009a-str.xml",
+        "gitBlobSha1": "9a21fab58fc2b2214ae4dfec734ad919dfe9d708",
+        "size": 11590,
+        "url": "https://github.com/camelot-dev/camelot/blob/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-009a-str.xml"
+      },
+      {
+        "name": "eu-009a.pdf",
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-009a.pdf",
+        "gitBlobSha1": "049449c3863c649ed96c02d8f8eac149a2d42157",
+        "size": 39525,
+        "url": "https://github.com/camelot-dev/camelot/blob/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-009a.pdf"
+      },
+      {
+        "name": "eu-009b-str.xml",
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-009b-str.xml",
+        "gitBlobSha1": "835556526462d000eb09583b932714c5320dc4fb",
+        "size": 11194,
+        "url": "https://github.com/camelot-dev/camelot/blob/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-eu/eu-009b-str.xml"
+      },
+      {
+        "name": "us-011a-str.xml",
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-011a-str.xml",
+        "gitBlobSha1": "fa833e10d8f492cdd4be9f047a12e5c6ee303afc",
+        "size": 10964,
+        "url": "https://github.com/camelot-dev/camelot/blob/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-011a-str.xml"
+      },
+      {
+        "name": "us-011a.pdf",
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-011a.pdf",
+        "gitBlobSha1": "bd3d80c275874716c1db242cad55abb44f6e9e2a",
+        "size": 52124,
+        "url": "https://github.com/camelot-dev/camelot/blob/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-011a.pdf"
+      },
+      {
+        "name": "us-011b-str.xml",
+        "path": "tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-011b-str.xml",
+        "gitBlobSha1": "650fe0661ceb7a595cdad64aaf7c825d32a19590",
+        "size": 10436,
+        "url": "https://github.com/camelot-dev/camelot/blob/92777b852e00933a5c4b9ba642601784604356cd/tests/files/tabula/icdar2013-dataset/competition-dataset-us/us-011b-str.xml"
+      }
+    ]
+  }
+}

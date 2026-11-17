@@ -46,6 +46,33 @@ export const seoPages: Record<PublicTool, SeoPage> = {
       ],
     ],
   },
+  pdfExcel: {
+    title: "PDF to Excel - Editable Tables | Smart PDF",
+    description:
+      "Extract PDF tables into editable Excel worksheets with self-hosted server processing.",
+    keywords: "pdf to excel, pdf to xlsx",
+    heading: "PDF to Excel",
+    intro: "Convert tables, check the result and download Excel.",
+    steps: [
+      "Choose one PDF.",
+      "Choose pages and upload to convert.",
+      "Review tables and download Excel.",
+    ],
+    faq: [
+      [
+        "Is my PDF uploaded?",
+        "Only when you start conversion. Temporary files expire within 15 minutes.",
+      ],
+      [
+        "Will every page look the same?",
+        "Detected tables retain rows, columns and supported merged cells. Images, charts and non-table paragraphs are excluded. Check scans and complex layouts against the source.",
+      ],
+      [
+        "Are numbers changed?",
+        "Values are stored as text to preserve leading zeros and long numbers. Original formulas cannot be recovered from a PDF.",
+      ],
+    ],
+  },
   ppt: {
     title: "PowerPoint to PDF - PPTX Conversion | Smart PDF",
     description:

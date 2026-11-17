@@ -16,6 +16,13 @@ export const toolCatalog = {
       "Turn simple text PDFs into editable Word documents using cloud processing.",
     group: "Convert PDF",
   },
+  pdfExcel: {
+    path: "/pdf-to-excel/",
+    title: "PDF to Excel",
+    label: "PDF to Excel",
+    summary: "Extract PDF tables into Excel with self-hosted processing.",
+    group: "Convert PDF",
+  },
   ppt: {
     path: "/powerpoint-to-pdf/",
     title: "PowerPoint to PDF",
@@ -130,11 +137,13 @@ export const publicTools = Object.keys(toolCatalog) as PublicTool[];
 export const enabledTools = (
   includeProtect = false,
   includeExcel = false,
+  includePdfExcel = false,
 ): PublicTool[] =>
   publicTools.filter(
     (tool) =>
       (includeProtect || tool !== "protect") &&
-      (includeExcel || tool !== "excel"),
+      (includeExcel || tool !== "excel") &&
+      (includePdfExcel || tool !== "pdfExcel"),
   );
 export const shortcutTools: PublicTool[] = ["combine", "split", "compress"];
 export const toolPaths = Object.fromEntries(

@@ -9,5 +9,7 @@ it("publishes Word and Unlock while Protect remains in review", () => {
   expect(toolFromPath("/protect-pdf/", published)).toBeNull();
   expect(published).not.toContain("excel");
   expect(toolFromPath("/excel-to-pdf/", published)).toBeNull();
-  expect(enabledTools(true, true)).toEqual(publicTools);
+  expect(published).not.toContain("pdfExcel");
+  expect(toolFromPath("/pdf-to-excel/", published)).toBeNull();
+  expect(enabledTools(true, true, true)).toEqual(publicTools);
 });

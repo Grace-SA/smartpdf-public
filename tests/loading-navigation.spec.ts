@@ -8,23 +8,29 @@ const tools = publicTools.map(
       toolCatalog[tool].path.replace(/^\//, "").replace(/\/$/, ""),
       tool === "pdfword"
         ? "pdfword-file"
-        : tool === "excel"
-          ? "excel-file"
-          : tool === "word"
-            ? "word-file"
-            : tool === "ppt"
-              ? "ppt-file"
-              : tool === "combine"
-                ? "combine-files"
-                : tool === "photos"
-                  ? "photo-files"
-                  : "pdf-file",
+        : tool === "pdfExcel"
+          ? "pdf-excel-input"
+          : tool === "excel"
+            ? "excel-file"
+            : tool === "word"
+              ? "word-file"
+              : tool === "ppt"
+                ? "ppt-file"
+                : tool === "combine"
+                  ? "combine-files"
+                  : tool === "photos"
+                    ? "photo-files"
+                    : "pdf-file",
     ] as const,
 );
 const cloudTools = tools.filter(([path]) =>
-  ["word-to-pdf", "powerpoint-to-pdf", "excel-to-pdf", "pdf-to-word"].includes(
-    path,
-  ),
+  [
+    "word-to-pdf",
+    "powerpoint-to-pdf",
+    "excel-to-pdf",
+    "pdf-to-word",
+    "pdf-to-excel",
+  ].includes(path),
 );
 const localTools = tools.filter(
   ([path]) => !cloudTools.some(([cloud]) => path === cloud),
@@ -92,8 +98,11 @@ async function navigate(page: Page, path: string) {
   await selectToolPath(page, path);
 }
 
-for (const destination of ["organize-pdf", "home"] as const) {
-  test(`history quota recovery keeps ${destination} content and URL together after the leave guard`, async ({
+for (const [destination, failure] of ["organize-pdf", "home"].flatMap(
+  (destination) =>
+    ["quota", "silent"].map((failure) => [destination, failure] as const),
+)) {
+  test(`history ${failure} recovery keeps ${destination} content and URL together after the leave guard`, async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -103,14 +112,15 @@ for (const destination of ["organize-pdf", "home"] as const) {
       .locator("#photo-files")
       .setInputFiles("docs/ux/public-synthetic-only/image-a.png");
     await expect(page.locator(".photo-list>li")).toHaveCount(1);
-    await page.evaluate(() => {
+    await page.evaluate((failure) => {
       history.pushState = () => {
-        throw new DOMException(
-          "Synthetic browser history quota",
-          "SecurityError",
-        );
+        if (failure === "quota")
+          throw new DOMException(
+            "Synthetic browser history quota",
+            "SecurityError",
+          );
       };
-    });
+    }, failure);
     const choose = () =>
       destination === "home"
         ? page.getByText("← All tools", { exact: true }).click()

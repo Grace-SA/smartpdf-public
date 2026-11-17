@@ -10,6 +10,7 @@ const events = new Set([
 ]);
 const tools = new Set([
   "pdfword",
+  "pdfExcel",
   "ppt",
   "word",
   "excel",

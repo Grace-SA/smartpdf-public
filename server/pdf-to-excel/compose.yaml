@@ -1,0 +1,19 @@
+services:
+  pdf-excel:
+    build:
+      context: ../..
+      dockerfile: server/pdf-to-excel/Dockerfile
+    ports: ["127.0.0.1:4290:4290"]
+    environment:
+      PDF_EXCEL_ORIGIN: ${PDF_EXCEL_ORIGIN:?Set the public HTTPS origin}
+      PDF_EXCEL_REGION: ${PDF_EXCEL_REGION:?Set the actual processing location}
+      STIRLING_URL: ${STIRLING_URL:-}
+      STIRLING_API_KEY: ${STIRLING_API_KEY:-}
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=768m,mode=1777"]
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped

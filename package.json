@@ -24,7 +24,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare:assets": "node scripts/prepare-assets.mjs",
-    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm test:e2e"
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && pnpm test:e2e",
+    "pdf-excel:serve": "node server/pdf-to-excel/service.mjs"
   },
   "dependencies": {
     "@neslinesli93/qpdf-wasm": "0.3.0",

@@ -1,7 +1,7 @@
 name: Smart PDF checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "fix/**", "development/pdf-to-excel"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -64,11 +64,24 @@ jobs:
         run: python -B scripts/verify-protect-output.py
         env:
           PYTHONPATH: .local-python
+      - name: PDF to Excel real conversion tests
+        run: |
+          python -m venv .pdf-excel-env
+          .pdf-excel-env/bin/pip install torch==2.15.0 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
+          .pdf-excel-env/bin/pip install -r server/pdf-to-excel/requirements-lock.txt reportlab==4.4.9
+          .pdf-excel-env/bin/pip check
+          .pdf-excel-env/bin/python scripts/pdf-to-excel/prepare-models.py .pdf-excel-models
+          .pdf-excel-env/bin/python -m unittest discover -s scripts/pdf-to-excel -p 'test_*.py'
+          .pdf-excel-env/bin/python scripts/pdf-to-excel/fixtures.py .pdf-excel-fixtures
+        env:
+          PDF_EXCEL_MODELS: .pdf-excel-models
+          HF_HUB_DISABLE_TELEMETRY: "1"
       - name: Build all public pages
         run: pnpm build
         env:
           VITE_ENABLE_PROTECT: "true"
           VITE_ENABLE_EXCEL: "true"
+          VITE_ENABLE_PDF_EXCEL: "true"
       - name: Select Ubuntu primary mirror for browser dependencies
         run: |
           # The runner's Azure mirror can stall while downloading browsers'
@@ -91,6 +104,24 @@ jobs:
           DEBUG: pw:browser
       - name: Browser regression across all tools
         run: pnpm exec playwright test --config playwright.github.config.ts --project ${{ matrix.browser }}
+      - name: PDF to Excel browser smoke
+        run: pnpm exec playwright test --config playwright.pdf-excel.config.ts
+        env:
+          PDF_EXCEL_PYTHON: .pdf-excel-env/bin/python
+          PDF_EXCEL_MODELS: .pdf-excel-models
+          PDF_EXCEL_OCR: "true"
+          PDF_EXCEL_BROWSER: ${{ matrix.browser }}
+      - name: Build and smoke-test isolated PDF to Excel container
+        if: matrix.browser == 'chromium'
+        run: |
+          docker build -f server/pdf-to-excel/Dockerfile -t smartpdf-excel:test .
+          docker run -d --name pdf-excel-smoke --network none --read-only --memory 4g --cpus 2 --pids-limit 128 --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp:rw,noexec,nosuid,size=768m,mode=1777 -v "$PWD/.pdf-excel-fixtures:/fixtures:ro" smartpdf-excel:test
+          trap 'docker rm -f pdf-excel-smoke' EXIT
+          docker exec -i pdf-excel-smoke node --input-type=module < scripts/pdf-to-excel/container-smoke.mjs
+          # docker cp cannot read the container's tmpfs mount; stream from inside it.
+          mkdir -p .pdf-excel-container-output
+          docker exec pdf-excel-smoke tar -C /tmp/smoke-workbooks -cf - . | tar -C .pdf-excel-container-output -xf -
+          .pdf-excel-env/bin/python scripts/pdf-to-excel/verify-container.py .pdf-excel-fixtures .pdf-excel-container-output
       - name: Build publication scope
         run: pnpm build
         env:
@@ -108,5 +139,7 @@ jobs:
             docs/evidence/github-published-browser.json
             test-results-published/**/error-context.md
             test-results-github/**/error-context.md
+            test-results/**/error-context.md
+            test-results-pdf-excel/report.json
           retention-days: 3
           if-no-files-found: ignore

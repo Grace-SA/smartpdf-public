@@ -150,6 +150,7 @@ const toolTitles = {
   ...Object.fromEntries(publicTools.map((id) => [id, toolCatalog[id].title])),
 } as Record<Tool, string>;
 const toolTaglines: Record<Tool, string> = {
+  pdfExcel: "Extract PDF tables into Excel using server processing.",
   ppt: "Convert visible PPTX slides using cloud processing.",
   pdfword: "Turn simple text PDFs into editable Word documents.",
   excel: "Choose worksheets and convert an XLSX using cloud processing.",
@@ -350,21 +351,21 @@ export function App() {
     if (window.location.pathname === path) return true;
     try {
       window.history.pushState({}, "", path);
-      return true;
+      if (window.location.pathname === path) return true;
     } catch (error) {
       if (!(error instanceof DOMException) || error.name !== "SecurityError")
         throw error;
-      // WebKit limits rapid history writes. Commit the URL before changing
-      // the task, and use a normal navigation only after the leave guard.
-      if (reuse) {
-        setMessage("Please wait a moment, then choose the tool again.");
-      } else {
-        approvedDocumentNavigation.current = true;
-        resourceController.current?.abort();
-        window.location.assign(path);
-      }
-      return false;
     }
+    // WebKit may reject or silently ignore rapid history writes. Commit the
+    // URL before changing the task; preserve reusable data if navigation fails.
+    if (reuse) {
+      setMessage("Please wait a moment, then choose the tool again.");
+    } else {
+      approvedDocumentNavigation.current = true;
+      resourceController.current?.abort();
+      window.location.assign(path);
+    }
+    return false;
   }
   function chooseTool(next: Tool, reuse = false) {
     if (job.current || photoBusy || packing) return;
@@ -373,7 +374,8 @@ export function App() {
         next === "word" ||
         next === "ppt" ||
         next === "excel" ||
-        next === "pdfword"
+        next === "pdfword" ||
+        next === "pdfExcel"
       ) {
         // React cleanup does not run when replacing this document. Stop pending
         // blob workers while their document and error handlers still exist.
@@ -1669,6 +1671,7 @@ export function App() {
               <Completion
                 title={
                   {
+                    pdfExcel: "Your Excel is ready",
                     ppt: "Your PDF is ready",
                     pdfword: "Your Word document is ready",
                     word: "Your PDF is ready",

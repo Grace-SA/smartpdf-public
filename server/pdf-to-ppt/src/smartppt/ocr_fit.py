@@ -80,15 +80,27 @@ def fit_shape(shape,desired,observed):
     return fit_local(shape,d,a)
 
 
-def fit_local(shape,d,a):
+def fit_local(shape,d,a,*,stabilize=True):
     cx=(shape.left+shape.width/2)/12700;cy=(shape.top+shape.height/2)/12700;angle=shape.rotation
     dw,dh=d[2]-d[0],d[3]-d[1];aw,ah=a[2]-a[0],a[3]-a[1]
     if min(dw,dh,aw,ah)<=0:return False
     ratio=dh/ah
     if not .8<=ratio<=1.2 or not .8<=dw/(aw*ratio)<=1.2:return False
-    run=shape.text_frame.paragraphs[0].runs[0];size=run.font.size.pt*ratio
+    # Deskewed ink is normally sampled at 2px/pt. A one-pixel height change
+    # must not repeatedly resize a long line and undo its width correction.
+    # The extra .001pt covers serialized rotation rounding, not a wider final
+    # acceptance threshold. Larger height errors still use optical scaling.
+    stable_height=stabilize and angle not in (0,90,180,270) and abs(dh-ah)<=.501
+    run=shape.text_frame.paragraphs[0].runs[0]
     props=run._r.get_or_add_rPr()
-    spacing=int(props.get('spc','0'))/100*ratio+(dw-aw*ratio)/max(1,len(shape.text)-1)
+    previous_spacing=int(props.get('spc','0'))/100;gaps=max(1,len(shape.text)-1)
+    stable_spacing=previous_spacing+(dw-aw)/gaps
+    # An infeasible stable-height alternative must not reject an otherwise
+    # valid optical fit. Keep the original ratio in that case.
+    if stable_height and .8<=dw/aw<=1.2 and abs(stable_spacing)<=run.font.size.pt*.2:
+        ratio=1.0
+    size=run.font.size.pt*ratio
+    spacing=previous_spacing*ratio+(dw-aw*ratio)/gaps
     if abs(spacing)>size*.2:return False
     x=d[0]-(a[0]-shape.left/12700)*ratio;y=d[1]-(a[1]-shape.top/12700)*ratio
     width=dw+size;height=size*1.8
@@ -178,6 +190,13 @@ def raster_bounds(page,slide,targets,observed):
     return out
 
 
+def refinement_tolerance(shape,row):
+    # Reserve one 2px/pt sampling pixel for skewed output re-export. Keep
+    # tighter per-line targets and all quarter-turn fitting behavior intact.
+    requested=row.get('refinement_tolerance_points',2)
+    return min(requested,1.5) if shape.rotation not in (0,90,180,270) else requested
+
+
 def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
     with tempfile.TemporaryDirectory(prefix='smartppt-scan-fit-',dir=Path(source).parent) as tmp:
         tmp=Path(tmp);before=tmp/'before.pptx';candidate=tmp/'candidate.pptx';shutil.copyfile(target,before)
@@ -202,9 +221,11 @@ def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
                         # Already aligned glyphs need no second fit. Moving them
                         # can add raster noise and reject a useful correction
                         # elsewhere on the same page.
-                        if n not in raster or max(abs(a-b) for a,b in zip(*raster[n]))<=row.get('refinement_tolerance_points',2):continue
+                        if n not in raster or max(abs(a-b) for a,b in zip(*raster[n]))<=refinement_tolerance(shape,row):continue
                         fitted=fit_local(shape,*raster[n])
-                    else:fitted=fit_shape(shape,row['bbox'],observed[n]) if shape.rotation in (0,90,180,270) else (fit_local(shape,*raster[n]) if n in raster else False)
+                    # First establish optical size; only subsequent refinement
+                    # may suppress pixel-sized height noise.
+                    else:fitted=fit_shape(shape,row['bbox'],observed[n]) if shape.rotation in (0,90,180,270) else (fit_local(shape,*raster[n],stabilize=False) if n in raster else False)
                     if fitted:originals[n]=original
                 if originals:changed[index]=originals
         if not changed:return
@@ -225,10 +246,10 @@ def _fit_ocr_pages(source,target,report,settings,prefer_ink=False):
                         if n not in changed[index] or n not in observed:continue
                         shape=slide.shapes[n]
                         if prefer_ink or shape.rotation not in (0,90,180,270):
-                            if n not in ink or max(abs(a-b) for a,b in zip(*ink[n]))<=row.get('refinement_tolerance_points',2):continue
+                            if n not in ink or max(abs(a-b) for a,b in zip(*ink[n]))<=refinement_tolerance(shape,row):continue
                             refined=fit_local(shape,*ink[n]) or refined
                         else:
-                            if max(abs(a-b) for a,b in zip(row['bbox'],observed[n]))<=row.get('refinement_tolerance_points',2):continue
+                            if max(abs(a-b) for a,b in zip(row['bbox'],observed[n]))<=refinement_tolerance(shape,row):continue
                             refined=fit_shape(shape,row['bbox'],observed[n]) or refined
             if not refined:break
             iteration=tmp/f'iteration-{retry+2}.pptx';prs.save(iteration)

@@ -5,7 +5,11 @@ const origin = "https://smartpdf.com.au";
 const outputDirectory = process.argv[2] || "dist";
 const reviewProtect = process.env.VITE_ENABLE_PROTECT === "true";
 const reviewExcel = process.env.VITE_ENABLE_EXCEL === "true";
-const publicTools = enabledTools(reviewProtect, reviewExcel);
+const publicTools = enabledTools(
+  reviewProtect,
+  reviewExcel,
+  process.env.VITE_ENABLE_PDF_EXCEL === "true",
+);
 const pages = {
   "pdf-to-word": {
     title: "PDF to Word - Editable Text | Smart PDF",
@@ -29,6 +33,17 @@ const pages = {
             "Convert selected visible worksheets with cloud processing. Keep print areas and check your PDF before sharing.",
           keywords: "excel to pdf, xlsx to pdf",
           heading: "Convert Excel worksheets to PDF",
+        },
+      }
+    : {}),
+  ...(process.env.VITE_ENABLE_PDF_EXCEL === "true"
+    ? {
+        "pdf-to-excel": {
+          title: "PDF to Excel - Editable Tables | Smart PDF",
+          description:
+            "Extract PDF tables into editable Excel worksheets using self-hosted processing. Review table previews and preserve text, leading zeros and long numbers.",
+          keywords: "pdf to excel, pdf to xlsx",
+          heading: "Convert PDF tables to Excel",
         },
       }
     : {}),
