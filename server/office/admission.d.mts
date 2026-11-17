@@ -5,7 +5,7 @@ export function createOfficeAdmission(options: {
   available: () => boolean;
   fail: () => void;
   acquire: (
-    kind: "word" | "ppt",
+    kind: "word" | "ppt" | "pdfword",
     signal: AbortSignal,
   ) => Promise<(healthy?: boolean) => Promise<void>>;
   close: () => void;

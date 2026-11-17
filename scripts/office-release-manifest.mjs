@@ -10,6 +10,14 @@ import {
 export const officeRuntimePaths = [
   "server/office/service.mjs",
   "server/office/admission.mjs",
+  "server/pdfword/service.mjs",
+  "server/pdfword/docx-check.mjs",
+  "server/pdfword/runner.py",
+  "server/pdfword/worker.py",
+  "server/pdfword/doctor.py",
+  "server/pdfword/Dockerfile",
+  "server/pdfword/requirements.txt",
+  "config/pdfword-runtime.json",
   "server/ppt/service.mjs",
   "server/ppt/runner.py",
   "server/ppt/preflight.py",
@@ -47,6 +55,23 @@ export function prepareOfficeRuntime(source, folder) {
     throw Error(
       "PPT runtime core provenance does not match the approved image recipe",
     );
+  const pdfword = JSON.parse(
+    fs.readFileSync(path.join(source, "config/pdfword-runtime.json"), "utf8"),
+  );
+  if (
+    !/^sha256:[a-f0-9]{64}$/.test(pdfword.imageId) ||
+    pdfword.ocr !== false ||
+    pdfword.scope !== "simple-native-text-only" ||
+    pdfword.requirementsSha256 !==
+      digest(
+        fs.readFileSync(path.join(source, "server/pdfword/requirements.txt")),
+      ) ||
+    pdfword.dockerfileSha256 !==
+      digest(fs.readFileSync(path.join(source, "server/pdfword/Dockerfile")))
+  )
+    throw Error(
+      "PDF to Word runtime provenance does not match the reviewed image recipe",
+    );
   const archive = path.join(folder, "office-runtime.tar");
   if (fs.existsSync(archive))
     throw Error("Office runtime archive already exists");
@@ -60,6 +85,7 @@ export function prepareOfficeRuntime(source, folder) {
   return {
     word,
     ppt,
+    pdfword,
     files,
     archive: {
       path: "office-runtime.tar",

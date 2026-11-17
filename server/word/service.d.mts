@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 export type Task = {
   id: string;
-  kind?: "word" | "excel" | "ppt";
+  kind?: "word" | "excel" | "ppt" | "pdfword";
   directory: string;
   state: string;
   owner: string;
@@ -21,8 +21,21 @@ export function checkPdf(
     | "ppt"
     | { ppt: boolean; visible: number; width: number; height: number },
 ): Promise<{ pages: number }>;
+export function runStirling(
+  job: Task,
+  update: (value: {
+    state?: string;
+    warnings?: string[];
+    completedPages?: number;
+    totalPages?: number;
+    stage?: string;
+  }) => void,
+  adapter?: string,
+  timeoutMs?: number,
+): Promise<void>;
 export function createWordService(options?: {
-  format?: "word" | "ppt";
+  format?: "word" | "ppt" | "pdfword";
+  region?: string;
   root?: string;
   enableExcel?: boolean;
   origin?: string;
@@ -32,6 +45,8 @@ export function createWordService(options?: {
     signal: AbortSignal,
   ) => Promise<(healthy?: boolean) => Promise<void>>;
   available?: () => boolean;
+  capabilities?: Record<string, unknown>;
+  processingTtlMs?: number;
   onUnsafe?: () => void;
   execute?: (
     job: Task,
@@ -39,7 +54,7 @@ export function createWordService(options?: {
   ) => Promise<void>;
   validate?: (
     file: string,
-    kind?: "word" | "excel" | "ppt",
+    kind?: "word" | "excel" | "ppt" | "pdfword",
   ) => Promise<{ pages: number }>;
 }): Promise<{
   server: Server;

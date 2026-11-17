@@ -177,6 +177,14 @@ await copyFile(
   "vendor-licenses/stirling-integration.txt",
   "public/notices/stirling-integration.txt",
 );
+await copyFile(
+  "vendor-licenses/pdfword-runtime.txt",
+  "public/notices/pdfword-runtime.txt",
+);
+await copyFile(
+  "vendor-licenses/camelot-MIT.txt",
+  "public/notices/camelot-MIT.txt",
+);
 const links = (await readdir("public/notices"))
   .map((file) => `<li><a href="./${file}">${file}</a></li>`)
   .join("");

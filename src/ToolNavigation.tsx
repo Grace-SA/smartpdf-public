@@ -23,6 +23,7 @@ export function ToolNavigation({
   const [open, setOpen] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const expanded = open && !disabled;
   function close(restoreFocus = false) {
     setOpen(false);
@@ -134,6 +135,7 @@ export function ToolNavigation({
         <div className="tools-menu-heading">
           <strong>All PDF tools</strong>
           <button
+            ref={closeButton}
             className="tools-close secondary"
             aria-label="Close tools"
             onClick={() => close(true)}

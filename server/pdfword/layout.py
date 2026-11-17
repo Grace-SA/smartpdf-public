@@ -1,0 +1,745 @@
+"""Native geometric reconstruction. PDFium renders; pdfplumber supplies glyphs/grids."""
+
+import math
+import re
+import unicodedata
+from statistics import median
+from model import Rejected
+
+
+def contains(a, b, pad=0):
+    x, y = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+    return a[0] - pad <= x <= a[2] + pad and a[1] - pad <= y <= a[3] + pad
+
+
+def union(boxes):
+    return [
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        max(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+    ]
+
+
+def order_blocks(blocks):
+    """Recursive whitespace cuts separate columns before ordering within each column."""
+    if len(blocks) < 2:
+        return blocks
+    for axis, min_gap in ((0, 18), (1, 5)):
+        intervals = sorted((b["bbox"][axis], b["bbox"][axis + 2]) for b in blocks)
+        end = intervals[0][1]
+        gaps = []
+        for lo, hi in intervals[1:]:
+            if lo - end >= min_gap:
+                gaps.append((lo - end, (lo + end) / 2))
+            end = max(end, hi)
+        if gaps:
+            _, cut = max(gaps)
+            left = [b for b in blocks if b["bbox"][axis + 2] <= cut]
+            right = [b for b in blocks if b["bbox"][axis] >= cut]
+            if left and right and len(left) + len(right) == len(blocks):
+                return order_blocks(left) + order_blocks(right)
+    return sorted(blocks, key=lambda b: (round(b["bbox"][1] / 3), b["bbox"][0]))
+
+
+def join_words(words):
+    text = ""
+    previous = None
+    for w in sorted(words, key=lambda w: w["x0"]):
+        value = w["text"]
+        cjk = (
+            previous
+            and re.search(r"[\u2e80-\u9fff]$", text)
+            and re.match(r"[\u2e80-\u9fff，。！？；：]", value)
+        )
+        text += (" " if text and not cjk else "") + value
+        previous = w
+    return text
+
+
+def native_font(paragraphs):
+    fonts = [p.get("font", "Arial") for p in paragraphs]
+    return max(fonts, key=fonts.count) if fonts else "Arial"
+
+
+def font_family(names):
+    if names and all("times" in n for n in names):
+        return "Times New Roman"
+    if names and all("courier" in n for n in names):
+        return "Courier New"
+    return "Arial"
+
+
+def words_to_blocks(words, width, height):
+    if not words:
+        return []
+    sizes = [c.get("size", 11) for w in words for c in w.get("chars", [])]
+    normal = median(sizes) if sizes else 11
+    lines = []
+    for w in sorted(words, key=lambda w: (w["top"], w["x0"])):
+        line = next(
+            (
+                l
+                for l in reversed(lines[-8:])
+                if abs(median(t["top"] for t in l) - w["top"]) <= max(2, normal * 0.25)
+            ),
+            None,
+        )
+        if line is None:
+            lines.append([w])
+        else:
+            line.append(w)
+    blocks = []
+    for line in lines:
+        groups = []
+        for w in sorted(line, key=lambda w: w["x0"]):
+            if not groups or w["x0"] - groups[-1][-1]["x1"] > max(26, normal * 2.5):
+                groups.append([])
+            groups[-1].append(w)
+        for group in groups:
+            chars = [c for w in group for c in w.get("chars", [])]
+            fonts = [c.get("fontname", "").lower() for c in chars]
+            size = median(c.get("size", normal) for c in chars) if chars else normal
+            bounds = union([[w["x0"], w["top"], w["x1"], w["bottom"]] for w in group])
+            text = join_words(group)
+            runs = []
+            consumed = ""
+            for w in sorted(group, key=lambda w: w["x0"]):
+                prefix = (
+                    ""
+                    if not consumed
+                    or (
+                        re.search(r"[\u2e80-\u9fff]$", consumed)
+                        and re.match(r"[\u2e80-\u9fff，。！？；：]", w["text"])
+                    )
+                    else " "
+                )
+                letters = w.get("chars", [])
+                names = [c.get("fontname", "").lower() for c in letters]
+                runs.append(
+                    dict(
+                        text=prefix + w["text"],
+                        font=font_family(names),
+                        size=(
+                            median(c.get("size", size) for c in letters)
+                            if letters
+                            else size
+                        ),
+                        bold=bool(
+                            names and sum("bold" in f for f in names) > len(names) / 2
+                        ),
+                        italic=bool(
+                            names
+                            and sum("italic" in f or "oblique" in f for f in names)
+                            > len(names) / 2
+                        ),
+                    )
+                )
+                consumed += prefix + w["text"]
+            kind = "heading" if size >= normal * 1.23 else "paragraph"
+            if re.match(r"^\s*(?:[•●▪]|[-–]\s|\d+[.)]\s|[a-zA-Z][.)]\s)", text):
+                kind = "list"
+            blocks.append(
+                dict(
+                    kind=kind,
+                    bbox=bounds,
+                    font=font_family(fonts),
+                    text=text,
+                    runs=runs,
+                    size=size,
+                    bold=bool(
+                        fonts and sum("bold" in f for f in fonts) > len(fonts) / 2
+                    ),
+                    italic=bool(
+                        fonts
+                        and sum("italic" in f or "oblique" in f for f in fonts)
+                        > len(fonts) / 2
+                    ),
+                    source="native",
+                )
+            )
+    ordered = order_blocks(blocks)
+    result = []
+    for block in ordered:
+        prev = result[-1] if result else None
+        if (
+            prev
+            and prev["kind"] == block["kind"] == "paragraph"
+            and abs(prev["bbox"][0] - block["bbox"][0]) < max(4, normal * 0.5)
+            and abs(prev["size"] - block["size"]) < 1
+            and prev["bold"] == block["bold"]
+            and 0 <= block["bbox"][1] - prev["bbox"][3] <= normal * 0.75
+            and abs(prev["bbox"][2] - block["bbox"][2]) < width * 0.25
+        ):
+            separator = (
+                ""
+                if re.search(r"[\u2e80-\u9fff]$", prev["text"])
+                and re.match(r"[\u2e80-\u9fff]", block["text"])
+                else " "
+            )
+            if block.get("runs"):
+                block["runs"][0]["text"] = separator + block["runs"][0]["text"]
+                prev["runs"].extend(block["runs"])
+            prev["text"] += separator + block["text"]
+            prev["bbox"] = union([prev["bbox"], block["bbox"]])
+        else:
+            result.append(block)
+    return result
+
+
+def refine_numeric_cells(boxes, xs, words):
+    """Infer missing body rules only from repeated numeric columns under a grid."""
+    replacements = {}
+    numeric = re.compile(r"[-+($€£¥]?\s*\d[\d,.%()−-]*")
+    for index, bounds in enumerate(boxes):
+        edges = [x for x in xs if bounds[0] - .5 <= x <= bounds[2] + .5]
+        if len(edges) < 4:
+            continue
+        inside = [word for word in words if contains(bounds, [word['x0'], word['top'], word['x1'], word['bottom']])]
+        lines = []
+        for word in sorted(inside, key=lambda item: (item['top'], item['x0'])):
+            if not lines or abs(word['top'] - lines[-1][0]['top']) > 3:
+                lines.append([])
+            lines[-1].append(word)
+        aligned = []
+        for line in lines:
+            columns = [[] for _ in range(len(edges)-1)]
+            for word in line:
+                centre = (word['x0'] + word['x1']) / 2
+                for col, (left, right) in enumerate(zip(edges, edges[1:])):
+                    if left <= centre < right:
+                        columns[col].append(word)
+                        break
+            values = [join_words(group) for group in columns]
+            active = tuple(i for i, value in enumerate(values) if value and numeric.fullmatch(value))
+            aligned.append((values, active, columns))
+        patterns = [active for values, active, _ in aligned if len(active) >= 2 and any(values[:active[0]])]
+        if not patterns:
+            continue
+        pattern = patterns[0]
+        anchors = []
+        for values, active, columns in aligned:
+            if not active or not any(values[:pattern[0]]):
+                continue
+            # Once two columns establish the grid, a missing value in one of
+            # those columns must remain an empty cell, not merge two data rows.
+            if set(active) - set(pattern):
+                anchors = []
+                break
+            anchors.append(min(word['top'] for col in active for word in columns[col]))
+        if len(anchors) < 2:
+            continue
+        # Start a new row just above its values. This leaves a wrapped label
+        # attached to the preceding row instead of cutting it at a midpoint.
+        cuts = [bounds[1]] + [top-1 for top in anchors[1:] if bounds[1]+1 < top-1 < bounds[3]-1] + [bounds[3]]
+        if len(cuts) < 3 or any(b-a < 3 for a, b in zip(cuts, cuts[1:])):
+            continue
+        replacements[index] = [[left, top, right, bottom] for top, bottom in zip(cuts, cuts[1:])
+                               for left, right in zip(edges, edges[1:])]
+    return [cell for index, bounds in enumerate(boxes) for cell in replacements.get(index, [bounds])]
+
+
+def native_tables(page, words):
+    result = []
+    for table in page.find_tables():
+        if len(table.rows) < 2 or len(table.columns) < 2:
+            continue
+        boxes = [list(c) for c in table.cells if c]
+        xs = sorted(set(round(v, 1) for c in boxes for v in (c[0], c[2])))
+        original_count = len(boxes)
+        boxes = refine_numeric_cells(boxes, xs, words)
+        ys = sorted(set(round(v, 1) for c in boxes for v in (c[1], c[3])))
+        if (len(xs) - 1) * (len(ys) - 1) > 10000:
+            raise Rejected("Table exceeds cell budget.")
+        cells = []
+        for b in boxes:
+            c0, c1 = (
+                min(range(len(xs)), key=lambda j: abs(xs[j] - b[k])) for k in (0, 2)
+            )
+            r0, r1 = (
+                min(range(len(ys)), key=lambda j: abs(ys[j] - b[k])) for k in (1, 3)
+            )
+            # Word extraction can join glyphs across a ruling. Assign glyphs to
+            # cells first so an entire joined word cannot land in one neighbour.
+            from pdfplumber.utils import extract_words
+
+            chars = [
+                char
+                for w in words
+                for char in w.get("chars", [])
+                if b[0] <= (char["x0"] + char["x1"]) / 2 < b[2]
+                and b[1] <= (char["top"] + char["bottom"]) / 2 < b[3]
+            ]
+            inside = extract_words(
+                chars, return_chars=True, x_tolerance=2, y_tolerance=3
+            )
+            paras = words_to_blocks(inside, page.width, page.height)
+            cells.append(
+                dict(
+                    row=r0,
+                    col=c0,
+                    rowspan=r1 - r0,
+                    colspan=c1 - c0,
+                    text="\n".join(p["text"] for p in paras),
+                    size=median(p["size"] for p in paras) if paras else 10,
+                    font=native_font(paras),
+                    bold=bool(paras) and all(p.get("bold") for p in paras),
+                    header=False,
+                )
+            )
+        if sum(bool(c["text"]) for c in cells) < 2:
+            continue
+        if len(boxes) != original_count:
+            # Partial rules in empty columns can add phantom grid rows between
+            # the inferred data rows. Keep every boundary used by actual text;
+            # collapse only boundaries that subdivide blank neighbour cells.
+            from bisect import bisect_right
+            boundaries = {0, len(ys)-1}
+            for cell in cells:
+                if cell["text"].strip():
+                    boundaries.update((cell["row"], cell["row"]+cell["rowspan"]))
+            boundaries = sorted(boundaries)
+            compacted = []
+            for cell in cells:
+                start = bisect_right(boundaries, cell["row"]) - 1
+                end = bisect_right(boundaries, cell["row"]+cell["rowspan"]) - 1
+                if end > start:
+                    cell["row"], cell["rowspan"] = start, end-start
+                    compacted.append(cell)
+            cells, ys = compacted, [ys[index] for index in boundaries]
+        slots = set()
+        for c in cells:
+            covered = {
+                (r, col)
+                for r in range(c["row"], c["row"] + c["rowspan"])
+                for col in range(c["col"], c["col"] + c["colspan"])
+            }
+            if slots & covered:
+                raise Rejected("Incomplete native table grid.")
+            slots |= covered
+        if len(slots) != (len(xs) - 1) * (len(ys) - 1):
+            raise Rejected("Incomplete native table grid.")
+        result.append(
+            dict(
+                kind="table",
+                bbox=list(table.bbox),
+                rows=len(ys) - 1,
+                cols=len(xs) - 1,
+                cells=cells,
+                widths=[b - a for a, b in zip(xs, xs[1:])],
+                source="native",
+            )
+        )
+    return result
+
+
+def borderless_tables(words, page):
+    """Recover regular numeric grids only; ambiguous/multiline grids still use OCR."""
+    lines = []
+    for word in sorted(words, key=lambda w: (w["top"], w["x0"])):
+        if not lines or abs(word["top"] - lines[-1][0]["top"]) > 3:
+            lines.append([])
+        lines[-1].append(word)
+    rows = []
+    for line in lines:
+        groups = []
+        for word in sorted(line, key=lambda w: w["x0"]):
+            if not groups or word["x0"] - groups[-1][-1]["x1"] > 18:
+                groups.append([])
+            groups[-1].append(word)
+        rows.append(groups)
+    result = []
+    pending = []
+
+    def finish():
+        if len(pending) < 3:
+            return
+        cols = len(pending[0])
+        numeric = sum(
+            all(
+                re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", join_words(cell))
+                for cell in row[1:]
+            )
+            for row in pending
+        )
+        if numeric < max(2, len(pending) - 1):
+            return
+        boxes = [
+            [
+                union([[w["x0"], w["top"], w["x1"], w["bottom"]] for w in cell])
+                for cell in row
+            ]
+            for row in pending
+        ]
+        lefts = [min(row[c][0] for row in boxes) for c in range(cols)]
+        rights = [max(row[c][2] for row in boxes) for c in range(cols)]
+        if any(rights[c] + 12 > lefts[c + 1] for c in range(cols - 1)):
+            return
+        edges = (
+            [lefts[0]]
+            + [(rights[c] + lefts[c + 1]) / 2 for c in range(cols - 1)]
+            + [rights[-1]]
+        )
+        cells = []
+        for r, row in enumerate(pending):
+            for c, cell in enumerate(row):
+                sizes = [char["size"] for w in cell for char in w.get("chars", [])]
+                cells.append(
+                    dict(
+                        row=r,
+                        col=c,
+                        rowspan=1,
+                        colspan=1,
+                        text=join_words(cell),
+                        size=median(sizes) if sizes else 10,
+                        header=False,
+                    )
+                )
+        result.append(
+            dict(
+                kind="table",
+                rows=len(pending),
+                cols=cols,
+                cells=cells,
+                bbox=union([b for row in boxes for b in row]),
+                widths=[b - a for a, b in zip(edges, edges[1:])],
+                source="native",
+            )
+        )
+
+    for row in rows:
+        if pending:
+            previous = pending[-1]
+            height = max(w["bottom"] - w["top"] for cell in previous for w in cell)
+            gap = row[0][0]["top"] - previous[0][0]["top"]
+            if len(row) != len(previous) or gap > max(18, height * 2.5):
+                finish()
+                pending = []
+        if 2 <= len(row) <= 32:
+            pending.append(row)
+    finish()
+    return result
+
+
+def graphics(page, tables):
+    boxes = []
+    for image in page.images:
+        b = [image["x0"], image["top"], image["x1"], image["bottom"]]
+        if b[2] - b[0] > 3 and b[3] - b[1] > 3:
+            boxes.append(b)
+    # Connected vector regions preserve charts; table borders are already reconstructed.
+    for obj in page.curves + page.rects + page.lines:
+        b = [obj["x0"], obj["top"], obj["x1"], obj["bottom"]]
+        if any(contains(t["bbox"], b, 2) for t in tables):
+            continue
+        if (b[2] - b[0]) * (b[3] - b[1]) > page.width * page.height * 0.8:
+            continue
+        if b[2] - b[0] < 2 and b[3] - b[1] < 2:
+            continue
+        boxes.append([b[0] - 1, b[1] - 1, b[2] + 1, b[3] + 1])
+    merged = []
+    for b in boxes:
+        pending = True
+        while pending:
+            pending = False
+            for other in list(merged):
+                if not (
+                    b[2] + 4 < other[0]
+                    or other[2] + 4 < b[0]
+                    or b[3] + 4 < other[1]
+                    or other[3] + 4 < b[1]
+                ):
+                    b = union([b, other])
+                    merged.remove(other)
+                    pending = True
+        merged.append(b)
+    return [
+        [max(0, b[0]), max(0, b[1]), min(page.width, b[2]), min(page.height, b[3])]
+        for b in merged
+        # Narrow filled vector strokes can be meaningful glyphs (for example I),
+        # not just decoration. Retain them alongside wider neighbouring regions.
+        if min(b[2] - b[0], b[3] - b[1]) >= 2 and max(b[2] - b[0], b[3] - b[1]) > 12
+    ]
+
+
+
+def include_figure_labels(images, words, width, height):
+    """Keep a short label's full glyph box inside its retained source crop.
+
+    Center-based figure membership can exclude a label from editable text while
+    clipping its font descent. Only expand by at most 2pt, never into adjacent
+    words; long prose still requires the existing editable coverage check.
+    """
+    from text_coverage import compact
+    bounds = [[w['x0'], w['top'], w['x1'], w['bottom']] for w in words]
+    result = []
+    for image in images:
+        members = {i for i,b in enumerate(bounds) if contains(image,b)}
+        candidate = union([image]+[bounds[i] for i in members])
+        if (sum(len(compact(words[i]['text'])) for i in members) > 80
+                or any(abs(a-b)>2 for a,b in zip(candidate,image))
+                or candidate[0]<0 or candidate[1]<0 or candidate[2]>width or candidate[3]>height
+                or any(i not in members and min(candidate[2],b[2])>max(candidate[0],b[0])
+                       and min(candidate[3],b[3])>max(candidate[1],b[1]) for i,b in enumerate(bounds))):
+            candidate = image
+        result.append(candidate)
+    return result
+
+def reconstructed_rules(page, tables):
+    """Recognize connected thin outer table rules, including a ruled footnote box.
+
+    Only line/rectangle strokes are removed; images, filled regions and curves
+    keep their normal figure route. Word supplies the editable table's borders.
+    """
+    rules = []
+    for obj in page.lines + page.rects:
+        b = [obj[k] for k in ('x0', 'top', 'x1', 'bottom')]
+        if min(b[2]-b[0], b[3]-b[1]) <= 2 and max(b[2]-b[0], b[3]-b[1]) > 0:
+            rules.append((obj, b))
+    if len(rules) > 2000:
+        return set()
+    components = []
+    for obj, b in rules:
+        linked = [c for c in components if any(
+            not (b[2]+1 < other[0] or other[2]+1 < b[0] or b[3]+1 < other[1] or other[3]+1 < b[1])
+            for _, other in c)]
+        group = [(obj, b)]
+        for component in linked:
+            group.extend(component)
+            components.remove(component)
+        components.append(group)
+    removed = set()
+    for component in components:
+        if len(component) < 4:
+            continue
+        bounds = union([b for _, b in component])
+        for table in tables:
+            l, top, r, bottom = table['bbox']
+            if (abs(bounds[0]-l) <= 12 and abs(bounds[2]-r) <= 12
+                    and top-12 <= bounds[1] <= top and bottom <= bounds[3] <= bottom+(bottom-top)*.25
+                    and any(b[2]-b[0] >= (r-l)*.8 for _, b in component)
+                    and any(b[3]-b[1] >= (bottom-top)*.1 for _, b in component)
+                    # Outside the data region, only perimeter/whole-width rules
+                    # qualify. Interior plotted strokes must remain as graphics.
+                    and all((b[1] >= top and b[3] <= bottom)
+                            or b[2] <= l+6 or b[0] >= r-6
+                            or b[2]-b[0] >= (r-l)*.8
+                            or (b[3]-b[1] <= 2 and (b[2] <= l+12 or b[0] >= r-12))
+                            for _, b in component)):
+                removed.update(id(obj) for obj, _ in component)
+    return removed
+
+
+def native_page(page, cosmetic_rectangles=(), table_proposals=()):
+    if cosmetic_rectangles:
+        def retain(obj):
+            color = obj.get("non_stroking_color")
+            white = color == 1 or color == (1, 1, 1) or color == [1, 1, 1]
+            if obj.get("object_type") != "rect" or not white or obj.get("stroke") or not obj.get("fill"):
+                return True
+            bounds = (obj["x0"], obj["top"], obj["x1"], obj["bottom"])
+            return not any(all(abs(a-b) < .01 for a, b in zip(bounds, box))
+                           for box in cosmetic_rectangles)
+    # pdfminer uses a multi-character placeholder for an unmapped source glyph.
+    # A literal printed "(cid:123)" is several separate chars and is not rejected.
+    if any(re.fullmatch(r"\(cid:\d+\)", char.get("text", ""))
+           or any(unicodedata.category(c) == 'Cc' and not c.isspace() for c in char.get('text', ''))
+           for char in page.chars):
+        raise Rejected("Layout needs OCR.")
+    if len(page.chars) > 60000:
+        raise Rejected("Page exceeds text budget.")
+    clean = page.dedupe_chars(tolerance=0.5)
+    words = clean.extract_words(
+        return_chars=True, x_tolerance=2, y_tolerance=3, keep_blank_chars=False
+    )
+    words = [w for w in words if w["text"].strip()]
+    if table_proposals:
+        from stream_tables import qualified_tables
+        tables = qualified_tables(clean, words, table_proposals)
+        if not tables:
+            raise Rejected("Layout needs OCR.")
+    else:
+        tables = native_tables(clean, words)
+    if cosmetic_rectangles:
+        for table in tables:
+            lengths = [len(c.get("text", "")) for c in table["cells"]]
+            # Page decoration may form a false grid containing almost all prose
+            # in one cell. Keep real grid boundaries, but ask OCR to resolve this
+            # ambiguous case instead of exporting a giant collapsed table.
+            if lengths and max(lengths) > 500 and max(lengths) > .85 * sum(lengths):
+                raise Rejected("Layout needs OCR.")
+    remaining_words = [
+        w
+        for w in words
+        if not any(
+            contains(t["bbox"], [w["x0"], w["top"], w["x1"], w["bottom"]])
+            for t in tables
+        )
+    ]
+    from aligned_tables import headed_registers
+    registers = headed_registers(remaining_words)
+    tables.extend(registers)
+    remaining_words = [w for w in remaining_words if not any(
+        contains(t["bbox"], [w["x0"], w["top"], w["x1"], w["bottom"]])
+        for t in registers)]
+    tables.extend(borderless_tables(remaining_words, clean))
+    # Invisible paint boundaries can still define the source table grid.
+    # Exclude proven cosmetic rectangles only from figure grouping.
+    figures = clean.filter(retain) if cosmetic_rectangles else clean
+    if table_proposals:
+        rules = reconstructed_rules(figures, tables)
+        if rules:
+            figures = figures.filter(lambda obj: id(obj) not in rules)
+    images = include_figure_labels(graphics(figures, tables), words, page.width, page.height)
+    excluded = [t["bbox"] for t in tables] + images
+    remaining = [
+        w
+        for w in words
+        if not any(
+            contains(b, [w["x0"], w["top"], w["x1"], w["bottom"]]) for b in excluded
+        )
+    ]
+    # Sparse text-only grids also occur without any numeric cells or rules.
+    # Three separated short cells on repeated baselines require layout recognition.
+    baselines = []
+    for word in sorted(remaining, key=lambda w: (w["top"], w["x0"])):
+        if not baselines or abs(word["top"] - baselines[-1][0]["top"]) > 3:
+            baselines.append([])
+        baselines[-1].append(word)
+    sparse_rows = 0
+    for row in baselines:
+        groups = []
+        for word in sorted(row, key=lambda w: w["x0"]):
+            if not groups or word["x0"] - groups[-1][-1]["x1"] > 18:
+                groups.append([])
+            groups[-1].append(word)
+        if len(groups) >= 3 and all(
+            sum(len(w["text"]) for w in group) <= 32 for group in groups
+        ):
+            sparse_rows += 1
+    if sparse_rows >= 2:
+        raise Rejected("Layout needs OCR.")
+    # Aligned numeric rows without ruling are ambiguous in native extraction.
+    # Ask the layout model instead of quietly exporting a table as prose.
+    aligned = {}
+    for w in remaining:
+        if re.fullmatch(r"[-+($€£¥]?\d[\d,.%()−-]*", w["text"]):
+            key = round(w["x1"] / 8)
+            aligned.setdefault(key, set()).add(round(w["top"] / 5))
+    if any(len(rows) >= 3 for rows in aligned.values()):
+        candidates = words_to_blocks(remaining, page.width, page.height)
+        if any(
+            abs(a["bbox"][1] - b["bbox"][1]) < 4 and a["bbox"][2] + 18 < b["bbox"][0]
+            for a in candidates
+            for b in candidates
+        ):
+            raise Rejected("Layout needs OCR.")
+    blocks = words_to_blocks(remaining, page.width, page.height) + tables
+    blocks.extend(dict(kind="image", bbox=b, source="native") for b in images)
+    return order_blocks(blocks)
+
+
+def repeated_margins(pages):
+    """Only repeated margin text is promoted; single-page headings stay in the body."""
+    if len(pages) < 2:
+        return
+    keys = {}
+    for p in pages:
+        if len(p["blocks"]) < 2:
+            continue
+        for b in p["blocks"]:
+            if b["kind"] not in ("paragraph", "heading", "header", "footer"):
+                continue
+            edge = (
+                "header"
+                if b["bbox"][3] < p["height"] * 0.08
+                else "footer" if b["bbox"][1] > p["height"] * 0.92 else None
+            )
+            # OCR may already identify part of a repeated page margin. Count
+            # that same geometric evidence too; otherwise mixed-route pages
+            # fall below the document-wide threshold and leave page numbers
+            # in the body. Do not count an existing margin on the wrong edge.
+            if b['kind'] in ('header', 'footer') and b['kind'] != edge:
+                continue
+            if edge:
+                title = re.sub(
+                    r"\s*(?:\(?continued\)?|续表|（续）)\s*$",
+                    "",
+                    b["text"].strip(),
+                    flags=re.I,
+                )
+                key = (edge, re.sub(r"\d+", "#", title))
+                keys.setdefault(key, []).append((p["index"], b))
+    for (edge, _), items in keys.items():
+        if len({i for i, b in items}) >= max(2, math.ceil(len(pages) * 0.6)):
+            for _, b in items:
+                b["kind"] = edge
+
+
+def link_tables(pages):
+    """Merge only repeated-header continuations reaching adjacent page edges."""
+    for previous, current in zip(pages, pages[1:]):
+        a = next(
+            (b for b in reversed(previous["blocks"]) if b["kind"] == "table"), None
+        )
+        b = next((b for b in current["blocks"] if b["kind"] == "table"), None)
+        if not a or not b or a["cols"] != b["cols"]:
+            continue
+        header = lambda t: [
+            c["text"].strip().casefold() for c in t["cells"] if c["row"] == 0
+        ]
+        titles = lambda p: [
+            re.sub(
+                r"\s*(?:\(?continued\)?|续表|（续）)\s*$",
+                "",
+                v["text"].strip(),
+                flags=re.I,
+            ).casefold()
+            for v in p["blocks"]
+            if v["kind"] in ("header", "heading") and v["bbox"][1] < p["height"] * 0.15
+        ]
+        explicit = any(
+            re.search(r"(?:\bcontinued\)?|续表|（续）)\s*$", v.get("text", ""), re.I)
+            for v in current["blocks"]
+            if v["bbox"][1] < current["height"] * 0.15
+        )
+        continuation = b.get("continuation", False) or (
+            explicit and bool(set(titles(previous)) & set(titles(current)))
+        )
+        repeats = header(a) == header(b) and any(header(a))
+        if not (
+            (repeats or continuation)
+            and a["bbox"][3] > previous["height"] * 0.75
+            and b["bbox"][1] < current["height"] * 0.25
+        ):
+            continue
+        if any(c["row"] == 0 and c["rowspan"] > 1 for c in b["cells"]):
+            continue
+        # Require compatible column proportions as independent geometry evidence.
+        wa = a.get("widths")
+        wb = b.get("widths")
+        if (
+            wa
+            and wb
+            and max(abs(x / sum(wa) - y / sum(wb)) for x, y in zip(wa, wb)) > 0.06
+        ):
+            continue
+        b["continues"] = a.get("continues", a["id"])
+        b["repeat_header"] = repeats
+        if repeats:
+            a["header_rows"] = 1
+        if continuation and explicit:
+            shared = set(titles(previous)) & set(titles(current))
+            candidates = []
+            for value in current["blocks"]:
+                if value["kind"] not in ("paragraph", "heading") or value["bbox"][1] >= current["height"] * 0.15:
+                    continue
+                title = re.sub(r"\s*(?:\(?continued\)?|续表|（续）)\s*$", "", value.get("text", "").strip(), flags=re.I).casefold()
+                if title in shared:
+                    candidates.append(value)
+            remainder = [v for v in current["blocks"] if v["kind"] not in ("header", "footer") and v not in candidates]
+            if remainder == [b]:
+                # A local table caption need not repeat on 60% of the entire
+                # document to be recognized as a continuation heading.
+                for value in candidates:
+                    value["kind"] = "header"

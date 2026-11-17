@@ -1,0 +1,2 @@
+# Optional isolated native-table proposal runtime (Camelot, MIT).
+camelot-py==2.0.0

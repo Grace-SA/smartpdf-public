@@ -1,0 +1,17 @@
+.pdfword-app .word-selected {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.pdfword-app .pdfword-review-scope {
+  margin-bottom: 16px;
+}
+.pdfword-app .word-selected .file-label {
+  grid-column: auto;
+}
+@media (max-width: 600px) {
+  .pdfword-app .word-selected {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pdfword-app .word-selected .file-label {
+    width: 100%;
+  }
+}

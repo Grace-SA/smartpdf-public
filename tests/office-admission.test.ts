@@ -12,40 +12,43 @@ const deferred = () => {
   };
 };
 
-it("serializes Word/PPT admission and removes idle Word before admitting PPT", async () => {
-  const clean = deferred();
-  const events: string[] = [];
-  const gate = createOfficeAdmission({
-    pauseWord: async () => {
-      events.push("discard-start");
-      await clean.promise;
-      events.push("discarded");
-    },
-    resumeWord: () => {
-      events.push("prewarm");
-    },
-  });
-  const word = await gate.acquire("word", signal());
-  const pptPromise = gate.acquire("ppt", signal());
-  const nextWord = gate.acquire("word", signal());
-  expect(events).toEqual([]);
-  await word();
-  expect(events).toEqual(["discard-start"]);
-  let admitted = false;
-  void pptPromise.then(() => {
-    admitted = true;
-  });
-  await Promise.resolve();
-  expect(admitted).toBe(false);
-  clean.resolve();
-  const ppt = await pptPromise;
-  expect(events).toEqual(["discard-start", "discarded"]);
-  await ppt();
-  const final = await nextWord;
-  expect(events).toEqual(["discard-start", "discarded", "prewarm"]);
-  await final();
-  gate.close();
-});
+it.each(["ppt", "pdfword"] as const)(
+  "serializes Word/%s admission and removes idle Word first",
+  async (kind) => {
+    const clean = deferred();
+    const events: string[] = [];
+    const gate = createOfficeAdmission({
+      pauseWord: async () => {
+        events.push("discard-start");
+        await clean.promise;
+        events.push("discarded");
+      },
+      resumeWord: () => {
+        events.push("prewarm");
+      },
+    });
+    const word = await gate.acquire("word", signal());
+    const pptPromise = gate.acquire(kind, signal());
+    const nextWord = gate.acquire("word", signal());
+    expect(events).toEqual([]);
+    await word();
+    expect(events).toEqual(["discard-start"]);
+    let admitted = false;
+    void pptPromise.then(() => {
+      admitted = true;
+    });
+    await Promise.resolve();
+    expect(admitted).toBe(false);
+    clean.resolve();
+    const ppt = await pptPromise;
+    expect(events).toEqual(["discard-start", "discarded"]);
+    await ppt();
+    const final = await nextWord;
+    expect(events).toEqual(["discard-start", "discarded", "prewarm"]);
+    await final();
+    gate.close();
+  },
+);
 
 it("cancels a waiting task without execution and keeps another format moving", async () => {
   let pauses = 0;

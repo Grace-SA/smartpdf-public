@@ -1,4 +1,4 @@
-// One host-wide active converter. Word's clean standby is evicted before PPT.
+// One host-wide active converter. Evict Word's standby before another engine.
 export function createOfficeAdmission({ pauseWord, resumeWord }) {
   const queue = [];
   let active = false,
@@ -27,7 +27,7 @@ export function createOfficeAdmission({ pauseWord, resumeWord }) {
     ticket.entering = true;
     void (async () => {
       try {
-        if (ticket.kind === "ppt") {
+        if (ticket.kind !== "word") {
           try {
             await pauseWord();
           } catch (error) {
@@ -51,8 +51,8 @@ export function createOfficeAdmission({ pauseWord, resumeWord }) {
               healthy &&
               !broken &&
               !closed &&
-              ticket.kind === "ppt" &&
-              queue[0]?.kind !== "ppt"
+              ticket.kind !== "word" &&
+              (!queue.length || queue[0]?.kind === "word")
             )
               await resumeWord();
           } catch {
@@ -68,8 +68,8 @@ export function createOfficeAdmission({ pauseWord, resumeWord }) {
         if (
           !broken &&
           !closed &&
-          ticket.kind === "ppt" &&
-          queue[0]?.kind !== "ppt"
+          ticket.kind !== "word" &&
+          (!queue.length || queue[0]?.kind === "word")
         ) {
           try {
             await resumeWord();

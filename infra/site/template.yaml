@@ -27,6 +27,11 @@ Parameters:
     Default: "false"
     AllowedValues: ["false", "true"]
     Description: Enable only after core host acceptance and trusted origin TLS.
+  PdfWordApiEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Enable after isolated PDF to Word host acceptance.
   PptApiEnabled:
     Type: String
     Default: "false"
@@ -40,6 +45,9 @@ Conditions:
     - !Condition HasWordOrigin
     - !Equals [!Ref WordApiEnabled, "true"]
     - !Not [!Equals [!Ref WordOriginSecret, ""]]
+  HasPdfWordApi: !And
+    - !Condition HasWordApi
+    - !Equals [!Ref PdfWordApiEnabled, "true"]
   HasPptApi: !And
     - !Condition HasWordApi
     - !Equals [!Ref PptApiEnabled, "true"]
@@ -229,6 +237,21 @@ Resources:
         QueryStringsConfig:
           QueryStringBehavior: none
 
+  PdfWordOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Condition: HasPdfWordApi
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub ${AWS::StackName}-pdfword-origin
+        CookiesConfig:
+          CookieBehavior: whitelist
+          Cookies: [pdfword_session]
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers: [Host, Origin, Content-Type]
+        QueryStringsConfig:
+          QueryStringBehavior: none
+
   WordAcmeRequestPolicy:
     Type: AWS::CloudFront::OriginRequestPolicy
     Condition: HasWordOrigin
@@ -303,7 +326,7 @@ Resources:
             "download",
             "download_failure",
           ]);
-          const tools = new Set(["ppt", "word", "excel",
+          const tools = new Set(["pdfword", "ppt", "word", "excel",
             "combine",
             "split",
             "organize",
@@ -527,6 +550,18 @@ Resources:
               Compress: false
               CachePolicyId: !Ref NoCachePolicy
               OriginRequestPolicyId: !Ref PptOriginRequestPolicy
+              ResponseHeadersPolicyId: !Ref SecurityHeaders
+            - !Ref AWS::NoValue
+          - !If
+            - HasPdfWordApi
+            - PathPattern: api/pdfword/*
+              TargetOriginId: word
+              ViewerProtocolPolicy: https-only
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+              CachedMethods: [GET, HEAD]
+              Compress: false
+              CachePolicyId: !Ref NoCachePolicy
+              OriginRequestPolicyId: !Ref PdfWordOriginRequestPolicy
               ResponseHeadersPolicyId: !Ref SecurityHeaders
             - !Ref AWS::NoValue
           - !If

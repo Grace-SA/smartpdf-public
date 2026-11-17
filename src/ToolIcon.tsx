@@ -21,7 +21,7 @@ export function ToolIcon({ tool }: { tool: string }) {
         <>
           <path d="M10 5h20l8 8v30H10zM30 5v9h8M15 21h18v16H15zM15 27h18M15 32h18M21 21v16M27 21v16" />
         </>
-      ) : tool === "word" ? (
+      ) : tool === "word" || tool === "pdfword" ? (
         <>
           <path d="M10 5h20l8 8v30H10zM30 5v9h8M15 21l3 13 5-10 5 10 3-13" />
         </>
