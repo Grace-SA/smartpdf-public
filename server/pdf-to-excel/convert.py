@@ -880,6 +880,10 @@ def convert_pages(source, output, selected, count, layout, ocr):
                         found = scan_leader_tables(page)
                         if found:
                             ocr_pages.append(index + 1)
+            if found and not image_only and not page.rotation:
+                from layout_header_unit import recover as recover_header_unit
+
+                found = [recover_header_unit(t, page, table_from_pdf) for t in found]
             if not found:
                 missing.append(index + 1)
             if any(t["method"] == "aligned" for t in found):

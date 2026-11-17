@@ -1,7 +1,7 @@
 name: Smart PDF checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "fix/**", "development/pdf-to-excel"]
   pull_request:
   workflow_dispatch:
 permissions:

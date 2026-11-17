@@ -319,9 +319,11 @@ export function PdfExcelPage() {
               <p>
                 {[
                   (job.tables || 0) > (job.forms || 0)
-                    ? `${(job.tables || 0) - (job.forms || 0)} tables`
+                    ? `${(job.tables || 0) - (job.forms || 0)} ${(job.tables || 0) - (job.forms || 0) === 1 ? "table" : "tables"}`
                     : null,
-                  job.forms ? `${job.forms} form pages` : null,
+                  job.forms
+                    ? `${job.forms} ${job.forms === 1 ? "form page" : "form pages"}`
+                    : null,
                   `${job.sheets} ${job.sheets === 1 ? "worksheet" : "worksheets"}`,
                 ]
                   .filter(Boolean)
@@ -367,7 +369,12 @@ export function PdfExcelPage() {
                     ? "First 12 text lines; long text is shortened. Check field placement and checkbox states in the downloaded workbook."
                     : `${preview.rows} rows × ${preview.columns} columns. Preview shows up to 12 rows and columns; long cell text is shortened.`}
                 </p>
-                <div className="px-table-scroll" tabIndex={0}>
+                <div
+                  className="px-table-scroll"
+                  tabIndex={0}
+                  role="region"
+                  aria-label="Worksheet preview, scroll to see more columns"
+                >
                   <table>
                     <tbody>
                       {preview.values.map((r, i) => (
@@ -439,9 +446,15 @@ export function PdfExcelPage() {
                     placeholder="All pages"
                     onChange={(e) => setPages(e.target.value)}
                     aria-describedby="px-pages-help"
+                    aria-invalid={!validPages(pages)}
                   />
-                  <small id="px-pages-help">
-                    Leave blank for all pages, or enter 1-3,5.
+                  <small
+                    id="px-pages-help"
+                    role={!validPages(pages) ? "status" : undefined}
+                  >
+                    {validPages(pages)
+                      ? "Leave blank for all pages, or enter 1-3,5."
+                      : "Enter page numbers such as 1-3,5, up to page 200."}
                   </small>
                   <label htmlFor="px-layout">Worksheet layout</label>
                   <select
@@ -455,8 +468,9 @@ export function PdfExcelPage() {
                     <option value="single">Everything in one worksheet</option>
                   </select>
                   <small>
-                    One worksheet stacks tables and form pages in source order;
-                    fields from different pages remain separate.
+                    {layout === "tables"
+                      ? "Keep each table or form page separate for easier review."
+                      : "Stack tables and form pages in source order; this does not join matching columns across pages."}
                   </small>
                   <label className="px-check">
                     <input
@@ -477,8 +491,9 @@ export function PdfExcelPage() {
                 <p className="px-muted">
                   Text, leading zeros and long numbers are preserved as text.
                   Supported native forms include field text and checkbox states.
-                  Images and other non-table paragraphs are excluded. Check OCR
-                  results and form fields against your PDF.
+                  Images are excluded; available surrounding text is saved in
+                  workbook comments. Check OCR results and form fields against
+                  your PDF.
                 </p>
                 {busy ? (
                   <div className="px-progress">

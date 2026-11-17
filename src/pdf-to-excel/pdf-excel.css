@@ -60,6 +60,22 @@
   color: #287854;
   font-weight: 700;
 }
+.px-drop .native-file-picker {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 52px;
+  padding: 14px 28px;
+  border-radius: 10px;
+  background: #e5322d;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+.px-drop .native-file-picker:focus-within {
+  outline: 3px solid #76a98b;
+  outline-offset: 3px;
+}
 .px-primary {
   display: inline-flex;
   justify-content: center;
@@ -186,6 +202,8 @@
 .px-table-scroll {
   overflow: auto;
   max-height: 420px;
+  border: 1px solid #dce5dc;
+  border-radius: 8px;
 }
 .px-preview table {
   border-collapse: collapse;
@@ -200,9 +218,12 @@
   max-width: 250px;
   overflow-wrap: anywhere;
 }
-.px-preview tr:first-child {
-  background: #edf5ef;
-  font-weight: 700;
+.px-preview tr:nth-child(even) {
+  background: #f6f8f7;
+}
+.px-main input[aria-invalid="true"] {
+  border-color: #b64432;
+  background: #fff8f5;
 }
 .px-footer {
   text-align: center;

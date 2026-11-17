@@ -57,11 +57,31 @@ def physical_page(page):
             and obj.get("height", 0) > 3
         )
     )
+    # Quarter-turn transforms can leave horizontal line endpoints differing
+    # by machine rounding. pdfplumber otherwise labels these as vertical.
+    result._edges = [axis_aligned_edge(edge) for edge in result.edges]
     # A loaded PDF page is immutable throughout conversion. Keep this cache on
     # that page only; cropped/rotated pages are distinct page objects.
     original._excel_physical_page = result
     result._excel_physical_page = result
     return result
+
+
+def axis_aligned_edge(edge):
+    """Correct only sub-micro-point roundoff in native straight line edges."""
+    if edge.get("object_type") != "line":
+        return edge
+    values = [edge.get(k) for k in ("x0", "x1", "top", "bottom")]
+    if any(not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+        return edge
+    x0, x1, top, bottom = values
+    if x1 - x0 > 3 and abs(bottom - top) <= 1e-7:
+        y = (top + bottom) / 2
+        return dict(edge, orientation="h", top=y, bottom=y, height=0)
+    if bottom - top > 3 and abs(x1 - x0) <= 1e-7:
+        x = (x0 + x1) / 2
+        return dict(edge, orientation="v", x0=x, x1=x, width=0)
+    return edge
 
 
 def model_box(box, page):
@@ -369,9 +389,13 @@ def prefer_native(model, native):
             restored = restore_native_spans(model, candidate)
             if restored is not model:
                 return restored
+    from layout_empty_rows import recover as recover_empty_rows
     from layout_partition import recover_partition
+    from layout_wrapped_rows import recover as recover_wrapped_rows
 
-    return recover_partition(model, native)
+    return recover_wrapped_rows(
+        recover_partition(recover_empty_rows(model, native), native), native
+    )
 
 
 def restore_native_spans(model, physical):
