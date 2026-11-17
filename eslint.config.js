@@ -7,6 +7,7 @@ export default ts.config(
       "dist/**",
       "dist-*/**",
       ".local-python/**",
+      ".research/**",
       "test-results-*/**",
       "node_modules/**",
       "public/**",
@@ -73,6 +74,19 @@ export default ts.config(
         setInterval: "readonly",
         clearInterval: "readonly",
         AbortController: "readonly",
+      },
+    },
+  },
+  {
+    files: ["server/pdf-to-ppt/web/*.js"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        fetch: "readonly",
+        XMLHttpRequest: "readonly",
+        URL: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
       },
     },
   },

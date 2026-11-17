@@ -1,0 +1,15 @@
+{
+  "repository": "PaddlePaddle/PP-LCNet_x1_0_doc_ori_onnx",
+  "revision": "7330ab7039123e46af2dc03154b9969aa412c61d",
+  "license": "Apache-2.0",
+  "files": {
+    "inference.onnx": {
+      "bytes": 6788069,
+      "sha256": "af9a0a4f317ff0709ce752067807f819cb15d883f8ecad89f28df1c6ee2d9c92"
+    },
+    "inference.yml": {
+      "bytes": 766,
+      "sha256": "9e195eb729a8173588cd0e8a852c8b373aa606e79e77b4ac7d8346f5426caf26"
+    }
+  }
+}
