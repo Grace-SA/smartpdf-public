@@ -162,6 +162,23 @@ it("advertises the native adapter only for an opted-in configured reconstruction
   ).toBe(false);
 });
 
+it.each([
+  ["0", "0", false],
+  ["0", "1", false],
+  ["1", "0", false],
+  ["1", "1", true],
+])(
+  "marks the review candidate only when explicitly enabled (%s,%s)",
+  async (mode, review, expected) => {
+    vi.stubEnv("PDFWORD_LOCAL_V2", mode);
+    vi.stubEnv("PDFWORD_REVIEW_CANDIDATE", review);
+    const s = await setup();
+    expect(
+      (await (await s.api("/session")).json()).capabilities.reviewCandidate,
+    ).toBe(expected);
+  },
+);
+
 it("separates owners, enforces PDF uploads, options and origin", async () => {
   const s = await setup();
   expect(s.cookie).toMatch(/^pdfword_session=/);

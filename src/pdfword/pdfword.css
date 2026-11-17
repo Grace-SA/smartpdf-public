@@ -1,6 +1,9 @@
 .pdfword-app .word-selected {
   grid-template-columns: minmax(0, 1fr) auto;
 }
+.pdfword-app .pdfword-review-scope {
+  margin-bottom: 16px;
+}
 .pdfword-app .word-selected .file-label {
   grid-column: auto;
 }

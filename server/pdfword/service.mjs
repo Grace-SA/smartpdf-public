@@ -28,6 +28,8 @@ export function createPdfWordService(options = {}) {
         : taskPolicy.legacyQueuedTaskSeconds),
     capabilities: {
       reconstruction,
+      reviewCandidate:
+        reconstruction && process.env.PDFWORD_REVIEW_CANDIDATE === "1",
       stirlingNative:
         process.env.PDFWORD_LOCAL_V2 === "1" &&
         process.env.PDFWORD_NATIVE_ENGINE === "stirling" &&

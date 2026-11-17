@@ -9,6 +9,93 @@ const selection = {
 };
 
 for (const width of [320, 390, 1280]) {
+  test(`PDF to Word ${width}: review scope remains visible through a successful task`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/pdfword/**", async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      if (path.endsWith("/result"))
+        return route.fulfill({
+          contentType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          body: Buffer.from("PKsynthetic-validated-by-service"),
+        });
+      if (path.endsWith("/session"))
+        return route.fulfill({
+          json: {
+            available: true,
+            region: "Local synthetic test service",
+            retentionMinutes: 60,
+            mode: "local",
+            capabilities: {
+              reconstruction: true,
+              reviewCandidate: true,
+              ocr: true,
+            },
+          },
+        });
+      return route.fulfill({
+        status:
+          request.method() === "POST"
+            ? 201
+            : request.method() === "PUT"
+              ? 202
+              : 200,
+        json: {
+          id,
+          state:
+            request.method() === "POST"
+              ? "created"
+              : request.method() === "DELETE"
+                ? "cancelled"
+                : "succeeded",
+          pages: 1,
+          warnings: [],
+        },
+      });
+    });
+    await page.goto("/pdf-to-word/");
+    const scope = page.getByRole("complementary", {
+      name: "Review candidate scope",
+    });
+    await expect(scope).toContainText(
+      "outside this candidate's supported scope",
+    );
+    await page.locator('input[type="file"]').setInputFiles(selection);
+    await page
+      .getByRole("button", { name: "Upload and convert", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Your Word document is ready for review",
+        exact: true,
+      }),
+    ).toBeFocused();
+    await expect(scope).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Download Word", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page
+      .getByRole("button", {
+        name: "Delete files and convert another",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Drop your PDF here" }),
+    ).toBeVisible();
+    await expect(scope).toBeVisible();
+  });
+}
+
+for (const width of [320, 390, 1280]) {
   test(`PDF to Word ${width}: explicit upload, correct result download and a clean next task`, async ({
     page,
   }) => {

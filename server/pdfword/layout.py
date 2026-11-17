@@ -482,6 +482,12 @@ def native_page(page, cosmetic_rectangles=()):
             for t in tables
         )
     ]
+    from aligned_tables import headed_registers
+    registers = headed_registers(remaining_words)
+    tables.extend(registers)
+    remaining_words = [w for w in remaining_words if not any(
+        contains(t["bbox"], [w["x0"], w["top"], w["x1"], w["bottom"]])
+        for t in registers)]
     tables.extend(borderless_tables(remaining_words, clean))
     # Invisible paint boundaries can still define the source table grid.
     # Exclude proven cosmetic rectangles only from figure grouping.

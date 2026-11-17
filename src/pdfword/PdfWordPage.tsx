@@ -26,6 +26,7 @@ type Service = {
   mode?: string;
   capabilities?: {
     reconstruction?: boolean;
+    reviewCandidate?: boolean;
     ocr?: boolean;
     stirlingNative?: boolean;
   };
@@ -413,6 +414,20 @@ export function PdfWordPage() {
             </p>
           </div>
         </div>
+        {service?.capabilities?.reviewCandidate && (
+          <aside
+            className="word-cloud-note pdfword-review-scope"
+            aria-label="Review candidate scope"
+          >
+            <strong>Review candidate</strong>
+            <p>
+              Evaluate simple text, regular tables and clear scans. Complex
+              tables, handwriting, poor scans and formula-heavy pages are
+              outside this candidate's supported scope. Check text, numbers and
+              layout before using any result.
+            </p>
+          </aside>
+        )}
         <section
           className="word-card"
           aria-label="PDF to Word conversion"
@@ -517,7 +532,7 @@ export function PdfWordPage() {
           {result && (
             <div className="word-result">
               <h2 tabIndex={-1} ref={complete}>
-                {job?.warnings?.length
+                {job?.warnings?.length || service?.capabilities?.reviewCandidate
                   ? "Your Word document is ready for review"
                   : "Your Word document is ready"}
               </h2>

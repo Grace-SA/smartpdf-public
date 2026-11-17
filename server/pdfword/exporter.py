@@ -187,9 +187,13 @@ def add_table(document, block, width, existing=None):
         block.get("header_rows")
         or any(c.get("header") for c in block["cells"] if c["row"] == 0)
     ):
-        props = table.rows[0]._tr.get_or_add_trPr()
-        if props.find(qn("w:tblHeader")) is None:
-            props.append(OxmlElement("w:tblHeader"))
+        count = block.get("header_rows", 1)
+        if not isinstance(count, int) or count < 1:
+            count = 1
+        for row in table.rows[:min(count, len(table.rows))]:
+            props = row._tr.get_or_add_trPr()
+            if props.find(qn("w:tblHeader")) is None:
+                props.append(OxmlElement("w:tblHeader"))
     return table
 
 
