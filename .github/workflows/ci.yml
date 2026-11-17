@@ -51,6 +51,8 @@ jobs:
         run: pnpm exec eslint src scripts/check-repository.mjs scripts/prepare-release.mjs
       - name: Unit and integration regression
         run: pnpm test
+        env:
+          PYTHONPATH: .pdfword-python:.local-python
       - name: Independent page-number output verification
         run: python -B scripts/verify-number-output.py
         env:

@@ -27,7 +27,18 @@ d.add_paragraph('Synthetic editable text 123.45')
 b=io.BytesIO();d.save(b);sys.stdout.buffer.write(b.getvalue())
 `,
   ],
-  { env: { ...process.env, PYTHONPATH: path.resolve(".local-python") } },
+  {
+    env: {
+      ...process.env,
+      PYTHONPATH: [
+        path.resolve(".pdfword-python"),
+        path.resolve(".local-python"),
+        process.env.PYTHONPATH,
+      ]
+        .filter(Boolean)
+        .join(path.delimiter),
+    },
+  },
 );
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
