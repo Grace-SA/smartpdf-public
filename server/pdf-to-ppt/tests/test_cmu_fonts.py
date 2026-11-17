@@ -5,7 +5,7 @@ import pytest
 from pptx import Presentation
 from pptx.util import Pt
 from fontTools.ttLib import TTFont
-from smartppt.layout import font_family,font_style,cjk_text,add_text,graphical_font
+from smartppt.layout import font_family,font_style,cjk_text,add_text,graphical_font,modern_face
 from smartppt.font_embedding import bundled_payloads,cmu_payload,CMU_FACES,P
 from smartppt.config import Settings,ConversionError
 from smartppt.portable_fonts import try_portable_fonts
@@ -25,6 +25,36 @@ def test_source_face_controls_modern_family_and_style(face,family,bold,italic,tm
  assert font_family('Computer Modern','office ﬁ 123.45',base_name=face)[0]==family
  assert font_style(face,900)==(bold,italic)
  assert font_family('Unknown','中文',base_name=face)[0]=='Noto Sans SC'
+
+
+@pytest.mark.parametrize('shape,family,bold,italic',[
+ ('rm','CMU Serif',False,False),('sl','CMU Serif',False,True),
+ ('ti','CMU Serif',False,True),('bx','CMU Serif',True,False),
+ ('bl','CMU Serif',True,True),('bi','CMU Serif',True,True),
+ ('rb','CMU Serif',True,False),('ss','CMU Sans Serif',False,False),
+ ('si','CMU Sans Serif',False,True),('sx','CMU Sans Serif',True,False),
+ ('so','CMU Sans Serif',True,True),('tt','CMU Typewriter Text',False,False),
+ ('st','CMU Typewriter Text',False,True),('it','CMU Typewriter Text',False,True)])
+@pytest.mark.parametrize('prefix,size',[('', '0900'),('ABCDEF+', '1000')])
+def test_cm_super_known_shapes(shape,family,bold,italic,prefix,size,tmp_path,monkeypatch):
+ face=prefix+'SF'+shape.upper()+size
+ test_source_face_controls_modern_family_and_style(face,family,bold,italic,tmp_path,monkeypatch)
+ # Explicit face names override contradictory PDF weight/italic estimates.
+ assert font_style(face,100,64)==(bold,italic)
+
+
+@pytest.mark.parametrize('face',['SFCC1000','SFSC1000','SFUI1000','SFVT1000','SFVI1000',
+ 'SFDH1000','SFRM10','SFRM1000Unknown','UnknownSFRM1000','SFBMR10','SFSSDC10','CMSY10'])
+def test_cm_super_unknown_shapes_are_not_guessed(face):
+ assert modern_face(face) is None
+
+
+def test_cm_super_requires_available_family_file(tmp_path,monkeypatch):
+ monkeypatch.setenv('SMARTPPT_CMU_FONT_DIR',str(tmp_path))
+ assert font_family('Computer Modern','Budget 123',base_name='SFRM1000')[0]=='Arial'
+ (tmp_path/'cmunss.ttf').write_bytes(b'availability only')
+ assert font_family('Computer Modern','Budget 123',base_name='SFRM1000')[0]=='Arial'
+ assert font_family('Computer Modern','Budget 123',base_name='SFSS1000')[0]=='CMU Sans Serif'
 
 @pytest.mark.parametrize('text,expected',[('ﬁ ﬂ \ue000',False),('中文',True),('𠮷',True),('123.45',False)])
 def test_chinese_detection_does_not_misclassify_latin_ligatures(text,expected):

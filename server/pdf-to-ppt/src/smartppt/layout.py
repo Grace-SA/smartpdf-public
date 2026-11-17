@@ -30,6 +30,13 @@ def modern_face(name):
                            (r'cmss(?:bx|i)?\d+(?:[-,].*)?','CMU Sans Serif'),
                            (r'cmtt\d+(?:[-,].*)?','CMU Typewriter Text')):
         if re.fullmatch(pattern,name):return family
+    # CM-Super uses sf + a two-letter shape + four-digit optical size.
+    # Restrict substitution to faces represented by our pinned CMU families;
+    # small caps, variable-width typewriter and decorative faces stay unknown.
+    for pattern,family in ((r'sf(?:rm|sl|ti|bx|bl|bi|rb)\d{4}','CMU Serif'),
+                           (r'sf(?:ss|si|sx|so)\d{4}','CMU Sans Serif'),
+                           (r'sf(?:tt|st|it)\d{4}','CMU Typewriter Text')):
+        if re.fullmatch(pattern,name):return family
     return None
 
 
@@ -92,6 +99,9 @@ def font_style(base_name,weight,flags=0):
     name=re.sub(r'^[A-Z]{6}\+','',base_name).lower().replace(' ','')
     if modern_face(base_name):
         if name.startswith('cmu'):return 'bold' in name,any(s in name for s in ('italic','oblique'))
+        if name.startswith('sf'):
+            shape=name[2:4]
+            return shape in ('bx','bl','bi','rb','sx','so'),shape in ('sl','ti','bl','bi','si','so','st','it')
         return name.startswith(('cmb','cmssbx')),name.startswith(('cmti','cmsl','cmmi','cmssi'))
     italic=bool(flags & 64) or any(x in name for x in ('italic','oblique'))
     if any(x in name for x in ('bold','semibold','demi','heavy','black')):return True,italic
