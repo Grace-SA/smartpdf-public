@@ -103,7 +103,16 @@ function linuxPath(value) {
 
 export function runStirling(job, update, adapter = runner, timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 3600000)
+    const localPdfWord =
+      process.env.PDFWORD_LOCAL_V2 === "1" &&
+      path.resolve(adapter) ===
+        fileURLToPath(new URL("../pdfword/local_runner.py", import.meta.url));
+    const maximumDeadline = localPdfWord ? 2 * 3600000 : 3600000;
+    if (
+      !Number.isInteger(timeoutMs) ||
+      timeoutMs < 1000 ||
+      timeoutMs > maximumDeadline
+    )
       throw new Error("Invalid conversion worker deadline");
     const windows = process.platform === "win32";
     const command = windows
@@ -218,10 +227,12 @@ export async function createWordService(options = {}) {
   const processingTtlMs = pdfword
     ? (options.processingTtlMs ?? 16 * 60000)
     : 16 * 60000;
+  const maximumProcessingTtlMs =
+    pdfword && process.env.PDFWORD_LOCAL_V2 === "1" ? 6 * 3600000 : 3600000;
   if (
     !Number.isInteger(processingTtlMs) ||
     processingTtlMs < 16 * 60000 ||
-    processingTtlMs > 3600000
+    processingTtlMs > maximumProcessingTtlMs
   )
     throw new Error("Invalid processing expiry");
   const outputName = pdfword ? "output.docx" : "output.pdf";

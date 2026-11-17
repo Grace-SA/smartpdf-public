@@ -28,6 +28,7 @@ export function createPdfWordService(options = {}) {
         : taskPolicy.legacyQueuedTaskSeconds),
     capabilities: {
       reconstruction,
+      nativeTables: reconstruction && Boolean(process.env.PDFWORD_TABLE_PYTHON),
       reviewCandidate:
         reconstruction && process.env.PDFWORD_REVIEW_CANDIDATE === "1",
       stirlingNative:

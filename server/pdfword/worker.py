@@ -17,9 +17,12 @@ from layout import native_page, repeated_margins, link_tables
 from exporter import export_word
 from ocr import OCR
 from math_export import unsupported
-from text_visibility import bright_text_visible, cosmetic_white_rectangles
+from text_visibility import (bright_text_visible, cosmetic_white_rectangles,
+                             fully_clipped_number, confirm_invisible_numbers,
+                             exclude_invisible_numbers)
 from text_geometry import repair_unmapped_glyphs, glyph_geometry, ink_bounds, mapped_bounds, repair_zero_width_blocks
 from text_coverage import check_coverage, editable_block_text, editable_source_text
+from native_margins import numeric_margin, upright_margin_words
 
 
 def preflight(source):
@@ -98,6 +101,7 @@ def needs_ocr(page):
     images = 0
     unsafe = False
     bright = []
+    clipped_numbers = []
     with closing(page.get_textpage()) as tp:
         geometry = glyph_geometry(tp)
         objects = 0
@@ -119,6 +123,9 @@ def needs_ocr(page):
             # native extractor below is cropped to the same visible page.
             if mapped and (mapped[2] <= crop[0] or mapped[0] >= crop[2]
                            or mapped[3] <= crop[1] or mapped[1] >= crop[3]):
+                continue
+            if fully_clipped_number(obj, geometry):
+                clipped_numbers.append(obj)
                 continue
             rgba = [ctypes.c_uint() for _ in range(4)]
             ok = pdf.raw.FPDFPageObj_GetFillColor(obj, *(ctypes.byref(v) for v in rgba))
@@ -145,13 +152,14 @@ def needs_ocr(page):
                 or t > crop[3] + 0.5
             )
             matrix = obj.get_matrix()
-            unsafe |= (
+            unsafe |= not numeric_margin(obj, page, geometry) and (
                 abs(matrix.b) > 0.001
                 or abs(matrix.c) > 0.001
                 or matrix.a <= 0
                 or matrix.d <= 0
             )
         unsafe |= not bright_text_visible(page, bright, geometry)
+        unsafe |= not confirm_invisible_numbers(page, clipped_numbers)
     return (
         (not visible and bool(images)) or unsafe or bool(page.get_rotation()),
         visible,
@@ -170,12 +178,46 @@ def render(page, path):
         bitmap.to_pil().convert("RGB").save(path)
 
 
+def checked_native_page(page, native, visible, cosmetic=(), proposals=()):
+    """All native candidates pass the same visibility-independent output gates."""
+    blocks = native_page(native, cosmetic, proposals)
+    expected = editable_source_text(native, blocks)
+    width, height = page.get_size()
+    left, _, _, top = page.get_bbox()
+    offset_top = native.root_page.height-top
+    if left or offset_top:
+        for block in blocks:
+            block['bbox'] = [v-(left if n % 2 == 0 else offset_top)
+                             for n, v in enumerate(block['bbox'])]
+    repair_zero_width_blocks(page, blocks)
+    try:
+        for block in blocks:
+            box(block['bbox'], width, height)
+    except Rejected as error:
+        raise Rejected("Layout needs OCR.") from error
+    if (not visible and blocks) or any(
+            b['kind'] == 'image' and (b['bbox'][2]-b['bbox'][0])*(b['bbox'][3]-b['bbox'][1])
+            > width*height*.65 for b in blocks):
+        raise Rejected("Layout needs OCR.")
+    try:
+        check_coverage([{'text': expected}], [editable_block_text(blocks)], numeric_tokens=False)
+    except ValueError as error:
+        raise Rejected("Layout needs OCR.") from error
+    return blocks
+
+
 def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
     source = Path(source)
     work = Path(work)
     count = preflight(source)
     model = dict(schema=2, pages=[], warnings=[])
+    from native_orientation import normalize_orientation
+    source, corrected = normalize_orientation(source, work, cancel)
+    for index in corrected:
+        model["warnings"].append(f"Page {index+1}: native text direction was corrected; check page orientation.")
     pixels = 0
+    from stream_tables import StreamTables
+    stream_tables = StreamTables(source)
     with pdf.PdfDocument(source) as doc, pdfplumber.open(source) as textdoc:
         if len(doc) != count or len(textdoc.pages) != count:
             raise Rejected("PDF page structure needs review.")
@@ -200,55 +242,27 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                         # coordinates; their page edges can differ by micrometres.
                         p = p.crop((l, top, r, top + height), strict=False)
                     p = repair_unmapped_glyphs(page, p)
-                    try:
-                        blocks = native_page(p, cosmetic_white_rectangles(page))
-                        expected_text = editable_source_text(p, blocks)
-                    except Rejected as error:
-                        if str(error) not in (
-                            "Incomplete native table grid.",
-                            "Layout needs OCR.",
-                        ):
-                            raise
-                        use_ocr = True
-                    if l or top:
-                        for block in blocks:
-                            block["bbox"] = [
-                                v - (l if n % 2 == 0 else top)
-                                for n, v in enumerate(block["bbox"])
-                            ]
-                    # Recover a uniquely mapped ink box for zero-width metrics;
-                    # otherwise re-recognize this page. Never drop the glyph or
-                    # relax final geometry checks to finish a long document.
-                    if not use_ocr:
-                        repair_zero_width_blocks(page, blocks)
-                        try:
-                            for block in blocks:
-                                box(block["bbox"], width, height)
-                        except Rejected:
-                            use_ocr = True
-                    use_ocr = use_ocr or any(
-                        b["kind"] == "image"
-                        and (b["bbox"][2] - b["bbox"][0])
-                        * (b["bbox"][3] - b["bbox"][1])
-                        > width * height * 0.65
-                        for b in blocks
-                    )
-                    # Outlined glyphs and image-only regions must be recognized, not silently omitted.
-                    use_ocr = use_ocr or (not visible and bool(blocks))
-                    if not use_ocr:
-                        # Background rectangles can encompass text and be grouped
-                        # into a picture. That must not silently rasterize editable
-                        # native prose or table values in a mixed-content page.
-                        try:
-                            # A ruling can split one PDF text run into two cells;
-                            # compare all digits, allowing these verified splits.
-                            check_coverage([{"text": expected_text}], [editable_block_text(blocks)], numeric_tokens=False)
-                        except ValueError:
-                            use_ocr = True
+                    p = exclude_invisible_numbers(page, p)
+                    if p is not None:
+                        p = upright_margin_words(page, p)
+                    use_ocr = True
+                    if p is not None:
+                        cosmetic = cosmetic_white_rectangles(page)
+                        for attempt in range(2):
+                            proposals = stream_tables.proposals(i) if attempt else ()
+                            if attempt and not proposals:
+                                break
+                            try:
+                                blocks = checked_native_page(page, p, visible, cosmetic, proposals)
+                                use_ocr = False
+                                break
+                            except Rejected as error:
+                                if str(error) not in ("Incomplete native table grid.", "Layout needs OCR."):
+                                    raise
                 if use_ocr:
                     scale = raster_scale(page)
                     pixels += math.ceil(width * scale) * math.ceil(height * scale)
-                    if pixels > 256000000:
+                    if pixels > max(256000000, count * 4000000):
                         raise Rejected(
                             "OCR page pixels exceed the task budget. Split the document."
                         )

@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import type { AddressInfo } from "node:net";
 import type { Task } from "../server/word/service.mjs";
 import { createPdfWordService } from "../server/pdfword/service.mjs";
+import { runStirling } from "../server/word/service.mjs";
 import { checkDocx } from "../server/pdfword/docx-check.mjs";
 import taskPolicy from "../server/pdfword/task-policy.json";
 
@@ -130,7 +131,7 @@ it("keeps the PDF reconstruction worker, three queue slots and client wait consi
   expect(taskPolicy.localWorkerSeconds).toBeGreaterThan(300);
   expect(taskPolicy.localWorkerSeconds).toBeLessThanOrEqual(900);
   expect(
-    taskPolicy.workerGuardSeconds - taskPolicy.localWorkerSeconds,
+    taskPolicy.workerGuardSeconds - taskPolicy.maxLocalWorkerSeconds,
   ).toBeGreaterThanOrEqual(30);
   expect(taskPolicy.queuedTaskSeconds).toBeGreaterThanOrEqual(
     3 * taskPolicy.workerGuardSeconds + 60,
@@ -138,8 +139,33 @@ it("keeps the PDF reconstruction worker, three queue slots and client wait consi
   expect(taskPolicy.clientWaitSeconds).toBeGreaterThan(
     taskPolicy.queuedTaskSeconds,
   );
-  expect(taskPolicy.clientWaitSeconds).toBeLessThan(3600);
+  expect(taskPolicy.maxLocalWorkerSeconds).toBeLessThanOrEqual(100 * 60);
+  expect(taskPolicy.clientWaitSeconds).toBeLessThan(6 * 3600);
   expect(taskPolicy.legacyQueuedTaskSeconds).toBe(16 * 60);
+});
+
+it("permits the extended deadline only for the opted-in local PDF worker", async () => {
+  const local = path.resolve("server/pdfword/local_runner.py");
+  const job = { directory: "--reap" } as Task;
+  vi.stubEnv("PDFWORD_LOCAL_V2", "1");
+  await expect(
+    runStirling(job, () => {}, local, taskPolicy.workerGuardSeconds * 1000),
+  ).resolves.toBeUndefined();
+  await expect(
+    runStirling(
+      job,
+      () => {},
+      path.resolve("server/word/runner.py"),
+      taskPolicy.workerGuardSeconds * 1000,
+    ),
+  ).rejects.toThrow("deadline");
+  await expect(
+    runStirling(job, () => {}, local, 2 * 3600000 + 1),
+  ).rejects.toThrow("deadline");
+  vi.stubEnv("PDFWORD_LOCAL_V2", "0");
+  await expect(
+    runStirling(job, () => {}, local, taskPolicy.workerGuardSeconds * 1000),
+  ).rejects.toThrow("deadline");
 });
 
 it("advertises the native adapter only for an opted-in configured reconstruction service", async () => {
@@ -161,6 +187,21 @@ it("advertises the native adapter only for an opted-in configured reconstruction
     (await (await baseline.api("/session")).json()).capabilities.stirlingNative,
   ).toBe(false);
 });
+
+it.each([
+  ["0", "/local/table-runtime/python", false],
+  ["1", "", false],
+  ["1", "/local/table-runtime/python", true],
+])(
+  "advertises the optional table helper only in configured local reconstruction (%s,%s)",
+  async (mode, python, expected) => {
+    vi.stubEnv("PDFWORD_LOCAL_V2", mode);
+    vi.stubEnv("PDFWORD_TABLE_PYTHON", python);
+    const s = await setup();
+    const response = await s.api("/session");
+    expect((await response.json()).capabilities.nativeTables).toBe(expected);
+  },
+);
 
 it.each([
   ["0", "0", false],

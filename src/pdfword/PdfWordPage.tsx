@@ -29,6 +29,7 @@ type Service = {
     reviewCandidate?: boolean;
     ocr?: boolean;
     stirlingNative?: boolean;
+    nativeTables?: boolean;
   };
 };
 const mime = "application/pdf";
@@ -637,6 +638,12 @@ export function PdfWordPage() {
               </a>
               {" · "}
               <a href="https://github.com/PaddlePaddle/PaddleOCR">PaddleOCR</a>
+            </span>
+          )}
+          {service?.capabilities?.nativeTables && (
+            <span>
+              Table parsing:{" "}
+              <a href="https://github.com/camelot-dev/camelot">Camelot</a>
             </span>
           )}
         </footer>

@@ -2,6 +2,7 @@
 
 import math
 import re
+import unicodedata
 from statistics import median
 from model import Rejected
 
@@ -444,7 +445,52 @@ def graphics(page, tables):
     ]
 
 
-def native_page(page, cosmetic_rectangles=()):
+def reconstructed_rules(page, tables):
+    """Recognize connected thin outer table rules, including a ruled footnote box.
+
+    Only line/rectangle strokes are removed; images, filled regions and curves
+    keep their normal figure route. Word supplies the editable table's borders.
+    """
+    rules = []
+    for obj in page.lines + page.rects:
+        b = [obj[k] for k in ('x0', 'top', 'x1', 'bottom')]
+        if min(b[2]-b[0], b[3]-b[1]) <= 2 and max(b[2]-b[0], b[3]-b[1]) > 0:
+            rules.append((obj, b))
+    if len(rules) > 2000:
+        return set()
+    components = []
+    for obj, b in rules:
+        linked = [c for c in components if any(
+            not (b[2]+1 < other[0] or other[2]+1 < b[0] or b[3]+1 < other[1] or other[3]+1 < b[1])
+            for _, other in c)]
+        group = [(obj, b)]
+        for component in linked:
+            group.extend(component)
+            components.remove(component)
+        components.append(group)
+    removed = set()
+    for component in components:
+        if len(component) < 4:
+            continue
+        bounds = union([b for _, b in component])
+        for table in tables:
+            l, top, r, bottom = table['bbox']
+            if (abs(bounds[0]-l) <= 12 and abs(bounds[2]-r) <= 12
+                    and top-12 <= bounds[1] <= top and bottom <= bounds[3] <= bottom+(bottom-top)*.25
+                    and any(b[2]-b[0] >= (r-l)*.8 for _, b in component)
+                    and any(b[3]-b[1] >= (bottom-top)*.1 for _, b in component)
+                    # Outside the data region, only perimeter/whole-width rules
+                    # qualify. Interior plotted strokes must remain as graphics.
+                    and all((b[1] >= top and b[3] <= bottom)
+                            or b[2] <= l+6 or b[0] >= r-6
+                            or b[2]-b[0] >= (r-l)*.8
+                            or (b[3]-b[1] <= 2 and (b[2] <= l+12 or b[0] >= r-12))
+                            for _, b in component)):
+                removed.update(id(obj) for obj, _ in component)
+    return removed
+
+
+def native_page(page, cosmetic_rectangles=(), table_proposals=()):
     if cosmetic_rectangles:
         def retain(obj):
             color = obj.get("non_stroking_color")
@@ -456,7 +502,9 @@ def native_page(page, cosmetic_rectangles=()):
                            for box in cosmetic_rectangles)
     # pdfminer uses a multi-character placeholder for an unmapped source glyph.
     # A literal printed "(cid:123)" is several separate chars and is not rejected.
-    if any(re.fullmatch(r"\(cid:\d+\)", char.get("text", "")) for char in page.chars):
+    if any(re.fullmatch(r"\(cid:\d+\)", char.get("text", ""))
+           or any(unicodedata.category(c) == 'Cc' and not c.isspace() for c in char.get('text', ''))
+           for char in page.chars):
         raise Rejected("Layout needs OCR.")
     if len(page.chars) > 60000:
         raise Rejected("Page exceeds text budget.")
@@ -465,7 +513,13 @@ def native_page(page, cosmetic_rectangles=()):
         return_chars=True, x_tolerance=2, y_tolerance=3, keep_blank_chars=False
     )
     words = [w for w in words if w["text"].strip()]
-    tables = native_tables(clean, words)
+    if table_proposals:
+        from stream_tables import qualified_tables
+        tables = qualified_tables(clean, words, table_proposals)
+        if not tables:
+            raise Rejected("Layout needs OCR.")
+    else:
+        tables = native_tables(clean, words)
     if cosmetic_rectangles:
         for table in tables:
             lengths = [len(c.get("text", "")) for c in table["cells"]]
@@ -491,7 +545,12 @@ def native_page(page, cosmetic_rectangles=()):
     tables.extend(borderless_tables(remaining_words, clean))
     # Invisible paint boundaries can still define the source table grid.
     # Exclude proven cosmetic rectangles only from figure grouping.
-    images = graphics(clean.filter(retain) if cosmetic_rectangles else clean, tables)
+    figures = clean.filter(retain) if cosmetic_rectangles else clean
+    if table_proposals:
+        rules = reconstructed_rules(figures, tables)
+        if rules:
+            figures = figures.filter(lambda obj: id(obj) not in rules)
+    images = graphics(figures, tables)
     excluded = [t["bbox"] for t in tables] + images
     remaining = [
         w

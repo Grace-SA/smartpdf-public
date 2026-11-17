@@ -5,11 +5,18 @@ import os
 import signal
 import sys
 from pathlib import Path
-from worker import convert, Rejected
+from worker import convert, preflight, Rejected
 
 
 def emit(**value):
     print(json.dumps(value), flush=True)
+
+
+def task_seconds(pages, policy):
+    if type(pages) is not int or not 1 <= pages <= 200:
+        return policy['localWorkerSeconds']
+    return min(policy['maxLocalWorkerSeconds'], policy['localWorkerSeconds']
+               + max(0, pages-policy['includedPages'])*policy['additionalPageSeconds'])
 
 
 def run(directory):
@@ -35,6 +42,15 @@ def run(directory):
     signal.alarm(policy["localWorkerSeconds"])
     try:
         emit(state="checking")
+        # The initial alarm bounds preflight too. Invalid inputs still get the
+        # ordinary converter rejection, never a larger unverified page budget.
+        try:
+            pages = preflight(directory / 'input.pdf')
+        except (OSError, ValueError):
+            pages = None
+        budget = task_seconds(pages, policy)
+        signal.alarm(budget)
+        emit(state='checking', timeLimitSeconds=budget)
         report = convert(
             directory / "input.pdf",
             directory / "output.docx",

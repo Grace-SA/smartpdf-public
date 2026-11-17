@@ -21,6 +21,18 @@ export function checkPdf(
     | "ppt"
     | { ppt: boolean; visible: number; width: number; height: number },
 ): Promise<{ pages: number }>;
+export function runStirling(
+  job: Task,
+  update: (value: {
+    state?: string;
+    warnings?: string[];
+    completedPages?: number;
+    totalPages?: number;
+    stage?: string;
+  }) => void,
+  adapter?: string,
+  timeoutMs?: number,
+): Promise<void>;
 export function createWordService(options?: {
   format?: "word" | "ppt" | "pdfword";
   region?: string;

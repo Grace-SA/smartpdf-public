@@ -1,5 +1,7 @@
 # 当前开发进度
 
-2026-11-17：PDF to Word 受限评审候选，状态 Ready for limited review。用户已授权继续当前功能，争取 48 小时内交付可评审候选；不合并 main、不部署。开发分支为 `development/pdf-to-word`，基线提交 `7de3e87`。
+2026-11-17：PDF to Word 复杂表格与长文档改进，状态 In review（受限候选，通用上线未通过）。用户授权继续当前功能，修复后完整重跑 139 份与实际 Word。开发分支为 `development/pdf-to-word`，本轮对比基线为 `1646cae`；已将 main 合入开发分支，只推送开发分支，不部署。
 
-范围、验收标准及当前证据见 [受限评审候选](pdfword-review-candidate.md)。上一完整批次及已知问题见 [混合转换方案与验收](pdfword-stirling-evaluation.md)。当前冻结候选已完成本轮 139 份、实际 Word、真实网页链路和累计回归，结果详见报告；整体准确率及通用上线仍未通过。这里只记录当前授权功能，不重新标记其他功能的验收状态。
+本轮设计：保留现有可用路由，对需要 OCR 的原生表格尝试独立 Stream 网格解析；每个单元格须通过原生文字与位置校验，普通段落、跨格歧义、不可见文字和解析异常仍回退。优先减少长文档重复 OCR，不通过删页、丢文字或放宽准确率门槛制造成功。固定 139 份身份、文字和表格参考答案；新增几何、脚注、误判和超时边界测试。先完成定向验证再冻结候选，完整运行转换、Word 编辑回存/渲染及累计回归。研究依据为 [Camelot 算法说明](https://camelot-py.readthedocs.io/en/latest/user/how-it-works.html) 与 [pdfplumber 表格提取](https://github.com/jsvine/pdfplumber#extracting-tables)。设计自查：外部解析结果只作候选，不能绕过可见性、完整性、资源限制和最终文档检查；不新增产品操作或扩大支持承诺。
+
+范围、验收标准及当前证据见 [受限评审候选](pdfword-review-candidate.md)。上一完整批次及已知问题见 [混合转换方案与验收](pdfword-stirling-evaluation.md)。上一候选已完成 139 份、实际 Word、真实网页链路和累计回归；本轮新候选已完成 139 份（106 成功、32 失败、1 超时）及实际 Word 106/106 编辑回存，表格参考单元格匹配率 89.21%，文字参考 96.9053%；长表分页与单页 OCR 仍有未解决问题，见 [复杂表格与长文档改进](pdfword-table-long-review.md)。整体准确率及通用上线仍未通过。这里只记录当前授权功能，不重新标记其他功能的验收状态。

@@ -12,6 +12,19 @@ from model import Rejected
 
 
 class DeadlineTests(unittest.TestCase):
+    def test_verified_page_budget_is_bounded_and_short_tasks_keep_ten_minutes(self):
+        from pathlib import Path
+        policy = json.loads(Path(local_runner.__file__).with_name('task-policy.json').read_text())
+        for pages in [None, 0, -1, 201, True, '200', 1, 20]:
+            self.assertEqual(local_runner.task_seconds(pages, policy), 600)
+        self.assertEqual(local_runner.task_seconds(21, policy), 630)
+        self.assertEqual(local_runner.task_seconds(86, policy), 2580)
+        self.assertEqual(local_runner.task_seconds(196, policy), 5880)
+        self.assertEqual(local_runner.task_seconds(200, policy), 6000)
+        self.assertGreater(policy['workerGuardSeconds'], policy['maxLocalWorkerSeconds'])
+        self.assertGreater(policy['queuedTaskSeconds'], 3*policy['workerGuardSeconds'])
+        self.assertGreater(policy['clientWaitSeconds'], policy['queuedTaskSeconds'])
+
     def test_timeout_is_not_reported_as_user_cancellation(self):
         handlers = {}
 

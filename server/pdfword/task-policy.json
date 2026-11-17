@@ -1,7 +1,10 @@
 {
   "localWorkerSeconds": 600,
-  "workerGuardSeconds": 630,
-  "queuedTaskSeconds": 1950,
-  "clientWaitSeconds": 1980,
+  "includedPages": 20,
+  "additionalPageSeconds": 30,
+  "maxLocalWorkerSeconds": 6000,
+  "workerGuardSeconds": 6030,
+  "queuedTaskSeconds": 18150,
+  "clientWaitSeconds": 18180,
   "legacyQueuedTaskSeconds": 960
 }

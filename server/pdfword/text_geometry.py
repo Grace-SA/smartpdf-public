@@ -99,7 +99,9 @@ def repair_unmapped_glyphs(page, native):
     if len(native.chars) > 60000:
         return native
     targets = [(i, c) for i, c in enumerate(native.chars)
-               if re.fullmatch(r"\(cid:\d+\)", c.get("text", ""))]
+               if re.fullmatch(r"\(cid:\d+\)", c.get("text", ""))
+               or (len(c.get("text", "")) == 1 and not c['text'].isspace()
+                   and unicodedata.category(c['text']) == 'Cc')]
     if not targets or page.get_rotation() or native.rotation:
         return native
     width, height = page.get_size()

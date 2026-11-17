@@ -119,14 +119,6 @@ export function ToolNavigation({
         aria-controls="header-tools"
         disabled={disabled}
         onClick={() => setOpen(!open)}
-        onKeyDown={(event) => {
-          // Safari can skip buttons during native Tab navigation. Enter the
-          // expanded menu explicitly before focus leaves and closes it.
-          if (expanded && event.key === "Tab" && !event.shiftKey) {
-            event.preventDefault();
-            closeButton.current?.focus();
-          }
-        }}
       >
         <span className="tools-desktop-label">All PDF tools</span>
         <span className="tools-mobile-label">Tools</span>

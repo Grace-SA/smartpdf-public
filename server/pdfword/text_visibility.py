@@ -84,6 +84,42 @@ def text_without_objects(textpage, objects):
     return "".join(result)
 
 
+def exclude_invisible_numbers(page, native):
+    """Remove only uniquely mapped, fully clipped numeric glyphs from native text.
+
+    Geometric clipping and exact rendered-pixel equality are both required.
+    None means the mapping was ambiguous and the caller must use OCR.
+    """
+    from text_geometry import glyph_geometry
+    with closing(page.get_textpage()) as textpage:
+        geometry = glyph_geometry(textpage)
+        objects = [obj for obj in page.get_objects(textpage=textpage)
+                   if obj.type == pdf.raw.FPDF_PAGEOBJ_TEXT and fully_clipped_number(obj, geometry)]
+        if not objects:
+            return native
+        if not confirm_invisible_numbers(page, objects):
+            return None
+        owners = {handle(obj) for obj in objects}
+        removed = set()
+        for index in range(textpage.count_chars()):
+            if handle(pdf.raw.FPDFText_GetTextObject(textpage, index)) not in owners:
+                continue
+            code = pdf.raw.FPDFText_GetUnicode(textpage, index)
+            if not code or chr(code).isspace():
+                continue
+            l, b, r, t = textpage.get_charbox(index)
+            matches = [i for i, char in enumerate(native.chars)
+                       if char['text'] == chr(code) and char['x0']-.5 <= l <= r <= char['x1']+.5
+                       and char['top']-.5 <= native.height-t <= native.height-b <= char['bottom']+.5]
+            if len(matches) != 1 or matches[0] in removed:
+                return None
+            removed.add(matches[0])
+    view = native.filter(lambda _: True)
+    view._objects = dict(native.objects)
+    view._objects['char'] = [c for i, c in enumerate(native.chars) if i not in removed]
+    return view
+
+
 def bright_text_visible(page, objects, geometry=None):
     if not objects:
         return True
