@@ -58,7 +58,7 @@ def qualified_tables(page, words, proposals):
     Camelot confidence scores are deliberately not used as accuracy evidence.
     Trailing footnotes remain outside the grid, in the native paragraph flow.
     """
-    from layout import contains, words_to_blocks
+    from layout import contains, words_to_blocks, native_font
     numeric = re.compile(r"[−+($€£¥-]?\d[\d,.%()−–-]*")
     result = []
     for proposal in proposals[:32]:
@@ -112,7 +112,8 @@ def qualified_tables(page, words, proposals):
                         valid = False
                         break
                     row_cells.append(dict(row=i-start, col=j, rowspan=1, colspan=1,
-                                      text=value,
+                                      text=value, font=native_font(paragraphs),
+                                      bold=bool(paragraphs) and all(p.get("bold") for p in paragraphs),
                                       size=min((p["size"] for p in paragraphs), default=10),
                                       header=i < data_rows[0]))
                 if not valid and i < data_rows[0]:
@@ -130,14 +131,15 @@ def qualified_tables(page, words, proposals):
             if characters("".join(w["text"] for w in inside)) != characters("".join(c["text"] for c in cells)):
                 continue
             result.append(dict(kind="table", bbox=bounds, rows=end-start, cols=len(cols),
-                               cells=cells, widths=[b-a for a, b in cols], source="native"))
+                               cells=cells, widths=[b-a for a, b in cols], source="native",
+                               header_rows=data_rows[0]-start))
         except (KeyError, TypeError, ValueError, IndexError, ZeroDivisionError):
             continue
     return result
 
 
 def header_spans(words, expected, cols, row, page):
-    from layout import words_to_blocks
+    from layout import words_to_blocks, native_font
     groups = []
     for word in sorted(words, key=lambda w: (round(w['top']/3), w['x0'])):
         if (not groups or abs(word['top']-groups[-1][-1]['top']) > 3
@@ -167,7 +169,8 @@ def header_spans(words, expected, cols, row, page):
         used.add(matches[0])
         paragraphs = words_to_blocks(group, page.width, page.height)
         cells.append(dict(row=row, col=min(span), rowspan=1, colspan=len(span),
-                          text='\n'.join(p['text'] for p in paragraphs),
+                          text='\n'.join(p['text'] for p in paragraphs), font=native_font(paragraphs),
+                          bold=bool(paragraphs) and all(p.get('bold') for p in paragraphs),
                           size=min((p['size'] for p in paragraphs), default=10), header=True))
     if used != {i for i, value in enumerate(expected) if value.strip()}:
         return None

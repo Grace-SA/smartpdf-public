@@ -97,6 +97,9 @@ def profile(source, cancel=None):
     # the existing native reconstruction already knows the complete structure.
     with pdfplumber.open(source) as document:
         for index, page in enumerate(document.pages):
+            if len(document.pages) == 1:
+                from native_page_labels import numeric_footer
+                pages[index]['numericFooter'] = numeric_footer(page)
             if has_nested_grid(page):
                 return None, "nested-source-grid"
             try:
@@ -177,7 +180,8 @@ def convert_native(source, destination, work, pages, cancel=None, progress=None)
                     process.kill()
                     process.wait()
     staged = Path(work) / "native-checked.docx"
-    report, text = normalize_package(raw, staged, len(pages))
+    report, text = normalize_package(raw, staged, len(pages),
+                                     numeric_footer=pages[0].get('numericFooter') if len(pages) == 1 else None)
     report["nativeCoverage"] = check_coverage(pages, text)
     check_visual_coverage(pages, report["nativePageImages"])
     if cancel and Path(cancel).exists():

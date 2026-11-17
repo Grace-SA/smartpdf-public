@@ -57,6 +57,19 @@ def join_words(words):
     return text
 
 
+def native_font(paragraphs):
+    fonts = [p.get("font", "Arial") for p in paragraphs]
+    return max(fonts, key=fonts.count) if fonts else "Arial"
+
+
+def font_family(names):
+    if names and all("times" in n for n in names):
+        return "Times New Roman"
+    if names and all("courier" in n for n in names):
+        return "Courier New"
+    return "Arial"
+
+
 def words_to_blocks(words, width, height):
     if not words:
         return []
@@ -106,6 +119,7 @@ def words_to_blocks(words, width, height):
                 runs.append(
                     dict(
                         text=prefix + w["text"],
+                        font=font_family(names),
                         size=(
                             median(c.get("size", size) for c in letters)
                             if letters
@@ -129,6 +143,7 @@ def words_to_blocks(words, width, height):
                 dict(
                     kind=kind,
                     bbox=bounds,
+                    font=font_family(fonts),
                     text=text,
                     runs=runs,
                     size=size,
@@ -267,6 +282,8 @@ def native_tables(page, words):
                     colspan=c1 - c0,
                     text="\n".join(p["text"] for p in paras),
                     size=median(p["size"] for p in paras) if paras else 10,
+                    font=native_font(paras),
+                    bold=bool(paras) and all(p.get("bold") for p in paras),
                     header=False,
                 )
             )
@@ -445,6 +462,29 @@ def graphics(page, tables):
     ]
 
 
+
+def include_figure_labels(images, words, width, height):
+    """Keep a short label's full glyph box inside its retained source crop.
+
+    Center-based figure membership can exclude a label from editable text while
+    clipping its font descent. Only expand by at most 2pt, never into adjacent
+    words; long prose still requires the existing editable coverage check.
+    """
+    from text_coverage import compact
+    bounds = [[w['x0'], w['top'], w['x1'], w['bottom']] for w in words]
+    result = []
+    for image in images:
+        members = {i for i,b in enumerate(bounds) if contains(image,b)}
+        candidate = union([image]+[bounds[i] for i in members])
+        if (sum(len(compact(words[i]['text'])) for i in members) > 80
+                or any(abs(a-b)>2 for a,b in zip(candidate,image))
+                or candidate[0]<0 or candidate[1]<0 or candidate[2]>width or candidate[3]>height
+                or any(i not in members and min(candidate[2],b[2])>max(candidate[0],b[0])
+                       and min(candidate[3],b[3])>max(candidate[1],b[1]) for i,b in enumerate(bounds))):
+            candidate = image
+        result.append(candidate)
+    return result
+
 def reconstructed_rules(page, tables):
     """Recognize connected thin outer table rules, including a ruled footnote box.
 
@@ -550,7 +590,7 @@ def native_page(page, cosmetic_rectangles=(), table_proposals=()):
         rules = reconstructed_rules(figures, tables)
         if rules:
             figures = figures.filter(lambda obj: id(obj) not in rules)
-    images = graphics(figures, tables)
+    images = include_figure_labels(graphics(figures, tables), words, page.width, page.height)
     excluded = [t["bbox"] for t in tables] + images
     remaining = [
         w
@@ -608,13 +648,19 @@ def repeated_margins(pages):
         if len(p["blocks"]) < 2:
             continue
         for b in p["blocks"]:
-            if b["kind"] not in ("paragraph", "heading"):
+            if b["kind"] not in ("paragraph", "heading", "header", "footer"):
                 continue
             edge = (
                 "header"
                 if b["bbox"][3] < p["height"] * 0.08
                 else "footer" if b["bbox"][1] > p["height"] * 0.92 else None
             )
+            # OCR may already identify part of a repeated page margin. Count
+            # that same geometric evidence too; otherwise mixed-route pages
+            # fall below the document-wide threshold and leave page numbers
+            # in the body. Do not count an existing margin on the wrong edge.
+            if b['kind'] in ('header', 'footer') and b['kind'] != edge:
+                continue
             if edge:
                 title = re.sub(
                     r"\s*(?:\(?continued\)?|续表|（续）)\s*$",

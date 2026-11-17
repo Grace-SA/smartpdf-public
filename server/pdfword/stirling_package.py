@@ -31,7 +31,7 @@ def text(element):
     return " ".join(element.xpath(".//w:t/text()", namespaces=N))
 
 
-def normalize_package(source, destination, page_count):
+def normalize_package(source, destination, page_count, numeric_footer=None):
     parts, media = {}, {}
     decoded_pixels = encoded_media = 0
     parser = E.XMLParser(resolve_entities=False, no_network=True)
@@ -181,6 +181,9 @@ def normalize_package(source, destination, page_count):
             if element.tag in (w("instrText"), w("fldChar")):
                 element.getparent().remove(element)
 
+    if page_count == 1 and numeric_footer:
+        restore_numeric_footer(parts, body, numeric_footer)
+
     page_text = [[] for _ in range(page_count)]
     page_images = [0 for _ in range(page_count)]
     # The engine anchors its first-page bookmark to the first paragraph, which may
@@ -210,3 +213,55 @@ def normalize_package(source, destination, page_count):
         raise ValueError("Native output exceeds download budget")
     images = sum(sum(E.QName(e).localname == "blip" for e in tree.iter()) for tree in parts.values())
     return dict(schema=2, pages=page_count, images=images, tables=len(tables), nativePageImages=page_images, warnings=[]), page_text
+
+
+def restore_numeric_footer(parts, body, label):
+    """Move a source-verified final page label into a real footer, never delete it."""
+    if not re.fullmatch(r'[0-9]{1,4}', label):
+        return
+    elements = [e for e in body if e.tag != w('sectPr')]
+    sections = list(body.iter(w('sectPr')))
+    if (not elements or len(sections) != 1 or sections[0].getparent() is not body
+            or not list(body.iter(w('tbl')))):
+        return
+    paragraph = elements[-1]
+    if (paragraph.tag != w('p') or text(paragraph).strip() != label
+            or paragraph.find('.//w:bookmarkStart', N) is not None
+            or paragraph.find('.//w:bookmarkEnd', N) is not None
+            or any(E.QName(e).localname in ('drawing', 'object', 'pict') for e in paragraph.iter())
+            or any(re.fullmatch(r'word/footer\d*\.xml', name) for name in parts)
+            or sections[0].find(w('footerReference')) is not None):
+        return
+    # Keep every word and formatting property; replace only artificial body gap.
+    props = paragraph.find(w('pPr'))
+    if props is None:
+        props = E.Element(w('pPr'))
+        paragraph.insert(0, props)
+    prop(props, 'spacing', before=0, after=0, line=240, lineRule='auto')
+    footer = E.Element(w('ftr'), nsmap={'w': W})
+    footer.append(paragraph)
+    parts['word/footer1.xml'] = footer
+    package_rel = 'http://schemas.openxmlformats.org/package/2006/relationships'
+    rels = parts.get('word/_rels/document.xml.rels')
+    if rels is None:
+        rels = E.Element('{'+package_rel+'}Relationships')
+        parts['word/_rels/document.xml.rels'] = rels
+    existing = {e.get('Id') for e in rels}
+    index = 1
+    while 'rIdFooter'+str(index) in existing:
+        index += 1
+    rid = 'rIdFooter'+str(index)
+    E.SubElement(rels, '{'+package_rel+'}Relationship', Id=rid,
+                 Type=R+'/footer', Target='footer1.xml')
+    reference = E.Element(w('footerReference'), {w('type'): 'default', '{'+R+'}id': rid})
+    sections[0].insert(0, reference)
+    types = parts['[Content_Types].xml']
+    E.SubElement(types, '{'+E.QName(types).namespace+'}Override', PartName='/word/footer1.xml',
+                 ContentType='application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml')
+    # Word requires a terminal body paragraph after a table. Reserve one point,
+    # rather than allowing its default paragraph mark to create another page.
+    tail = E.Element(w('p'))
+    tail_props = prop(tail, 'pPr')
+    prop(tail_props, 'spacing', before=0, after=0, line=20, lineRule='exact')
+    prop(prop(tail_props, 'rPr'), 'sz', val=2)
+    body.insert(list(body).index(sections[0]), tail)

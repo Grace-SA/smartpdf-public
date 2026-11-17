@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+from ocr_recovery import bounded_generate, recognize_block as recover_text_block
 
 _loaded = None
 _loop = None
@@ -30,13 +31,13 @@ def main(request):
     limit = min(int(request.get("max_tokens", 8192)), 8192)
     truncated = False
 
-    def infer(image, prompt, cap=limit):
+    def infer(image, prompt, cap=limit, options=None):
         nonlocal truncated
         text = apply_chat_template(processor, model.config, prompt, num_images=1)
-        out = generate(
-            model, processor, text, image=[image], max_tokens=cap, temperature=0
+        out, hit_limit = bounded_generate(
+            generate, model, processor, text, image, cap, options,
+            guard_repetition=engine == 'oxr' and prompt == 'Recognize the content of the image.'
         )
-        hit_limit = out.generation_tokens >= cap
         if engine == "u2":
             truncated |= hit_limit
         return out.text, hit_limit
@@ -82,11 +83,11 @@ def main(request):
         async def local_inference(
             prompt, image, timeout, model_options=None, max_tokens=None
         ):
-            value, hit_limit = infer(
-                Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)),
-                prompt,
-                min(max_tokens or limit, limit),
-            )
+            original = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            cap = min(max_tokens or limit, limit)
+            # Tables/formulae and unpartitionable text retain their original
+            # ceiling. All text bands must terminate; no partial output succeeds.
+            value, hit_limit = recover_text_block(infer, original, prompt, cap, model_options)
             state = active_block.get()
             if state is not None:
                 state["truncated"] = hit_limit

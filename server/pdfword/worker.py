@@ -231,6 +231,7 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                 ):
                     raise Rejected("Unsupported page dimensions.")
                 use_ocr, visible, images = needs_ocr(page)
+                native_text_safe = not use_ocr
                 full = work / f"page-{i}.png"
                 blocks = []
                 if not use_ocr:
@@ -297,6 +298,12 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                         model["warnings"].append(
                             f"Page {i+1}: alternative OCR recovered an incomplete result; review the page."
                         )
+                    if native_text_safe and getattr(ocr, 'last_native_coordinates', False):
+                        from native_ocr_text import reconcile
+                        safe_native = exclude_invisible_numbers(page, textdoc.pages[i])
+                        restored = reconcile(page, safe_native, blocks) if safe_native is not None else 0
+                        if restored:
+                            model['warnings'].append(f'Page {i+1}: independently verified native text restored in {restored} OCR regions.')
                     if not blocks:
                         raise Rejected(f"Page {i+1} produced no recognized content.")
                     model["warnings"].append(

@@ -63,7 +63,7 @@ def run_text(paragraph, text, block):
 
 def plain_run(paragraph, text, block):
     run = paragraph.add_run(text)
-    run.font.name = "Arial"
+    run.font.name = block.get("font", "Arial") if block.get("font") in {"Arial", "Times New Roman", "Courier New"} else "Arial"
     run.font.size = Pt(max(6, min(36, block.get("size", 11))))
     run.bold = block.get("bold", False)
     run.italic = block.get("italic", False)
@@ -175,10 +175,12 @@ def add_table(document, block, width, existing=None):
         run_text(
             cell.paragraphs[0],
             c["text"],
-            {"size": c.get("size", 10), "bold": c.get("header", False)},
+            {"size": c.get("size", 10), "bold": c.get("bold", c.get("header", False)), "font": c.get("font")},
         )
         cell.paragraphs[0].paragraph_format.space_after = Pt(0)
         cell.paragraphs[0].paragraph_format.space_before = Pt(0)
+        cell.paragraphs[0].paragraph_format.line_spacing = 1
+        cell.paragraphs[0].paragraph_format.widow_control = False
     for row in table.rows:
         props = row._tr.get_or_add_trPr()
         if props.find(qn("w:cantSplit")) is None:
@@ -194,6 +196,9 @@ def add_table(document, block, width, existing=None):
             props = row._tr.get_or_add_trPr()
             if props.find(qn("w:tblHeader")) is None:
                 props.append(OxmlElement("w:tblHeader"))
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    paragraph.paragraph_format.keep_with_next = True
     return table
 
 
@@ -217,6 +222,58 @@ def image_rows(blocks):
         result.append(first if len(group) == 1 else dict(kind="image_row", images=group))
         index += len(group)
     return result
+
+
+def compact_section_breaks(document):
+    """An empty section carrier must not consume a normal body-text line."""
+    for paragraph in document.paragraphs:
+        if paragraph.text or paragraph._p.find('./' + qn('w:pPr') + '/' + qn('w:sectPr')) is None:
+            continue
+        fmt = paragraph.paragraph_format
+        fmt.space_before = fmt.space_after = Pt(0)
+        fmt.line_spacing = Pt(1)
+        fmt.widow_control = False
+        props = paragraph._p.get_or_add_pPr()
+        run_props = OxmlElement('w:rPr')
+        size = OxmlElement('w:sz')
+        size.set(qn('w:val'), '2')
+        run_props.append(size)
+        props.append(run_props)
+
+
+def compact_text_runs(document):
+    """Coalesce adjacent plain runs with identical formatting, preserving content.
+
+    OCR/native reconciliation can emit a run per word. Repeating the same run
+    properties wastes the bounded OPC part budget on long documents. Bookmarks,
+    fields, drawings, formulae and differing styles are strict merge barriers.
+    """
+    from lxml import etree
+    allowed = {qn('w:rPr'), qn('w:t'), qn('w:br'), qn('w:tab')}
+    for paragraph in document.element.iter(qn('w:p')):
+        previous = None
+        previous_style = None
+        for run in list(paragraph):
+            if (run.tag != qn('w:r') or run.attrib
+                    or any(child.tag not in allowed for child in run)):
+                previous = None
+                continue
+            props = run.find(qn('w:rPr'))
+            style = etree.tostring(props) if props is not None else None
+            if previous is not None and style == previous_style:
+                for child in list(run):
+                    if child.tag == qn('w:rPr'):
+                        continue
+                    last = previous[-1] if len(previous) else None
+                    if child.tag == qn('w:t') and last is not None and last.tag == qn('w:t'):
+                        last.text = (last.text or '') + (child.text or '')
+                        last.set(qn('xml:space'), 'preserve')
+                    else:
+                        previous.append(child)
+                paragraph.remove(run)
+            else:
+                previous = run
+                previous_style = style
 
 
 def export_word(model, destination, assets):
@@ -359,8 +416,13 @@ def export_word(model, destination, assets):
                         paragraph.paragraph_format.tab_stops.add_tab_stop(Pt((item["bbox"][0] - left) * scale))
                         paragraph.add_run().add_tab()
                     draw_width = (item["bbox"][2] - item["bbox"][0]) * scale
-                    paragraph.add_run().add_picture(str(path), width=Pt(draw_width))
+                    picture_run = paragraph.add_run()
+                    picture_run.font.size = Pt(1)
+                    picture_run.add_picture(str(path), width=Pt(draw_width))
                     image_count += 1
+                paragraph.paragraph_format.space_before = Pt(0)
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.line_spacing = 1
                 continue
             if kind == "heading":
                 paragraph.style = (
@@ -381,9 +443,15 @@ def export_word(model, destination, assets):
                     run_text(paragraph, run["text"], run)
             else:
                 run_text(paragraph, value, block)
+            if block.get('source') == 'native':
+                paragraph.paragraph_format.space_before = Pt(0)
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.line_spacing = 1
             text.append(value)
         if not marked:
             mark(doc.add_paragraph(), i)
+    compact_section_breaks(doc)
+    compact_text_runs(doc)
     with tempfile.TemporaryDirectory(dir=destination.parent) as temp:
         staged = Path(temp) / "output.docx"
         doc.save(staged)

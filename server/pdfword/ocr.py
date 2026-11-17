@@ -246,6 +246,7 @@ class OCR:
         self.calls = 0
         self.last_engine = None
         self.last_page_size = None
+        self.last_native_coordinates = False
         self.processes = {}
 
     def close(self):
@@ -322,6 +323,7 @@ class OCR:
             raise Rejected("This page needs OCR. The OCR worker is not configured.")
         self.last_engine = None
         self.last_page_size = None
+        self.last_native_coordinates = False
         if self.engine != "auto" or not (Path(self.model_root) / "u2").is_dir():
             engine = "oxr" if self.engine == "auto" else self.engine
             result = self._recognize(image, width, height, engine, 180)
@@ -449,6 +451,7 @@ class OCR:
             width, height = height, width
         blocks = normalize(data["pages"][0], width, height, engine)
         self.last_page_size = (width, height)
+        self.last_native_coordinates = angle == 0 and os.environ.get("PDFWORD_PADDLE_UNWARP") != "1"
         if blocks and quality.get("orientation_rejected"):
             blocks[0]["ocr_orientation_review"] = True
         return blocks
