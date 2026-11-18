@@ -36,12 +36,14 @@ def preflight(source):
     root = reader.trailer["/Root"]
     form = root.get("/AcroForm")
     form = form.get_object() if hasattr(form, "get_object") else form
+    from static_signatures import signature_widgets
+    signatures = signature_widgets(reader)
     action = root.get("/OpenAction")
     action = action.get_object() if hasattr(action, "get_object") else action
     # A destination array merely sets the opening view. It is not executable content.
     if (
         any(k in root for k in ("/OCProperties", "/AA"))
-        or (form and (form.get("/Fields") or form.get("/XFA")))
+        or (form and (form.get("/XFA") or (form.get("/Fields") and not signatures)))
         or (action and not isinstance(action, list))
     ):
         raise Rejected("Export a flattened PDF before converting interactive content.")
@@ -54,7 +56,7 @@ def preflight(source):
         if p.get("/AA"):
             raise Rejected("Interactive page actions are unsupported.")
         for ref in p.get("/Annots", []):
-            if ref.get_object().get("/Subtype") != "/Link":
+            if ref.get_object().get("/Subtype") != "/Link" and id(ref.get_object()) not in signatures:
                 raise Rejected("Flatten visible annotations before conversion.")
     return len(reader.pages)
 
@@ -104,6 +106,9 @@ def needs_ocr(page):
     clipped_numbers = []
     with closing(page.get_textpage()) as tp:
         geometry = glyph_geometry(tp)
+        from invisible_margins import proven_margin_objects
+        from text_geometry import handle
+        invisible_margins = {handle(obj) for obj in proven_margin_objects(page, tp)}
         objects = 0
         for obj in page.get_objects(max_depth=8, textpage=tp):
             objects += 1
@@ -112,6 +117,8 @@ def needs_ocr(page):
             if obj.type == pdf.raw.FPDF_PAGEOBJ_IMAGE:
                 images += 1
             if obj.type != pdf.raw.FPDF_PAGEOBJ_TEXT:
+                continue
+            if handle(obj) in invisible_margins:
                 continue
             value = obj.extract()
             if not value.strip():
@@ -211,6 +218,10 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
     work = Path(work)
     count = preflight(source)
     model = dict(schema=2, pages=[], warnings=[])
+    from static_signatures import flatten_signatures, NOTICE
+    source, static_signature = flatten_signatures(source, work)
+    if static_signature:
+        model["warnings"].append(NOTICE)
     from native_orientation import normalize_orientation
     source, corrected = normalize_orientation(source, work, cancel)
     for index in corrected:
@@ -244,6 +255,9 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                         p = p.crop((l, top, r, top + height), strict=False)
                     p = repair_unmapped_glyphs(page, p)
                     p = exclude_invisible_numbers(page, p)
+                    if p is not None:
+                        from invisible_margins import exclude_margin_text
+                        p = exclude_margin_text(page, p)
                     if p is not None:
                         p = upright_margin_words(page, p)
                     use_ocr = True
@@ -301,6 +315,9 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                     if native_text_safe and getattr(ocr, 'last_native_coordinates', False):
                         from native_ocr_text import reconcile
                         safe_native = exclude_invisible_numbers(page, textdoc.pages[i])
+                        if safe_native is not None:
+                            from invisible_margins import exclude_margin_text
+                            safe_native = exclude_margin_text(page, safe_native)
                         restored = reconcile(page, safe_native, blocks) if safe_native is not None else 0
                         if restored:
                             model['warnings'].append(f'Page {i+1}: independently verified native text restored in {restored} OCR regions.')
@@ -390,6 +407,8 @@ def convert(source, destination, *, engine=None, cancel=None, progress=None):
         raise Rejected("Choose a new Word output file.")
     preflight(source)
     with tempfile.TemporaryDirectory(dir=destination.parent) as temp:
+        from static_signatures import flatten_signatures, NOTICE
+        source, static_signature = flatten_signatures(source, temp)
         native_reason = "disabled"
         if os.environ.get("PDFWORD_NATIVE_ENGINE") == "stirling":
             from stirling_native import profile, convert_native
@@ -402,7 +421,10 @@ def convert(source, destination, *, engine=None, cancel=None, progress=None):
                 pages, native_reason = None, "native-profile-fallback:" + type(error).__name__
             if pages:
                 try:
-                    return convert_native(source, destination, temp, pages, cancel, progress)
+                    report = convert_native(source, destination, temp, pages, cancel, progress)
+                    if static_signature:
+                        report["warnings"].append(NOTICE)
+                    return report
                 except Rejected:
                     raise
                 except Exception as error:
@@ -424,6 +446,8 @@ def convert(source, destination, *, engine=None, cancel=None, progress=None):
         report = export_word(model, destination, temp)
         report["engine"] = "structured-ocr" if any("OCR" in v for v in model["warnings"]) else "structured-native"
         report["nativeRoute"] = native_reason
+        if static_signature:
+            report["warnings"].append(NOTICE)
         return report
 
 

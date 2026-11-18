@@ -21,11 +21,11 @@ def union(boxes):
     ]
 
 
-def order_blocks(blocks):
+def order_blocks(blocks, column_gap=18):
     """Recursive whitespace cuts separate columns before ordering within each column."""
     if len(blocks) < 2:
         return blocks
-    for axis, min_gap in ((0, 18), (1, 5)):
+    for axis, min_gap in ((0, column_gap), (1, 5)):
         intervals = sorted((b["bbox"][axis], b["bbox"][axis + 2]) for b in blocks)
         end = intervals[0][1]
         gaps = []
@@ -38,7 +38,7 @@ def order_blocks(blocks):
             left = [b for b in blocks if b["bbox"][axis + 2] <= cut]
             right = [b for b in blocks if b["bbox"][axis] >= cut]
             if left and right and len(left) + len(right) == len(blocks):
-                return order_blocks(left) + order_blocks(right)
+                return order_blocks(left, column_gap) + order_blocks(right, column_gap)
     return sorted(blocks, key=lambda b: (round(b["bbox"][1] / 3), b["bbox"][0]))
 
 
@@ -62,7 +62,11 @@ def native_font(paragraphs):
     return max(fonts, key=fonts.count) if fonts else "Arial"
 
 
-def font_family(names):
+def font_family(names, families=None):
+    if names and families:
+        known = {families.get(name) for name in names}
+        if len(known) == 1 and None not in known:
+            return known.pop()
     if names and all("times" in n for n in names):
         return "Times New Roman"
     if names and all("courier" in n for n in names):
@@ -70,7 +74,7 @@ def font_family(names):
     return "Arial"
 
 
-def words_to_blocks(words, width, height):
+def words_to_blocks(words, width, height, merge_paragraphs=True, controls=(), column_cuts=(), families=None):
     if not words:
         return []
     sizes = [c.get("size", 11) for w in words for c in w.get("chars", [])]
@@ -81,7 +85,10 @@ def words_to_blocks(words, width, height):
             (
                 l
                 for l in reversed(lines[-8:])
-                if abs(median(t["top"] for t in l) - w["top"]) <= max(2, normal * 0.25)
+                if (not column_cuts or w["top"] <= height*.08 or l[0]["top"] <= height*.08
+                    or sum(w["x0"] >= c for c in column_cuts) == sum(l[0]["x0"] >= c for c in column_cuts))
+                and (abs(median(t["top"] for t in l) - w["top"]) <= max(2, normal * (0.3 if column_cuts else 0.25))
+                    or (controls and abs(median(t["bottom"] for t in l) - w["bottom"]) <= 1))
             ),
             None,
         )
@@ -93,7 +100,10 @@ def words_to_blocks(words, width, height):
     for line in lines:
         groups = []
         for w in sorted(line, key=lambda w: w["x0"]):
-            if not groups or w["x0"] - groups[-1][-1]["x1"] > max(26, normal * 2.5):
+            if (not groups or w["x0"] - groups[-1][-1]["x1"] > max(26, normal * 2.5)
+                    or any(groups[-1][-1]["x1"] <= cut <= w["x0"] for cut in column_cuts)
+                    or any(groups[-1][-1]["x1"] <= c[0] and c[2] <= w["x0"]
+                           and min(c[3], w["bottom"]) > max(c[1], w["top"]) for c in controls)):
                 groups.append([])
             groups[-1].append(w)
         for group in groups:
@@ -119,7 +129,7 @@ def words_to_blocks(words, width, height):
                 runs.append(
                     dict(
                         text=prefix + w["text"],
-                        font=font_family(names),
+                        font=font_family(names, families),
                         size=(
                             median(c.get("size", size) for c in letters)
                             if letters
@@ -143,7 +153,7 @@ def words_to_blocks(words, width, height):
                 dict(
                     kind=kind,
                     bbox=bounds,
-                    font=font_family(fonts),
+                    font=font_family(fonts, families),
                     text=text,
                     runs=runs,
                     size=size,
@@ -158,13 +168,16 @@ def words_to_blocks(words, width, height):
                     source="native",
                 )
             )
-    ordered = order_blocks(blocks)
+    ordered = (order_blocks(blocks, 6 if column_cuts else 18) if merge_paragraphs else
+               sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0])))
     result = []
     for block in ordered:
         prev = result[-1] if result else None
         if (
             prev
             and prev["kind"] == block["kind"] == "paragraph"
+            and (merge_paragraphs or min(prev["bbox"][2]-prev["bbox"][0],
+                                        block["bbox"][2]-block["bbox"][0]) > width*.6)
             and abs(prev["bbox"][0] - block["bbox"][0]) < max(4, normal * 0.5)
             and abs(prev["size"] - block["size"]) < 1
             and prev["bold"] == block["bold"]
@@ -421,7 +434,32 @@ def borderless_tables(words, page):
     return result
 
 
+def form_controls(page, tables=(), words=None):
+    """Repeated small stroked squares, outside tables, are static form controls."""
+    controls = []
+    for rect in page.rects:
+        w, h = rect["x1"] - rect["x0"], rect["bottom"] - rect["top"]
+        bounds = [rect["x0"], rect["top"], rect["x1"], rect["bottom"]]
+        if (rect.get("stroke") and not rect.get("fill") and 6 <= w <= 14
+                and 6 <= h <= 14 and abs(w-h) <= 1
+                and not any(contains(t["bbox"], bounds, 2) for t in tables)):
+            if bounds not in controls:
+                controls.append(bounds)
+            if len(controls) > 128:
+                return []
+    if len(controls) < 4:
+        return []
+    if words is None:
+        words = page.extract_words()
+    labelled = sum(any(0 <= w["x0"]-c[2] <= 35
+        and min(w["bottom"], c[3])-max(w["top"], c[1]) >= 3
+        and len(re.findall(r"[^\W\d_]", w["text"])) >= 2 for w in words)
+        for c in controls)
+    return controls if labelled >= .75*len(controls) else []
+
+
 def graphics(page, tables):
+    controls = form_controls(page, tables)
     boxes = []
     for image in page.images:
         b = [image["x0"], image["top"], image["x1"], image["bottom"]]
@@ -431,6 +469,8 @@ def graphics(page, tables):
     for obj in page.curves + page.rects + page.lines:
         b = [obj["x0"], obj["top"], obj["x1"], obj["bottom"]]
         if any(contains(t["bbox"], b, 2) for t in tables):
+            continue
+        if any(contains(c, b, 1) for c in controls):
             continue
         if (b[2] - b[0]) * (b[3] - b[1]) > page.width * page.height * 0.8:
             continue
@@ -454,6 +494,9 @@ def graphics(page, tables):
                     pending = True
         merged.append(b)
     return [
+        [max(0, b[0]-1), max(0, b[1]-1), min(page.width, b[2]+1), min(page.height, b[3]+1)]
+        for b in controls
+    ] + [
         [max(0, b[0]), max(0, b[1]), min(page.width, b[2]), min(page.height, b[3])]
         for b in merged
         # Narrow filled vector strokes can be meaningful glyphs (for example I),
@@ -599,6 +642,8 @@ def native_page(page, cosmetic_rectangles=(), table_proposals=()):
             contains(b, [w["x0"], w["top"], w["x1"], w["bottom"]]) for b in excluded
         )
     ]
+    from prose_columns import narrow_prose_cuts, native_font_families
+    column_cuts = narrow_prose_cuts(remaining, page.width, page.height)
     # Sparse text-only grids also occur without any numeric cells or rules.
     # Three separated short cells on repeated baselines require layout recognition.
     baselines = []
@@ -613,7 +658,9 @@ def native_page(page, cosmetic_rectangles=(), table_proposals=()):
             if not groups or word["x0"] - groups[-1][-1]["x1"] > 18:
                 groups.append([])
             groups[-1].append(word)
-        if len(groups) >= 3 and all(
+        across_columns = (column_cuts and len(groups) == 3
+            and [sum(group[0]["x0"] >= cut for cut in column_cuts) for group in groups] == [0, 1, 2])
+        if not across_columns and len(groups) >= 3 and all(
             sum(len(w["text"]) for w in group) <= 32 for group in groups
         ):
             sparse_rows += 1
@@ -627,16 +674,33 @@ def native_page(page, cosmetic_rectangles=(), table_proposals=()):
             key = round(w["x1"] / 8)
             aligned.setdefault(key, set()).add(round(w["top"] / 5))
     if any(len(rows) >= 3 for rows in aligned.values()):
-        candidates = words_to_blocks(remaining, page.width, page.height)
+        candidates = words_to_blocks(remaining, page.width, page.height, column_cuts=column_cuts)
         if any(
             abs(a["bbox"][1] - b["bbox"][1]) < 4 and a["bbox"][2] + 18 < b["bbox"][0]
+            and sum(a["bbox"][0] >= c for c in column_cuts) == sum(b["bbox"][0] >= c for c in column_cuts)
+            and not any(a["bbox"][0] < c < a["bbox"][2] or b["bbox"][0] < c < b["bbox"][2] for c in column_cuts)
             for a in candidates
             for b in candidates
         ):
             raise Rejected("Layout needs OCR.")
-    blocks = words_to_blocks(remaining, page.width, page.height) + tables
+    controls = form_controls(clean, tables, words)
+    labelled_controls = sum(any(0 <= w["x0"]-c[2] <= 35
+        and min(w["bottom"], c[3])-max(w["top"], c[1]) >= 3 for w in words)
+        for c in controls)
+    static_form = bool(controls) and labelled_controls >= .75*len(controls) and not tables
+    blocks = words_to_blocks(remaining, page.width, page.height,
+                             merge_paragraphs=not static_form,
+                             controls=controls if static_form else (), column_cuts=column_cuts,
+                             families=native_font_families(clean) if column_cuts else None) + tables
     blocks.extend(dict(kind="image", bbox=b, source="native") for b in images)
-    return order_blocks(blocks)
+    if static_form:
+        for block in blocks:
+            block["static_form"] = True
+        return sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0]))
+    if column_cuts:
+        for block in blocks:
+            block["native_columns"] = column_cuts
+    return order_blocks(blocks, 6 if column_cuts else 18)
 
 
 def repeated_margins(pages):

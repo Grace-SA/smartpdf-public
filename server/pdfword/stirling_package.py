@@ -31,7 +31,7 @@ def text(element):
     return " ".join(element.xpath(".//w:t/text()", namespaces=N))
 
 
-def normalize_package(source, destination, page_count, numeric_footer=None):
+def normalize_package(source, destination, page_count, numeric_footer=None, verified_titles=()):
     parts, media = {}, {}
     decoded_pixels = encoded_media = 0
     parser = E.XMLParser(resolve_entities=False, no_network=True)
@@ -151,6 +151,9 @@ def normalize_package(source, destination, page_count, numeric_footer=None):
                 prop(cp, "tcW", type="dxa", w=sum(sizes[index:index+count]))
                 index += count
 
+    from native_table_titles import restore_titles
+    repaired_titles = restore_titles(body, verified_titles)
+
     # Normalize images and relations; deduplicate exact pixels without changing content.
     output_media, renamed, hashes = {}, {}, {}
     for name, value in media.items():
@@ -212,7 +215,7 @@ def normalize_package(source, destination, page_count, numeric_footer=None):
     if Path(destination).stat().st_size > 30 * 1024**2:
         raise ValueError("Native output exceeds download budget")
     images = sum(sum(E.QName(e).localname == "blip" for e in tree.iter()) for tree in parts.values())
-    return dict(schema=2, pages=page_count, images=images, tables=len(tables), nativePageImages=page_images, warnings=[]), page_text
+    return dict(schema=2, pages=page_count, images=images, tables=len(tables), nativePageImages=page_images, restoredTableTitles=repaired_titles, warnings=[]), page_text
 
 
 def restore_numeric_footer(parts, body, label):

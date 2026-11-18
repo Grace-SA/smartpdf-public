@@ -219,7 +219,9 @@ def image_rows(blocks):
                 if b[0] < a[2] or overlap < 0.5 * max(first["bbox"][3] - first["bbox"][1], b[3] - b[1]):
                     break
                 group.append(other)
-        result.append(first if len(group) == 1 else dict(kind="image_row", images=group))
+        result.append(first if len(group) == 1 else dict(kind="image_row", images=group, bbox=[
+            min(b["bbox"][0] for b in group), min(b["bbox"][1] for b in group),
+            max(b["bbox"][2] for b in group), max(b["bbox"][3] for b in group)]))
         index += len(group)
     return result
 
@@ -318,6 +320,9 @@ def export_word(model, destination, assets):
             else WD_ORIENT.PORTRAIT
         )
         margin = min(36, page["width"] / 10, page["height"] / 10)
+        static_form = any(b.get("static_form") for b in body)
+        if static_form:
+            margin = min(margin, max(12, min(b["bbox"][0] for b in body)))
         section.left_margin = section.right_margin = section.top_margin = (
             section.bottom_margin
         ) = Pt(margin)
@@ -342,7 +347,8 @@ def export_word(model, destination, assets):
         height = page["height"] - 2 * margin
         marked = False
         column_break = False
-        for block in image_rows(column_flow(page["blocks"], page["width"])):
+        from form_rows import inline_rows
+        for block in image_rows(inline_rows(column_flow(page["blocks"], page["width"]))):
             kind = block["kind"]
             if kind == "columns_start":
                 section = doc.add_section(WD_SECTION_START.CONTINUOUS)
@@ -396,24 +402,54 @@ def export_word(model, destination, assets):
                 text.append(content_text(block))
                 continue
             paragraph = doc.add_paragraph()
+            form_indent = max(0, block["bbox"][0] - margin) if static_form or kind == "form_row" else 0
+            if static_form or kind == "form_row":
+                paragraph.paragraph_format.left_indent = Pt(form_indent)
             if column_break:
                 paragraph.add_run().add_break(WD_BREAK.COLUMN)
                 column_break = False
             if not marked:
                 mark(paragraph, i)
                 marked = True
+            if kind == "form_row":
+                left = block["bbox"][0]
+                scale = min(1, (width-form_indent-1) / (block["bbox"][2] - left))
+                paragraph.paragraph_format.space_before = Pt(0)
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.line_spacing = 1
+                for index, item in enumerate(block["items"]):
+                    if index:
+                        paragraph.paragraph_format.tab_stops.add_tab_stop(
+                            Pt(form_indent + (item["bbox"][0] - left) * scale))
+                        paragraph.add_run().add_tab()
+                    if item["kind"] == "image":
+                        path = (assets / item["asset"]).resolve()
+                        if path.parent != assets or path.suffix.lower() != ".png":
+                            raise Rejected("Invalid embedded image.")
+                        paragraph.add_run().add_picture(str(path), width=Pt(
+                            (item["bbox"][2] - item["bbox"][0]) * scale))
+                        image_count += 1
+                    else:
+                        value = item.get("text", "")
+                        runs = item.get("runs") or [dict(item, text=value)]
+                        if "".join(run["text"] for run in runs) != value:
+                            raise Rejected("Text runs do not match source content.")
+                        for run in runs:
+                            run_text(paragraph, run["text"], dict(run, size=run.get("size", 11)*scale))
+                        text.append(value)
+                continue
             if kind in ("image", "formula", "image_row"):
                 group = block["images"] if kind == "image_row" else [block]
                 left = min(item["bbox"][0] for item in group)
                 span = max(item["bbox"][2] for item in group) - left
                 tallest = max(item["bbox"][3] - item["bbox"][1] for item in group)
-                scale = min(1, width / span, height / tallest)
+                scale = min(1, (width-form_indent-(1 if static_form else 0)) / span, height / tallest)
                 for index, item in enumerate(group):
                     path = (assets / item["asset"]).resolve()
                     if path.parent != assets or path.suffix.lower() != ".png":
                         raise Rejected("Invalid embedded image.")
                     if index:
-                        paragraph.paragraph_format.tab_stops.add_tab_stop(Pt((item["bbox"][0] - left) * scale))
+                        paragraph.paragraph_format.tab_stops.add_tab_stop(Pt(form_indent + (item["bbox"][0] - left) * scale))
                         paragraph.add_run().add_tab()
                     draw_width = (item["bbox"][2] - item["bbox"][0]) * scale
                     picture_run = paragraph.add_run()

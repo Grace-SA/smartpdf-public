@@ -180,7 +180,13 @@ def convert_native(source, destination, work, pages, cancel=None, progress=None)
                     process.kill()
                     process.wait()
     staged = Path(work) / "native-checked.docx"
+    titles = set()
+    if len(pages) == 1:
+        from native_table_titles import source_titles
+        with pdfplumber.open(source) as document:
+            titles = source_titles(document.pages[0])
     report, text = normalize_package(raw, staged, len(pages),
+                                     verified_titles=titles,
                                      numeric_footer=pages[0].get('numericFooter') if len(pages) == 1 else None)
     report["nativeCoverage"] = check_coverage(pages, text)
     check_visual_coverage(pages, report["nativePageImages"])

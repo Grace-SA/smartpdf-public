@@ -83,7 +83,8 @@ def suppress_duplicate_text_regions(blocks):
                 break
         if index not in removed:
             kept.append(index)
-    return [b for i, b in enumerate(blocks) if i not in removed]
+    from ocr_table_overlap import suppress_table_text_duplicates
+    return suppress_table_text_duplicates([b for i, b in enumerate(blocks) if i not in removed])
 
 
 def parse_u2(raw):
