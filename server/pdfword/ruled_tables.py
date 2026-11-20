@@ -111,9 +111,10 @@ def reconstruct(page, words):
     except Rejected as error:
         if str(error) in ('Mixed cell text directions require review.',
                           'Mixed rotated cell text requires review.'):
-            # This optional path only models one direction per cell. Leave
-            # mixed-direction pages to the existing validated native/OCR route.
-            return None
+            # A preflight grid can differ after glyph deduplication. Request
+            # OCR explicitly so an earlier rotation exemption cannot let the
+            # ordinary native grid flatten unsupported text directions.
+            raise Rejected('Layout needs OCR.') from error
         raise
     # Do not accept intersecting peer grids. Nested grids have already been attached.
     for i,a in enumerate(result):

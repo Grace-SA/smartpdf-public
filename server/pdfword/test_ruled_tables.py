@@ -27,7 +27,8 @@ class RuledTablesTests(unittest.TestCase):
             fixture(source,'\n'.join(commands).encode())
             with pdfplumber.open(source) as pdf:
                 page=pdf.pages[0]
-                self.assertIsNone(reconstruct(page,page.extract_words(return_chars=True)))
+                with self.assertRaisesRegex(Rejected,'Layout needs OCR'):
+                    reconstruct(page,page.extract_words(return_chars=True))
 
     def test_overpainted_space_is_removed_but_word_separator_survives(self):
         chars=[dict(text=text,x0=x,x1=x+4,top=10,bottom=20)
