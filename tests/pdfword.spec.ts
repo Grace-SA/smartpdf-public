@@ -52,7 +52,12 @@ for (const width of [320, 390, 1280]) {
                 ? "cancelled"
                 : "succeeded",
           pages: 1,
-          warnings: [],
+          warnings: [
+            "Page 1: text was recognized with OCR; check names and numbers.",
+            "Page 2: text was recognized with OCR; check names and numbers.",
+            "Page 2: independently verified native text restored in 3 OCR regions.",
+            "Page 2: table may be incomplete.",
+          ],
         },
       });
     });
@@ -63,17 +68,46 @@ for (const width of [320, 390, 1280]) {
     await expect(scope).toContainText(
       "outside this candidate's supported scope",
     );
+    await expect(
+      page.getByText("Local synthetic test service", { exact: true }),
+    ).not.toBeVisible();
+    await page.getByText("Privacy and processing", { exact: true }).click();
+    await expect(
+      page.getByText("Local synthetic test service", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Temporary files expire within 60 minutes; you can delete them sooner.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page.getByText("Privacy and processing", { exact: true }).click();
     await page.locator('input[type="file"]').setInputFiles(selection);
     await page
       .getByRole("button", { name: "Upload and convert", exact: true })
       .click();
     await expect(
       page.getByRole("heading", {
-        name: "Your Word document is ready for review",
+        name: "Conversion complete",
         exact: true,
       }),
     ).toBeFocused();
     await expect(scope).toBeVisible();
+    await expect(
+      page.getByText("Scanned text recognized. Check names and numbers.", {
+        exact: true,
+      }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByText("Page 2: table may be incomplete.", { exact: true }),
+    ).not.toBeVisible();
+    await page.getByText("Review details (1)", { exact: true }).click();
+    await expect(
+      page.getByText("Page 2: table may be incomplete.", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/independently verified native text restored/),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: "Download Word", exact: true }),
     ).toBeVisible();
@@ -84,7 +118,7 @@ for (const width of [320, 390, 1280]) {
     ).toBe(true);
     await page
       .getByRole("button", {
-        name: "Delete files and convert another",
+        name: "Convert another file",
         exact: true,
       })
       .click();
@@ -178,7 +212,7 @@ for (const width of [320, 390, 1280]) {
     });
     await convert.click();
     await expect(
-      page.getByRole("heading", { name: "Your Word document is ready" }),
+      page.getByRole("heading", { name: "Conversion complete" }),
     ).toBeFocused();
     expect(creates).toBe(1);
     expect(uploads).toBe(1);
@@ -190,7 +224,7 @@ for (const width of [320, 390, 1280]) {
     expect(download.suggestedFilename()).toBe("synthetic-text.docx");
     await page
       .getByRole("button", {
-        name: "Delete files and convert another",
+        name: "Convert another file",
         exact: true,
       })
       .click();

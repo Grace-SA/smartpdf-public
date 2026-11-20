@@ -8,6 +8,7 @@ import { checkPdfLocally } from "./preflight";
 import { wordRequest as request } from "../word/errors";
 import "../word/word.css";
 import "./pdfword.css";
+import { reviewNotes } from "./review-notes";
 import taskPolicy from "../../server/pdfword/task-policy.json";
 
 type Job = {
@@ -64,6 +65,7 @@ export function PdfWordPage() {
   const [checked, setChecked] = useState(false);
   const [checking, setChecking] = useState(false);
   const [job, setJob] = useState<Job>();
+  const notes = reviewNotes(job?.warnings);
   const [busy, setBusy] = useState(false);
   const [cleanup, setCleanup] = useState(false);
   const [error, setError] = useState("");
@@ -420,13 +422,16 @@ export function PdfWordPage() {
             className="word-cloud-note pdfword-review-scope"
             aria-label="Review candidate scope"
           >
-            <strong>Review candidate</strong>
-            <p>
-              Evaluate simple text, regular tables and clear scans. Complex
-              tables, handwriting, poor scans and formula-heavy pages are
-              outside this candidate's supported scope. Check text, numbers and
-              layout before using any result.
-            </p>
+            <strong>Test version</strong>
+            <details>
+              <summary>Supported files and limitations</summary>
+              <p>
+                Evaluate simple text, regular tables and clear scans. Complex
+                tables, handwriting, poor scans and formula-heavy pages are
+                outside this candidate's supported scope. Check text, numbers
+                and layout before using any result.
+              </p>
+            </details>
           </aside>
         )}
         <section
@@ -486,9 +491,9 @@ export function PdfWordPage() {
           {file && !job?.id && (
             <p role="status">
               {checking
-                ? "Checking PDF on this device… Nothing is being uploaded."
+                ? "Checking PDF…"
                 : checked
-                  ? "Basic file checks passed. Text and layout are checked during conversion."
+                  ? "Ready to convert."
                   : "Choose a corrected PDF to continue."}
             </p>
           )}
@@ -498,19 +503,23 @@ export function PdfWordPage() {
                 {service?.mode === "local"
                   ? "Conversion on this computer"
                   : "Cloud conversion"}
-                {service ? ` · ${service.region}` : ""}
               </strong>
               <p>
-                Your PDF is uploaded only when you choose Upload and convert.{" "}
-                {service
-                  ? `Temporary files expire within ${service.retentionMinutes} minutes; you can delete them sooner.`
-                  : "Connect to see processing details."}
+                Your PDF is uploaded only when you choose Upload and convert.
               </p>
-              <p>
-                {service?.capabilities?.reconstruction
-                  ? `Editable paragraphs and tables, with pictures retained. ${service.capabilities.ocr ? "Scanned pages are recognized with OCR." : "OCR is unavailable on this server."} Word layout and fonts may change.`
-                  : "Simple text PDFs only. Scans, tables, columns and graphics are not supported yet. Word layout and fonts may change."}
-              </p>
+              {service?.capabilities?.reconstruction &&
+                !service.capabilities.ocr && (
+                  <p>Scanned PDFs are unavailable on this server.</p>
+                )}
+              <details>
+                <summary>Privacy and processing</summary>
+                <p>{service?.region}</p>
+                <p>
+                  {service
+                    ? `Temporary files expire within ${service.retentionMinutes} minutes; you can delete them sooner.`
+                    : "Processing details will be available when connected."}
+                </p>
+              </details>
             </div>
           )}
           {busy && (
@@ -533,24 +542,32 @@ export function PdfWordPage() {
           {result && (
             <div className="word-result">
               <h2 tabIndex={-1} ref={complete}>
-                {job?.warnings?.length || service?.capabilities?.reviewCandidate
-                  ? "Your Word document is ready for review"
-                  : "Your Word document is ready"}
+                Conversion complete
               </h2>
               <p className="word-filename">{result.name}</p>
-              <p>{job?.pages} source pages · editable text</p>
-              <p className="limits">
-                {service?.region} · temporary files expire within{" "}
-                {service?.retentionMinutes} minutes
+              <p>
+                {job?.pages} source {job?.pages === 1 ? "page" : "pages"}
               </p>
               <div className="word-actions">
                 <a className="word-download" href={url} download={result.name}>
                   Download Word
                 </a>
               </div>
-              {job?.warnings?.map((warning) => (
-                <p key={warning}>{warning}</p>
-              ))}
+              {notes.usedOcr && (
+                <p className="limits">
+                  Scanned text recognized. Check names and numbers.
+                </p>
+              )}
+              {notes.details.length > 0 && (
+                <details className="input-support">
+                  <summary>Review details ({notes.details.length})</summary>
+                  <ul>
+                    {notes.details.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           )}
           <div className="word-actions">
@@ -575,7 +592,7 @@ export function PdfWordPage() {
                 {cleanup
                   ? "Retry deletion"
                   : result
-                    ? "Delete files and convert another"
+                    ? "Convert another file"
                     : "Delete temporary files"}
               </button>
             )}

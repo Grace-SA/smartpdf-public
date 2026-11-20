@@ -99,7 +99,8 @@ def content_column_weights(block):
 def add_table(document, block, width, existing=None):
     # Word merges adjacent w:tbl elements when opening/saving a document.
     # Separate independent tables, while explicit continuations reuse one table.
-    body = document.element.body
+    nested = hasattr(document, "_tc")
+    body = document._tc if nested else document.element.body
     previous = body[-2] if len(body) > 1 else None
     if existing is None and previous is not None and previous.tag == qn("w:tbl"):
         separator = document.add_paragraph()
@@ -110,7 +111,7 @@ def add_table(document, block, width, existing=None):
     table = (
         existing
         if existing is not None
-        else document.add_table(rows=0, cols=block["cols"])
+        else document.add_table(rows=0, cols=block["cols"] )
     )
     table.style = "Table Grid"
     # Word does not reliably rebalance an equal OCR grid on open. Supply
@@ -181,6 +182,32 @@ def add_table(document, block, width, existing=None):
         cell.paragraphs[0].paragraph_format.space_before = Pt(0)
         cell.paragraphs[0].paragraph_format.line_spacing = 1
         cell.paragraphs[0].paragraph_format.widow_control = False
+        # Decorative bands can be much shorter than a normal text line. Keep
+        # their measured minimum height without imposing a 6pt empty glyph.
+        if block.get("row_heights") and not c["text"] and not c.get("content"):
+            cell.paragraphs[0].paragraph_format.line_spacing = Pt(1)
+            for run in cell.paragraphs[0].runs:
+                run.font.size = Pt(1)
+        if c.get("direction"):
+            direction = OxmlElement("w:textDirection")
+            direction.set(qn("w:val"), c["direction"])
+            cell._tc.get_or_add_tcPr().append(direction)
+        if c.get("content"):
+            cell_width = sum(column_widths[c["col"]:c["col"]+c["colspan"]]) - 2*padding/20
+            for part in c["content"]:
+                if part["kind"] == "table":
+                    add_table(cell, part, max(2, cell_width))
+                else:
+                    paragraph = cell.paragraphs[-1]
+                    if paragraph.text:
+                        paragraph = cell.add_paragraph()
+                    run_text(paragraph, part.get("text", ""), part)
+                    paragraph.paragraph_format.space_after = Pt(0)
+                    paragraph.paragraph_format.line_spacing = 1
+        if block.get("row_heights"):
+            from docx.enum.table import WD_ROW_HEIGHT_RULE
+            table.rows[c["row"]+offset].height = Pt(block["row_heights"][c["row"]])
+            table.rows[c["row"]+offset].height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
     for row in table.rows:
         props = row._tr.get_or_add_trPr()
         if props.find(qn("w:cantSplit")) is None:
@@ -219,7 +246,9 @@ def image_rows(blocks):
                 if b[0] < a[2] or overlap < 0.5 * max(first["bbox"][3] - first["bbox"][1], b[3] - b[1]):
                     break
                 group.append(other)
-        result.append(first if len(group) == 1 else dict(kind="image_row", images=group))
+        result.append(first if len(group) == 1 else dict(kind="image_row", images=group, bbox=[
+            min(b["bbox"][0] for b in group), min(b["bbox"][1] for b in group),
+            max(b["bbox"][2] for b in group), max(b["bbox"][3] for b in group)]))
         index += len(group)
     return result
 
@@ -318,6 +347,9 @@ def export_word(model, destination, assets):
             else WD_ORIENT.PORTRAIT
         )
         margin = min(36, page["width"] / 10, page["height"] / 10)
+        static_form = any(b.get("static_form") for b in body)
+        if static_form:
+            margin = min(margin, max(12, min(b["bbox"][0] for b in body)))
         section.left_margin = section.right_margin = section.top_margin = (
             section.bottom_margin
         ) = Pt(margin)
@@ -342,7 +374,8 @@ def export_word(model, destination, assets):
         height = page["height"] - 2 * margin
         marked = False
         column_break = False
-        for block in image_rows(column_flow(page["blocks"], page["width"])):
+        from form_rows import inline_rows
+        for block in image_rows(inline_rows(column_flow(page["blocks"], page["width"]))):
             kind = block["kind"]
             if kind == "columns_start":
                 section = doc.add_section(WD_SECTION_START.CONTINUOUS)
@@ -396,24 +429,54 @@ def export_word(model, destination, assets):
                 text.append(content_text(block))
                 continue
             paragraph = doc.add_paragraph()
+            form_indent = max(0, block["bbox"][0] - margin) if static_form or kind == "form_row" else 0
+            if static_form or kind == "form_row":
+                paragraph.paragraph_format.left_indent = Pt(form_indent)
             if column_break:
                 paragraph.add_run().add_break(WD_BREAK.COLUMN)
                 column_break = False
             if not marked:
                 mark(paragraph, i)
                 marked = True
+            if kind == "form_row":
+                left = block["bbox"][0]
+                scale = min(1, (width-form_indent-1) / (block["bbox"][2] - left))
+                paragraph.paragraph_format.space_before = Pt(0)
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.line_spacing = 1
+                for index, item in enumerate(block["items"]):
+                    if index:
+                        paragraph.paragraph_format.tab_stops.add_tab_stop(
+                            Pt(form_indent + (item["bbox"][0] - left) * scale))
+                        paragraph.add_run().add_tab()
+                    if item["kind"] == "image":
+                        path = (assets / item["asset"]).resolve()
+                        if path.parent != assets or path.suffix.lower() != ".png":
+                            raise Rejected("Invalid embedded image.")
+                        paragraph.add_run().add_picture(str(path), width=Pt(
+                            (item["bbox"][2] - item["bbox"][0]) * scale))
+                        image_count += 1
+                    else:
+                        value = item.get("text", "")
+                        runs = item.get("runs") or [dict(item, text=value)]
+                        if "".join(run["text"] for run in runs) != value:
+                            raise Rejected("Text runs do not match source content.")
+                        for run in runs:
+                            run_text(paragraph, run["text"], dict(run, size=run.get("size", 11)*scale))
+                        text.append(value)
+                continue
             if kind in ("image", "formula", "image_row"):
                 group = block["images"] if kind == "image_row" else [block]
                 left = min(item["bbox"][0] for item in group)
                 span = max(item["bbox"][2] for item in group) - left
                 tallest = max(item["bbox"][3] - item["bbox"][1] for item in group)
-                scale = min(1, width / span, height / tallest)
+                scale = min(1, (width-form_indent-(1 if static_form else 0)) / span, height / tallest)
                 for index, item in enumerate(group):
                     path = (assets / item["asset"]).resolve()
                     if path.parent != assets or path.suffix.lower() != ".png":
                         raise Rejected("Invalid embedded image.")
                     if index:
-                        paragraph.paragraph_format.tab_stops.add_tab_stop(Pt((item["bbox"][0] - left) * scale))
+                        paragraph.paragraph_format.tab_stops.add_tab_stop(Pt(form_indent + (item["bbox"][0] - left) * scale))
                         paragraph.add_run().add_tab()
                     draw_width = (item["bbox"][2] - item["bbox"][0]) * scale
                     picture_run = paragraph.add_run()
@@ -465,7 +528,7 @@ def export_word(model, destination, assets):
         schema=2,
         pages=len(model["pages"]),
         images=image_count,
-        tables=len({id(t) for t in tables.values()}),
+        tables=len(doc.element.body.findall(".//" + qn("w:tbl"))),
         textCharacters=sum(len(t) for t in text),
         warnings=model.get("warnings", []),
     )
