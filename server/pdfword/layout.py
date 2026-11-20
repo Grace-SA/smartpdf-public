@@ -252,10 +252,10 @@ def refine_numeric_cells(boxes, xs, words):
     return [cell for index, bounds in enumerate(boxes) for cell in replacements.get(index, [bounds])]
 
 
-def native_tables(page, words):
+def native_tables(page, words, detected=None):
     result = []
-    for table in page.find_tables():
-        if len(table.rows) < 2 or len(table.columns) < 2:
+    for table in (page.find_tables() if detected is None else detected):
+        if (len(table.rows) < 2 and detected is None) or len(table.columns) < 2:
             continue
         boxes = [list(c) for c in table.cells if c]
         xs = sorted(set(round(v, 1) for c in boxes for v in (c[0], c[2])))
@@ -296,11 +296,12 @@ def native_tables(page, words):
                     text="\n".join(p["text"] for p in paras),
                     size=median(p["size"] for p in paras) if paras else 10,
                     font=native_font(paras),
+                    bbox=b,
                     bold=bool(paras) and all(p.get("bold") for p in paras),
                     header=False,
                 )
             )
-        if sum(bool(c["text"]) for c in cells) < 2:
+        if detected is None and sum(bool(c["text"]) for c in cells) < 2:
             continue
         if len(boxes) != original_count:
             # Partial rules in empty columns can add phantom grid rows between
@@ -602,7 +603,10 @@ def native_page(page, cosmetic_rectangles=(), table_proposals=()):
         if not tables:
             raise Rejected("Layout needs OCR.")
     else:
-        tables = native_tables(clean, words)
+        from ruled_tables import reconstruct
+        tables = reconstruct(clean, words)
+        if tables is None:
+            tables = native_tables(clean, words)
     if cosmetic_rectangles:
         for table in tables:
             lengths = [len(c.get("text", "")) for c in table["cells"]]

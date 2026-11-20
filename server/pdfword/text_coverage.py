@@ -30,7 +30,8 @@ def editable_block_text(blocks):
     values = []
     for block in blocks:
         if block["kind"] == "table":
-            values.extend(cell.get("text", "") for cell in block["cells"])
+            from model import content_text
+            values.append(content_text(block))
         elif block["kind"] not in ("image", "formula"):
             values.append(block.get("text", ""))
     return " ".join(values)

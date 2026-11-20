@@ -98,7 +98,7 @@ def clips_text(obj, bounds=None):
     return False
 
 
-def needs_ocr(page):
+def needs_ocr(page, rotated_cells=()):
     visible = 0
     images = 0
     unsafe = False
@@ -159,7 +159,12 @@ def needs_ocr(page):
                 or t > crop[3] + 0.5
             )
             matrix = obj.get_matrix()
-            unsafe |= not numeric_margin(obj, page, geometry) and (
+            orthogonal_cell = (abs(matrix.a) < .001 and abs(matrix.d) < .001
+                and matrix.b*matrix.c < 0 and any(
+                    bounds[0] >= cell[0]-.5 and bounds[1] >= cell[1]-.5
+                    and bounds[2] <= cell[2]+.5 and bounds[3] <= cell[3]+.5
+                    for cell in rotated_cells))
+            unsafe |= not orthogonal_cell and not numeric_margin(obj, page, geometry) and (
                 abs(matrix.b) > 0.001
                 or abs(matrix.c) > 0.001
                 or matrix.a <= 0
@@ -242,6 +247,19 @@ def parse_pdf(source, work, ocr=None, progress=None, cancel=None):
                 ):
                     raise Rejected("Unsupported page dimensions.")
                 use_ocr, visible, images = needs_ocr(page)
+                if use_ocr and not page.get_rotation():
+                    candidate = textdoc.pages[i]
+                    if any(not c.get('upright', True) for c in candidate.chars):
+                        from ruled_tables import reconstruct
+                        try:
+                            grids = reconstruct(candidate, candidate.extract_words(return_chars=True)) or []
+                            regions = [[c['bbox'][0], candidate.height-c['bbox'][3],
+                                        c['bbox'][2], candidate.height-c['bbox'][1]]
+                                       for grid in grids for c in grid['cells'] if c.get('direction')]
+                            if regions:
+                                use_ocr, visible, images = needs_ocr(page, regions)
+                        except Rejected:
+                            pass
                 native_text_safe = not use_ocr
                 full = work / f"page-{i}.png"
                 blocks = []

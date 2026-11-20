@@ -142,13 +142,19 @@ def table_from_html(markup):
     return dict(rows=len(rows), cols=cols, cells=cells)
 
 
-def content_text(block):
+def content_text(block, _depth=0):
+    if _depth > 3:
+        raise Rejected("Nested table depth exceeds limit.")
     if block["kind"] == "table":
-        return "\n".join(c["text"] for c in block["cells"])
+        return "\n".join(
+            "\n".join(content_text(part, _depth+1) for part in c["content"])
+            if "content" in c else c["text"] for c in block["cells"])
     return block.get("text", "")
 
 
-def validate(model):
+def validate(model, _depth=0):
+    if _depth > 3:
+        raise Rejected("Nested table depth exceeds limit.")
     if model.get("schema") != 2 or not 1 <= len(model.get("pages", [])) <= 200:
         raise Rejected("Invalid document structure.")
     total = 0
@@ -193,7 +199,29 @@ def validate(model):
                     raise Rejected("Invalid table column widths.")
                 if not 1 <= nr <= 500 or not 1 <= nc <= 64 or nr * nc > MAX_CELLS:
                     raise Rejected("Table too large.")
+                if "row_heights" in b and (
+                    len(b["row_heights"]) != nr
+                    or any(type(v) not in (int, float) or not math.isfinite(v)
+                           or v <= 0 or v > page["height"] for v in b["row_heights"])
+                ):
+                    raise Rejected("Invalid table row heights.")
                 for c in b["cells"]:
+                    if c.get("direction") not in (None, "btLr", "tbRl"):
+                        raise Rejected("Invalid cell text direction.")
+                    if "content" in c:
+                        if (c.get("text") or not isinstance(c["content"], list)
+                                or not 1 <= len(c["content"]) <= 100):
+                            raise Rejected("Ambiguous nested cell content.")
+                        owner = box(c.get("bbox"), page["width"], page["height"])
+                        for part in c["content"]:
+                            if part.get("kind") not in ("paragraph", "table"):
+                                raise Rejected("Unsupported nested cell content.")
+                            region = box(part["bbox"], page["width"], page["height"])
+                            if (region[0] < owner[0]-.5 or region[1] < owner[1]-.5
+                                    or region[2] > owner[2]+.5 or region[3] > owner[3]+.5):
+                                raise Rejected("Nested content falls outside its cell.")
+                        validate(dict(schema=2, pages=[dict(index=0, width=page["width"],
+                            height=page["height"], blocks=c["content"])]), _depth+1)
                     r, col, rs, cs = (
                         c[k] for k in ("row", "col", "rowspan", "colspan")
                     )

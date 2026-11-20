@@ -99,7 +99,8 @@ def content_column_weights(block):
 def add_table(document, block, width, existing=None):
     # Word merges adjacent w:tbl elements when opening/saving a document.
     # Separate independent tables, while explicit continuations reuse one table.
-    body = document.element.body
+    nested = hasattr(document, "_tc")
+    body = document._tc if nested else document.element.body
     previous = body[-2] if len(body) > 1 else None
     if existing is None and previous is not None and previous.tag == qn("w:tbl"):
         separator = document.add_paragraph()
@@ -110,7 +111,7 @@ def add_table(document, block, width, existing=None):
     table = (
         existing
         if existing is not None
-        else document.add_table(rows=0, cols=block["cols"])
+        else document.add_table(rows=0, cols=block["cols"] )
     )
     table.style = "Table Grid"
     # Word does not reliably rebalance an equal OCR grid on open. Supply
@@ -181,6 +182,32 @@ def add_table(document, block, width, existing=None):
         cell.paragraphs[0].paragraph_format.space_before = Pt(0)
         cell.paragraphs[0].paragraph_format.line_spacing = 1
         cell.paragraphs[0].paragraph_format.widow_control = False
+        # Decorative bands can be much shorter than a normal text line. Keep
+        # their measured minimum height without imposing a 6pt empty glyph.
+        if block.get("row_heights") and not c["text"] and not c.get("content"):
+            cell.paragraphs[0].paragraph_format.line_spacing = Pt(1)
+            for run in cell.paragraphs[0].runs:
+                run.font.size = Pt(1)
+        if c.get("direction"):
+            direction = OxmlElement("w:textDirection")
+            direction.set(qn("w:val"), c["direction"])
+            cell._tc.get_or_add_tcPr().append(direction)
+        if c.get("content"):
+            cell_width = sum(column_widths[c["col"]:c["col"]+c["colspan"]]) - 2*padding/20
+            for part in c["content"]:
+                if part["kind"] == "table":
+                    add_table(cell, part, max(2, cell_width))
+                else:
+                    paragraph = cell.paragraphs[-1]
+                    if paragraph.text:
+                        paragraph = cell.add_paragraph()
+                    run_text(paragraph, part.get("text", ""), part)
+                    paragraph.paragraph_format.space_after = Pt(0)
+                    paragraph.paragraph_format.line_spacing = 1
+        if block.get("row_heights"):
+            from docx.enum.table import WD_ROW_HEIGHT_RULE
+            table.rows[c["row"]+offset].height = Pt(block["row_heights"][c["row"]])
+            table.rows[c["row"]+offset].height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
     for row in table.rows:
         props = row._tr.get_or_add_trPr()
         if props.find(qn("w:cantSplit")) is None:
@@ -501,7 +528,7 @@ def export_word(model, destination, assets):
         schema=2,
         pages=len(model["pages"]),
         images=image_count,
-        tables=len({id(t) for t in tables.values()}),
+        tables=len(doc.element.body.findall(".//" + qn("w:tbl"))),
         textCharacters=sum(len(t) for t in text),
         warnings=model.get("warnings", []),
     )
