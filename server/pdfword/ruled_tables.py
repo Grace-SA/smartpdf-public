@@ -106,7 +106,15 @@ def reconstruct(page, words):
             if len(ys)-1 == table['rows']:
                 table['row_heights'] = [b-a for a,b in zip(ys,ys[1:])]
         return table
-    result = [build(i) for i in range(len(detected)) if i not in parents]
+    try:
+        result = [build(i) for i in range(len(detected)) if i not in parents]
+    except Rejected as error:
+        if str(error) in ('Mixed cell text directions require review.',
+                          'Mixed rotated cell text requires review.'):
+            # This optional path only models one direction per cell. Leave
+            # mixed-direction pages to the existing validated native/OCR route.
+            return None
+        raise
     # Do not accept intersecting peer grids. Nested grids have already been attached.
     for i,a in enumerate(result):
         for b in result[i+1:]:

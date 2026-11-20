@@ -18,6 +18,17 @@ def rules(xs, ys):
 
 
 class RuledTablesTests(unittest.TestCase):
+    def test_mixed_direction_cell_leaves_existing_route_available(self):
+        commands=rules([100,180,260],[500,550,650,720])
+        commands += ['BT /F1 9 Tf 0 1 -1 0 130 665 Tm (North) Tj ET',
+                     'BT /F1 9 Tf 140 680 Td (Note) Tj ET']
+        with tempfile.TemporaryDirectory() as td:
+            source=Path(td)/'mixed.pdf'
+            fixture(source,'\n'.join(commands).encode())
+            with pdfplumber.open(source) as pdf:
+                page=pdf.pages[0]
+                self.assertIsNone(reconstruct(page,page.extract_words(return_chars=True)))
+
     def test_overpainted_space_is_removed_but_word_separator_survives(self):
         chars=[dict(text=text,x0=x,x1=x+4,top=10,bottom=20)
                for text,x in [('A',10),(' ',11),(' ',14),('B',18)]]
