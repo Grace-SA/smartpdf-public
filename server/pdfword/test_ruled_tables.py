@@ -19,7 +19,7 @@ def rules(xs, ys):
 
 class RuledTablesTests(unittest.TestCase):
     def test_mixed_direction_cell_leaves_existing_route_available(self):
-        commands=rules([100,180,260],[500,550,650,720])
+        commands=rules([100,180,260],[500,510,550,650,720])
         commands += ['BT /F1 9 Tf 0 1 -1 0 130 665 Tm (North) Tj ET',
                      'BT /F1 9 Tf 140 680 Td (Note) Tj ET']
         with tempfile.TemporaryDirectory() as td:
